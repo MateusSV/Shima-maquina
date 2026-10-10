@@ -52,16 +52,22 @@
     return achados;
   }
 
-  function tipoDoArquivo(nome, bytes) {
-    const inicio = texto(bytes, 0, Math.min(32, bytes.length));
-    if (inicio.startsWith("SDS LZSS COMPRESS")) return "dat";
-    if (inicio.startsWith("START")) return "programa";
-    if (inicio.startsWith("AUTOMATIC SETTINGS")) return "ajustes";
+  // Tipo pela extensão (lista da pasta, antes de ler o arquivo).
+  function tipoPeloNome(nome) {
     const ext = (nome.split(".").pop() || "").toLowerCase();
     if (ext === "dat") return "dat";
     if (ext === "qfd") return "ajustes";
     if (/^\d{3}$/.test(ext)) return "programa";
     return "desconhecido";
+  }
+
+  // Tipo pelo conteúdo; a extensão só decide quando o começo do arquivo não diz nada.
+  function tipoDoArquivo(nome, bytes) {
+    const inicio = texto(bytes, 0, Math.min(32, bytes.length));
+    if (inicio.startsWith("SDS LZSS COMPRESS")) return "dat";
+    if (inicio.startsWith("START")) return "programa";
+    if (inicio.startsWith("AUTOMATIC SETTINGS")) return "ajustes";
+    return tipoPeloNome(nome);
   }
 
   // ----- .000 -----
@@ -174,7 +180,7 @@
     return { tipo, nome, tamanho: bytes.length, bytes, textos: textos(bytes) };
   }
 
-  const api = { abrir, tipoDoArquivo, lerPrograma, lerAjustes, textos, hex, linhasHex };
+  const api = { abrir, tipoDoArquivo, tipoPeloNome, lerPrograma, lerAjustes, textos, hex, linhasHex };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.ShimaArquivos = api;
 })(typeof window !== "undefined" ? window : globalThis);

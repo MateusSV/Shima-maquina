@@ -151,8 +151,10 @@ class Test_Api_Arquivos(unittest.TestCase):
         self.addCleanup(self.servidor.server_close)
         self.addCleanup(self.servidor.shutdown)
 
-    def pedir(self, caminho, corpo=None):
-        pedido = urllib.request.Request(self.base + caminho, data=corpo, method="POST" if corpo is not None else "GET")
+    def pedir(self, caminho, corpo=None, cabecalhos=None):
+        if cabecalhos is None:
+            cabecalhos = {"X-Editor-Shima": "1"} if corpo is not None else {}
+        pedido = urllib.request.Request(self.base + caminho, data=corpo, method="POST" if corpo is not None else "GET", headers=cabecalhos)
         try:
             with urllib.request.urlopen(pedido) as resposta:
                 return resposta.status, resposta.read()
@@ -206,6 +208,24 @@ class Test_Api_Arquivos(unittest.TestCase):
         status, _ = self.pedir("/api/arquivos/DESENHO.dat", corpo=b"qualquer coisa")
         self.assertEqual(status, 400)
         self.assertEqual((self.pasta / "DESENHO.dat").read_bytes(), self.dat)
+
+    def test_recusa_gravacao_vinda_de_outro_site(self):
+        novo = b"SDS LZSS COMPRESS Ver 1.00" + bytes(50)
+        casos = (
+            {},  # sem o cabeçalho do editor (um formulário ou fetch "no-cors" de outro site)
+            {"X-Editor-Shima": "1", "Origin": "https://site-malicioso.example"},
+            {"X-Editor-Shima": "1", "Host": "site-malicioso.example:8765"},  # DNS rebinding
+        )
+        for cabecalhos in casos:
+            status, _ = self.pedir("/api/arquivos/DESENHO.dat", corpo=novo, cabecalhos=cabecalhos)
+            self.assertEqual(status, 403, cabecalhos)
+        self.assertEqual((self.pasta / "DESENHO.dat").read_bytes(), self.dat)
+
+    def test_leitura_so_para_o_proprio_computador(self):
+        status, _ = self.pedir("/api/arquivos", cabecalhos={"Host": "site-malicioso.example"})
+        self.assertEqual(status, 403)
+        status, _ = self.pedir("/api/arquivos", cabecalhos={"Origin": "http://localhost:8765"})
+        self.assertEqual(status, 200)
 
     def test_editor_funciona_sem_a_biblioteca_do_simulador(self):
         import servidor

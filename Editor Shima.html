@@ -978,16 +978,22 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
     return achados;
   }
 
-  function tipoDoArquivo(nome, bytes) {
-    const inicio = texto(bytes, 0, Math.min(32, bytes.length));
-    if (inicio.startsWith("SDS LZSS COMPRESS")) return "dat";
-    if (inicio.startsWith("START")) return "programa";
-    if (inicio.startsWith("AUTOMATIC SETTINGS")) return "ajustes";
+  // Tipo pela extensão (lista da pasta, antes de ler o arquivo).
+  function tipoPeloNome(nome) {
     const ext = (nome.split(".").pop() || "").toLowerCase();
     if (ext === "dat") return "dat";
     if (ext === "qfd") return "ajustes";
     if (/^\d{3}$/.test(ext)) return "programa";
     return "desconhecido";
+  }
+
+  // Tipo pelo conteúdo; a extensão só decide quando o começo do arquivo não diz nada.
+  function tipoDoArquivo(nome, bytes) {
+    const inicio = texto(bytes, 0, Math.min(32, bytes.length));
+    if (inicio.startsWith("SDS LZSS COMPRESS")) return "dat";
+    if (inicio.startsWith("START")) return "programa";
+    if (inicio.startsWith("AUTOMATIC SETTINGS")) return "ajustes";
+    return tipoPeloNome(nome);
   }
 
   // ----- .000 -----
@@ -1100,7 +1106,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
     return { tipo, nome, tamanho: bytes.length, bytes, textos: textos(bytes) };
   }
 
-  const api = { abrir, tipoDoArquivo, lerPrograma, lerAjustes, textos, hex, linhasHex };
+  const api = { abrir, tipoDoArquivo, tipoPeloNome, lerPrograma, lerAjustes, textos, hex, linhasHex };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.ShimaArquivos = api;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -1120,6 +1126,7 @@ const $ = (id) => document.getElementById(id);
 const ZOOMS = [0.25, 0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
 const ZOOM_GRADE = 6;
 const LIMITE_HISTORICO = 60;
+const LIMITE_MEMORIA_HISTORICO = 300 * 1024 * 1024; // bytes de pixels guardados para desfazer, por aba
 const LIMITE_HEX = 4096; // linhas de 16 bytes mostradas de uma vez
 const EXT_IMAGEM = /\.(png|jpe?g|gif|webp|bmp)$/i;
 const FERRAMENTAS = {
@@ -1381,7 +1388,10 @@ async function fecharAba(id) {
   const aba = estado.abas.find((a) => a.id === id);
   if (!aba) return;
   if (aba.modificado && !(await perguntar(`${aba.nome} tem alterações não salvas. Fechar mesmo assim?`, "Fechar sem salvar"))) return;
-  if (aba.tipo === "imagem") URL.revokeObjectURL(aba.aberto.url);
+  if (aba.tipo === "imagem") {
+    if (estado.imagemImportar && estado.imagemImportar.url === aba.aberto.url) estado.imagemImportar = null;
+    URL.revokeObjectURL(aba.aberto.url);
+  }
   const i = estado.abas.indexOf(aba);
   estado.abas.splice(i, 1);
   if (estado.atual === id) {
@@ -1447,7 +1457,7 @@ function desenharPasta() {
   $("btn-atualizar-pasta").hidden = !estado.servidor;
   $("lista-pasta").innerHTML = estado.arquivosPasta
     .map((a) => {
-      const tipo = EXT_IMAGEM.test(a.nome) ? "imagem" : tipoPeloNome(a.nome);
+      const tipo = EXT_IMAGEM.test(a.nome) ? "imagem" : ShimaArquivos.tipoPeloNome(a.nome);
       const aberta = estado.abas.find((x) => x.nome === a.nome && x.origem === "pasta");
       const ativa = aberta && aberta.id === estado.atual;
       return `<li><button type="button" class="arquivo${ativa ? " ativo" : ""}" data-arquivo="${esc(a.nome)}">
@@ -1457,14 +1467,6 @@ function desenharPasta() {
       </button></li>`;
     })
     .join("");
-}
-
-function tipoPeloNome(nome) {
-  const ext = (nome.split(".").pop() || "").toLowerCase();
-  if (ext === "dat") return "dat";
-  if (ext === "qfd") return "ajustes";
-  if (/^\d{3}$/.test(ext)) return "programa";
-  return "desconhecido";
 }
 
 async function abrirDaPasta(nome) {
@@ -1658,9 +1660,17 @@ function retrato(aba) {
 
 function salvarHistorico(aba) {
   aba.hist.push(retrato(aba));
-  if (aba.hist.length > LIMITE_HISTORICO) aba.hist.shift();
   aba.refazer = [];
+  limitarHistorico(aba);
   marcarModificado(aba);
+}
+
+// Desenhos grandes ocupam muita memória por passo: guarda menos passos em vez de travar o navegador.
+function limitarHistorico(aba) {
+  let total = aba.hist.reduce((t, r) => t + r.pixels.length, 0);
+  while (aba.hist.length > 1 && (aba.hist.length > LIMITE_HISTORICO || total > LIMITE_MEMORIA_HISTORICO)) {
+    total -= aba.hist.shift().pixels.length;
+  }
 }
 
 function restaurar(aba, r) {
@@ -1681,6 +1691,7 @@ function restaurar(aba, r) {
 function desfazer() {
   const a = abaDat();
   if (!a) return;
+  gesto = null; // um arrasto em andamento não sobrevive ao desfazer
   if (a.flutuante && !a.flutuante.levantado) {
     a.flutuante = null;
     renderizar();
@@ -1688,15 +1699,22 @@ function desfazer() {
     return;
   }
   if (!a.hist.length) return avisar("Nada para desfazer.");
-  a.refazer.push(retrato(a));
+  const atual = retrato(a);
+  // Uma área movida ainda solta: o "refazer" precisa trazê-la de volta já no lugar novo.
+  const f = a.flutuante;
+  if (f) colarArea({ largura: atual.largura, altura: atual.altura, pixels: atual.pixels }, f, f.x, f.y, f.transparente);
+  a.refazer.push(atual);
   restaurar(a, a.hist.pop());
 }
 
 function refazer() {
   const a = abaDat();
   if (!a || !a.refazer.length) return avisar("Nada para refazer.");
-  fixarFlutuante(a);
+  // Fixar a colagem seria uma alteração nova, que apaga o que havia para refazer.
+  if (a.flutuante) return avisar("Fixe (Enter) ou descarte (Esc) a colagem antes de refazer.");
+  gesto = null;
   a.hist.push(retrato(a));
+  limitarHistorico(a);
   restaurar(a, a.refazer.pop());
 }
 
@@ -1913,13 +1931,13 @@ tela.addEventListener("pointerdown", (e) => {
     renderizar();
   } else if (f === "linha" || f === "retangulo" || f === "retangulo-cheio") {
     salvarHistorico(a);
-    gesto = { tipo: "forma", forma: f, inicio: p, base: d.pixels.slice(), cor };
+    gesto = { tipo: "forma", forma: f, inicio: p, base: a.hist[a.hist.length - 1].pixels, cor };
     desenharForma(d, f, p, p, cor, estado.pincel);
     renderizar();
   } else if (f === "balde") {
-    if (!noDesenho(p, d)) return;
+    if (!noDesenho(p, d) || d.pixels[p.y * d.largura + p.x] === cor) return;
     salvarHistorico(a);
-    if (!balde(d, p, cor)) a.hist.pop();
+    balde(d, p, cor);
     renderizar();
     atualizarPainel();
   } else if (f === "conta-gotas") {
@@ -1965,7 +1983,7 @@ tela.addEventListener("pointermove", (e) => {
     } else if (gesto.tipo === "selecionar") {
       a.selecao = retanguloEntre(gesto.inicio, prender(p, d));
       posicionarCaixas();
-    } else if (gesto.tipo === "mover") {
+    } else if (gesto.tipo === "mover" && a.flutuante) {
       a.flutuante.x = p.x - gesto.dx;
       a.flutuante.y = p.y - gesto.dy;
       renderizar();
@@ -2146,20 +2164,16 @@ $("dlg-substituir").addEventListener("close", () => {
   if (de === para) return;
   const d = a.doc;
   const r = form["so-selecao"].checked && a.selecao ? a.selecao : { x: 0, y: 0, w: d.largura, h: d.altura };
-  salvarHistorico(a);
-  let trocados = 0;
+  const posicoes = [];
   for (let y = r.y; y < r.y + r.h; y++) {
-    for (let i = y * d.largura + r.x, fim = i + r.w; i < fim; i++) {
-      if (d.pixels[i] === de) {
-        d.pixels[i] = para;
-        trocados++;
-      }
-    }
+    for (let i = y * d.largura + r.x, fim = i + r.w; i < fim; i++) if (d.pixels[i] === de) posicoes.push(i);
   }
-  if (!trocados) a.hist.pop();
+  if (!posicoes.length) return avisar(`A cor ${de} não aparece nessa área.`);
+  salvarHistorico(a);
+  for (const i of posicoes) d.pixels[i] = para;
   renderizar();
   atualizarPainel();
-  avisar(trocados ? `${trocados.toLocaleString("pt-BR")} pixels da cor ${de} viraram cor ${para}.` : `A cor ${de} não aparece nessa área.`);
+  avisar(`${posicoes.length.toLocaleString("pt-BR")} pixels da cor ${de} viraram cor ${para}.`);
 });
 
 $("dlg-redimensionar").addEventListener("close", () => {
@@ -2363,7 +2377,7 @@ async function salvarNaPasta(a, nome) {
   try {
     const resposta = await fetch("/api/arquivos/" + encodeURIComponent(nome), {
       method: "POST",
-      headers: { "Content-Type": "application/octet-stream" },
+      headers: { "Content-Type": "application/octet-stream", "X-Editor-Shima": "1" },
       body: bytes,
     });
     const dados = await resposta.json();
@@ -2398,11 +2412,19 @@ async function baixarDat(a, nome = a.nome) {
   else avisar(`${entregue} foi baixado. Dentro dele está ${nome}: extraia e copie para a pasta dos desenhos.`);
 }
 
-function salvar() {
+// Só não pergunta quando o arquivo da pasta é o mesmo que foi aberto dela.
+async function podeGravarNaPasta(a, nome) {
+  const existe = estado.arquivosPasta.some((x) => x.nome === nome);
+  if (!existe || (a.origem === "pasta" && a.nome === nome)) return true;
+  return perguntar(`${nome} já existe na pasta. Substituir pelo desenho desta aba? Se ainda não houver ${nome}.bak, o arquivo atual fica guardado nele.`, "Substituir");
+}
+
+async function salvar() {
   const a = abaDat();
   if (!a) return;
-  if (estado.servidor && (a.origem === "pasta" || a.origem === "novo")) salvarNaPasta(a, a.nome);
-  else baixarDat(a);
+  if (estado.servidor && (a.origem === "pasta" || a.origem === "novo")) {
+    if (await podeGravarNaPasta(a, a.nome)) salvarNaPasta(a, a.nome);
+  } else baixarDat(a);
 }
 
 async function salvarComo() {
@@ -2412,9 +2434,8 @@ async function salvarComo() {
   if (!nome) return;
   if (/[\\/]/.test(nome)) return avisar("O nome não pode ter barras.", true);
   if (!/\.dat$/i.test(nome)) nome += ".dat";
-  const existe = estado.arquivosPasta.some((x) => x.nome === nome);
   if (estado.servidor) {
-    if (existe && nome !== a.nome && !(await perguntar(`${nome} já existe na pasta. Substituir? O original fica guardado como .bak.`, "Substituir"))) return;
+    if (!(await podeGravarNaPasta(a, nome))) return;
     salvarNaPasta(a, nome);
   } else {
     a.nome = nome;
@@ -2544,7 +2565,7 @@ function trocarCores() {
 function atualizarBotoes() {
   const a = abaDat();
   $("btn-desfazer").disabled = !a || (!a.hist.length && !(a.flutuante && !a.flutuante.levantado));
-  $("btn-refazer").disabled = !a || !a.refazer.length;
+  $("btn-refazer").disabled = !a || !a.refazer.length || !!a.flutuante;
   $("btn-salvar").textContent = a && estado.servidor && (a.origem === "pasta" || a.origem === "novo") ? "Salvar na pasta" : "Salvar";
   if (!a) return;
   const tem = (acao, ok) => {

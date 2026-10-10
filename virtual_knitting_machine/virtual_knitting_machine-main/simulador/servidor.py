@@ -13,9 +13,13 @@ Rotas:
     /api/simular           ?padrao=meia|ribana|arroz&largura=2..60&carreiras=1..40 -> quadros da animação em JSON
     /api/arquivos          GET: lista a pasta de desenhos (--pasta, padrão "07 122 SSGsv")
     /api/arquivos/<nome>   GET: conteúdo do arquivo · POST: grava um .dat (o original vira <nome>.bak na 1ª vez)
+
+As rotas /api/arquivos só atendem pedidos feitos ao próprio computador (Host local). Gravar exige ainda o
+cabeçalho X-Editor-Shima, que outros sites abertos no navegador não conseguem enviar sem permissão.
 """
 
 import argparse
+import errno
 import json
 import os
 import sys
@@ -26,6 +30,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+from urllib.request import urlopen
 
 try:
     from padroes import Parametros_Invalidos, simular
@@ -40,6 +45,8 @@ PASTA_DESENHOS = Path(__file__).resolve().parents[2] / "07 122 SSGsv"
 PREFIXO_ARQUIVOS = "/api/arquivos"
 TAMANHO_MAXIMO = 32 * 1024 * 1024
 EXTENSOES_GRAVAVEIS = (".dat",)
+CABECALHO_EDITOR = "X-Editor-Shima"
+HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 
 
 class Manipulador(SimpleHTTPRequestHandler):
@@ -53,19 +60,31 @@ class Manipulador(SimpleHTTPRequestHandler):
         url = urlparse(self.path)
         if url.path == "/api/simular":
             self._simular(parse_qs(url.query))
-        elif url.path == PREFIXO_ARQUIVOS:
-            self._listar_arquivos()
-        elif url.path.startswith(PREFIXO_ARQUIVOS + "/"):
-            self._ler_arquivo(url.path)
+        elif url.path == PREFIXO_ARQUIVOS or url.path.startswith(PREFIXO_ARQUIVOS + "/"):
+            if not self._pedido_local():
+                self._json(HTTPStatus.FORBIDDEN, {"erro": "Pedido recusado: só o editor aberto neste computador pode ler a pasta."})
+            elif url.path == PREFIXO_ARQUIVOS:
+                self._listar_arquivos()
+            else:
+                self._ler_arquivo(url.path)
         else:
             super().do_GET()
 
     def do_POST(self) -> None:
         url = urlparse(self.path)
-        if url.path.startswith(PREFIXO_ARQUIVOS + "/"):
-            self._gravar_arquivo(url.path)
-        else:
+        if not url.path.startswith(PREFIXO_ARQUIVOS + "/"):
             self._json(HTTPStatus.NOT_FOUND, {"erro": "Rota inexistente."})
+        elif not self._pedido_local() or self.headers.get(CABECALHO_EDITOR) != "1":
+            self._json(HTTPStatus.FORBIDDEN, {"erro": "Pedido recusado: só o editor aberto neste computador pode gravar na pasta."})
+        else:
+            self._gravar_arquivo(url.path)
+
+    def _pedido_local(self) -> bool:
+        """Recusa pedidos de outros sites: o Host (contra DNS rebinding) e a Origin, se houver, precisam ser locais."""
+        if urlparse("//" + (self.headers.get("Host") or "")).hostname not in HOSTS_LOCAIS:
+            return False
+        origem = self.headers.get("Origin")
+        return origem is None or urlparse(origem).hostname in HOSTS_LOCAIS
 
     def _arquivo_da_pasta(self, caminho: str) -> Path | None:
         """Só aceita um nome que exista na pasta de desenhos: nada de subpastas nem ".."."""
@@ -173,6 +192,19 @@ def criar_servidor(porta: int = 8000, host: str = "127.0.0.1", pasta: Path | Non
     return ThreadingHTTPServer((host, porta), partial(manipulador, directory=str(PASTA_ESTATICA)))
 
 
+def porta_ocupada(erro: OSError) -> bool:
+    return erro.errno in (errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", None)) or getattr(erro, "winerror", None) == 10048
+
+
+def editor_responde(porta: int) -> bool:
+    """Confere se quem está na porta é mesmo este editor (e não outro programa)."""
+    try:
+        with urlopen(f"http://127.0.0.1:{porta}{PREFIXO_ARQUIVOS}", timeout=2) as resposta:
+            return "arquivos" in json.loads(resposta.read())
+    except (OSError, ValueError):
+        return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Simulador de tricô em localhost.")
     parser.add_argument("--porta", type=int, default=int(os.environ.get("PORT", 8000)))
@@ -182,11 +214,17 @@ def main() -> None:
     endereco_editor = f"http://localhost:{args.porta}/editor.html"
     try:
         servidor = criar_servidor(args.porta, pasta=args.pasta)
-    except OSError:
-        print(f"A porta {args.porta} já está em uso: o editor provavelmente já está aberto em {endereco_editor}")
-        if args.abrir:
-            webbrowser.open(endereco_editor)
-        sys.exit(0)
+    except OSError as erro:
+        if porta_ocupada(erro) and editor_responde(args.porta):
+            print(f"O editor já está aberto em {endereco_editor}")
+            if args.abrir:
+                webbrowser.open(endereco_editor)
+            sys.exit(0)
+        if porta_ocupada(erro):
+            print(f"A porta {args.porta} está ocupada por outro programa. Use --porta com outro número.")
+        else:
+            print(f"Não foi possível iniciar o servidor na porta {args.porta}: {erro}")
+        sys.exit(1)
     if ERRO_SIMULADOR:
         print(f"Simulador desligado. {ERRO_SIMULADOR}")
     else:
