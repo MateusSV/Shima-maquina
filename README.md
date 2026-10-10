@@ -3,7 +3,17 @@ Shima projeto
 
 ## Editor de arquivos Shima (.dat, .000, .QFD)
 
-### Jeito mais simples: abrir no computador
+### No Windows: dois cliques em `Abrir Editor Shima.bat`
+
+Baixe o repositório inteiro (no GitHub: **Code → Download ZIP**), descompacte e dê dois cliques em
+**`Abrir Editor Shima.bat`**, na raiz da pasta.
+
+- **Com Python instalado** (3.10 ou mais novo): abre uma janela preta e o editor no navegador. A lista da
+  pasta `07 122 SSGsv` aparece à esquerda, e o **Salvar** grava direto nela (o original fica guardado
+  como `.bak`). Deixe a janela preta aberta enquanto usa o editor; feche-a quando terminar.
+- **Sem Python:** abre o `Editor Shima.html` (abaixo), e o **Salvar** baixa o arquivo.
+
+### Sem instalar nada: abrir o `Editor Shima.html`
 
 1. Baixe o arquivo **`Editor Shima.html`** (está na raiz deste repositório).
 2. Dê dois cliques nele. Ele abre no navegador (Chrome, Edge ou Firefox), sem instalar nada.

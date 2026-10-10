@@ -2,7 +2,10 @@
 Servidor local do simulador de tricô. Usa só a biblioteca padrão do Python.
 
 Uso (a partir da pasta do projeto):
-    .\\.venv\\Scripts\\python simulador\\servidor.py [--porta 8000]   (ou a variável de ambiente PORT)
+    .\\.venv\\Scripts\\python simulador\\servidor.py [--porta 8000] [--pasta PASTA] [--abrir]
+    (--abrir abre o editor no navegador assim que o servidor estiver pronto)
+
+O editor funciona mesmo sem a biblioteca virtual_knitting_machine instalada; só o simulador precisa dela.
 
 Rotas:
     /                      a página do simulador (arquivos de simulador/static)
@@ -15,14 +18,22 @@ Rotas:
 import argparse
 import json
 import os
+import sys
 import warnings
+import webbrowser
 from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from padroes import Parametros_Invalidos, simular
+try:
+    from padroes import Parametros_Invalidos, simular
+except ImportError as erro:  # Biblioteca do simulador não instalada: o editor de arquivos continua funcionando.
+    Parametros_Invalidos = simular = None
+    ERRO_SIMULADOR = f"O simulador precisa da biblioteca do projeto (pip install -e .): {erro}"
+else:
+    ERRO_SIMULADOR = None
 
 PASTA_ESTATICA = Path(__file__).with_name("static")
 PASTA_DESENHOS = Path(__file__).resolve().parents[2] / "07 122 SSGsv"
@@ -120,6 +131,9 @@ class Manipulador(SimpleHTTPRequestHandler):
         self._json(HTTPStatus.OK, {"nome": arquivo.name, "tamanho": len(corpo), "copia": copia.name if copia.exists() else None})
 
     def _simular(self, consulta: dict[str, list[str]]) -> None:
+        if simular is None:
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"erro": ERRO_SIMULADOR})
+            return
         try:
             padrao = consulta.get("padrao", ["ribana"])[0]
             largura = int(consulta.get("largura", ["16"])[0])
@@ -163,10 +177,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Simulador de tricô em localhost.")
     parser.add_argument("--porta", type=int, default=int(os.environ.get("PORT", 8000)))
     parser.add_argument("--pasta", type=Path, default=PASTA_DESENHOS, help="pasta com os arquivos .dat/.000/.QFD")
+    parser.add_argument("--abrir", action="store_true", help="abre o editor no navegador")
     args = parser.parse_args()
-    servidor = criar_servidor(args.porta, pasta=args.pasta)
-    print(f"Simulador de Tricô rodando em http://localhost:{args.porta}  (Ctrl+C para parar)")
-    print(f"Editor de arquivos Shima em http://localhost:{args.porta}/editor.html  (pasta: {args.pasta.resolve()})")
+    endereco_editor = f"http://localhost:{args.porta}/editor.html"
+    try:
+        servidor = criar_servidor(args.porta, pasta=args.pasta)
+    except OSError:
+        print(f"A porta {args.porta} já está em uso: o editor provavelmente já está aberto em {endereco_editor}")
+        if args.abrir:
+            webbrowser.open(endereco_editor)
+        sys.exit(0)
+    if ERRO_SIMULADOR:
+        print(f"Simulador desligado. {ERRO_SIMULADOR}")
+    else:
+        print(f"Simulador de Tricô rodando em http://localhost:{args.porta}  (Ctrl+C para parar)")
+    print(f"Editor de arquivos Shima em {endereco_editor}  (pasta: {args.pasta.resolve()})")
+    if args.abrir:
+        webbrowser.open(endereco_editor)
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:

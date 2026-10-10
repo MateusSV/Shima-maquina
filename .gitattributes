@@ -1,0 +1,2 @@
+# O .bat precisa de quebras de linha do Windows (CRLF): guardado como está, sem conversão.
+*.bat -text

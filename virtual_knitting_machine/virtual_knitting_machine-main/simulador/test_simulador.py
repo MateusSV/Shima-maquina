@@ -207,6 +207,18 @@ class Test_Api_Arquivos(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual((self.pasta / "DESENHO.dat").read_bytes(), self.dat)
 
+    def test_editor_funciona_sem_a_biblioteca_do_simulador(self):
+        import servidor
+
+        original = servidor.simular
+        servidor.simular = None
+        self.addCleanup(setattr, servidor, "simular", original)
+        status, corpo = self.pedir("/api/simular?padrao=meia&largura=4&carreiras=2")
+        self.assertEqual(status, 503)
+        self.assertIn("erro", json.loads(corpo))
+        status, _ = self.pedir("/api/arquivos/DESENHO.dat")
+        self.assertEqual(status, 200)
+
     def test_pagina_do_editor(self):
         status, corpo = self.pedir("/editor.html")
         self.assertEqual(status, 200)
