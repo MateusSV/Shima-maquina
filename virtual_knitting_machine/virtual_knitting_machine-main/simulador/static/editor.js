@@ -109,6 +109,10 @@ function abaDat() {
 }
 
 function abrirBuffer(nome, buffer, origem) {
+  if (!buffer.byteLength) {
+    avisar(`${nome} está vazio (0 bytes).`, true);
+    return null;
+  }
   const existente = estado.abas.find((a) => a.nome === nome && a.origem === origem);
   if (existente) {
     mostrarAba(existente);
@@ -197,6 +201,13 @@ function marcarModificado(aba) {
 // ------------------------------------------------------------------ pasta (servidor)
 
 async function carregarPasta() {
+  if (location.protocol === "file:") {
+    // Aberto direto do disco (Editor Shima.html): não há servidor nem lista da pasta.
+    estado.servidor = false;
+    desenharPasta();
+    atualizarBotoes();
+    return;
+  }
   try {
     const resposta = await fetch("/api/arquivos", { cache: "no-store" });
     if (!resposta.ok) throw new Error(String(resposta.status));
@@ -215,7 +226,7 @@ async function carregarPasta() {
 
 function desenharPasta() {
   $("nome-pasta").textContent = estado.pasta;
-  $("pasta-sem-servidor").hidden = estado.servidor;
+  $("grupo-pasta").hidden = !estado.servidor;
   $("btn-abrir-todos").hidden = !estado.servidor || !estado.arquivosPasta.length;
   $("btn-atualizar-pasta").hidden = !estado.servidor;
   $("lista-pasta").innerHTML = estado.arquivosPasta
@@ -268,7 +279,33 @@ async function abrirTodos() {
 }
 
 async function abrirLocais(arquivos) {
-  for (const arquivo of arquivos) abrirBuffer(arquivo.name, await arquivo.arrayBuffer(), "local");
+  let primeiroDat = null;
+  let abertos = 0;
+  const falhas = [];
+  for (const arquivo of arquivos) {
+    // Numa pasta inteira, ignora arquivos ocultos e as cópias .bak.
+    if (arquivo.name.startsWith(".") || /\.(bak|tmp)$/i.test(arquivo.name)) continue;
+    let conteudo;
+    try {
+      conteudo = await arquivo.arrayBuffer();
+    } catch (erro) {
+      // Uma pasta arrastada chega como um "arquivo" que não pode ser lido.
+      falhas.push(arquivo.name);
+      continue;
+    }
+    const aba = abrirBuffer(arquivo.name, conteudo, "local");
+    if (!aba) {
+      falhas.push(arquivo.name);
+      continue;
+    }
+    abertos++;
+    if (aba.tipo === "dat" && !primeiroDat) primeiroDat = aba;
+  }
+  if (primeiroDat && abertos > 1) mostrarAba(primeiroDat);
+  if (falhas.length) {
+    const dica = falhas.some((n) => !n.includes(".")) ? " Para abrir uma pasta, use “Abrir uma pasta inteira…”." : "";
+    avisar(`${abertos ? `${abertos} arquivos abertos. ` : ""}Não foi possível abrir: ${falhas.join(", ")}.${dica}`, true);
+  } else if (abertos > 1) avisar(`${abertos} arquivos abertos.`);
 }
 
 // ------------------------------------------------------------------ tela do desenho
@@ -1136,6 +1173,7 @@ function baixarDat(a, nome = a.nome) {
       a.modificado = false;
       desenharAbas();
     }
+    avisar(`${nome} foi baixado (normalmente vai para a pasta Downloads). Copie-o para a pasta dos desenhos.`);
   } catch (erro) {
     avisar(`Erro ao gravar: ${erro.message}`, true);
   }
@@ -1548,6 +1586,10 @@ $("lista-pasta").addEventListener("click", (e) => {
 
 $("btn-abrir-todos").addEventListener("click", abrirTodos);
 $("btn-atualizar-pasta").addEventListener("click", carregarPasta);
+$("entrada-pasta").addEventListener("change", (e) => {
+  abrirLocais([...e.target.files].sort((a, b) => a.name.localeCompare(b.name)));
+  e.target.value = "";
+});
 $("entrada-arquivo").addEventListener("change", (e) => {
   abrirLocais([...e.target.files]);
   e.target.value = "";

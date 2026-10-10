@@ -212,6 +212,23 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--destaque
 .vazio { margin: auto; max-width: 520px; padding: 32px; display: flex; flex-direction: column; gap: 10px; }
 .vazio h2 { font-size: 22px; font-weight: 600; }
 .formatos { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.area-soltar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 180px;
+  padding: 24px;
+  border: 2px dashed var(--botao-borda);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--destaque);
+  text-align: center;
+  cursor: pointer;
+}
+.area-soltar:hover { border-color: var(--destaque); }
+.area-soltar strong { color: var(--tinta); font-size: 16px; font-weight: 600; }
 
 /* ---------- área de desenho ---------- */
 

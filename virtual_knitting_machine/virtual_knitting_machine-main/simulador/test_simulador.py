@@ -11,6 +11,7 @@ import warnings
 
 from pathlib import Path
 
+from gerar_editor_portatil import SAIDA_PADRAO, gerar_html
 from ler_dat_shima import ler_dat
 from padroes import Parametros_Invalidos, simular
 from servidor import PASTA_DESENHOS, criar_servidor
@@ -210,6 +211,24 @@ class Test_Api_Arquivos(unittest.TestCase):
         status, corpo = self.pedir("/editor.html")
         self.assertEqual(status, 200)
         self.assertIn(b"Editor Shima", corpo)
+
+
+class Test_Editor_Portatil(unittest.TestCase):
+
+    def test_arquivo_unico_tem_tudo_embutido(self):
+        html = gerar_html()
+        self.assertNotIn('<script src="', html)
+        self.assertNotIn('href="editor.css"', html)
+        for trecho in ("function ler(buffer)", "function lerPrograma(buffer)", "function abrirLocais(arquivos)"):
+            self.assertIn(trecho, html)
+
+    @unittest.skipUnless(SAIDA_PADRAO.exists(), "Editor Shima.html ainda não foi gerado")
+    def test_arquivo_unico_esta_atualizado(self):
+        self.assertEqual(
+            SAIDA_PADRAO.read_text(encoding="utf-8"),
+            gerar_html(),
+            "Editor Shima.html está desatualizado: rode python simulador/gerar_editor_portatil.py",
+        )
 
 
 if __name__ == "__main__":
