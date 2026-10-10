@@ -388,6 +388,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .dialogo { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
 .dialogo h2 { font-size: 18px; font-weight: 600; }
 .botoes-dialogo { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.texto-dialogo { margin: 0; font-size: 15px; max-width: 46ch; }
 
 .aviso {
   position: fixed;
@@ -680,6 +681,21 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
       <label class="campo">Altura <input type="number" name="altura" min="1" max="8000"></label>
     </div>
     <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Importar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-confirmar" aria-labelledby="confirmar-texto">
+  <form method="dialog" class="dialogo">
+    <p id="confirmar-texto" class="texto-dialogo"></p>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok" id="confirmar-ok">Continuar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-nome" aria-labelledby="dlg-nome-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-nome-titulo">Salvar como</h2>
+    <label class="campo">Nome do arquivo <input type="text" name="nome" id="campo-nome-arquivo" required></label>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Salvar</button></div>
   </form>
 </dialog>
 
@@ -1169,7 +1185,37 @@ function avisar(texto, erro = false) {
   temporizadorAviso = setTimeout(() => (el.hidden = true), erro ? 7000 : 3500);
 }
 
-function baixar(blob, nome) {
+// Extensões que a página publicada no Claude consegue entregar; outras (como .dat) vão dentro de um .zip.
+const EXT_PERMITIDAS_NO_CLAUDE = /\.(png|jpe?g|gif|webp|txt|json|md|csv|html|svg|pdf|zip)$/i;
+
+function dentroDoClaude() {
+  return !!(window.claude && typeof window.claude.use === "function");
+}
+
+// Entrega o arquivo ao usuário. Devolve o nome com que ele foi oferecido, ou null se não foi baixado.
+async function baixar(dados, nome) {
+  if (dentroDoClaude()) {
+    const downloads = await window.claude.use("downloads");
+    if (!downloads) {
+      avisar("Esta página não pode baixar arquivos aqui. Use o Editor Shima.html no computador.", true);
+      return null;
+    }
+    let arquivo = nome;
+    let conteudo = dados instanceof Blob ? dados : new Blob([dados]);
+    if (!EXT_PERMITIDAS_NO_CLAUDE.test(nome)) {
+      conteudo = new Blob([zipComUmArquivo(nome, new Uint8Array(await conteudo.arrayBuffer()))]);
+      arquivo = trocarExtensao(nome, ".zip");
+    }
+    try {
+      await downloads.save({ filename: arquivo, data: conteudo });
+      return arquivo;
+    } catch (erro) {
+      if (erro && erro.code === "declined") avisar("Download cancelado.");
+      else avisar(`Não foi possível baixar ${arquivo}: ${(erro && erro.message) || erro}`, true);
+      return null;
+    }
+  }
+  const blob = dados instanceof Blob ? dados : new Blob([dados], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -1178,6 +1224,83 @@ function baixar(blob, nome) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return nome;
+}
+
+let tabelaCrc = null;
+function crc32(bytes) {
+  if (!tabelaCrc) {
+    tabelaCrc = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      tabelaCrc[n] = c >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) crc = tabelaCrc[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+// ZIP sem compressão com um único arquivo (nome em UTF-8, para manter o Ç).
+function zipComUmArquivo(nome, bytes) {
+  const nomeBytes = new TextEncoder().encode(nome);
+  const crc = crc32(bytes);
+  const local = new DataView(new ArrayBuffer(30));
+  local.setUint32(0, 0x04034b50, true);
+  local.setUint16(4, 20, true);
+  local.setUint16(6, 0x0800, true); // nome em UTF-8
+  local.setUint32(14, crc, true);
+  local.setUint32(18, bytes.length, true);
+  local.setUint32(22, bytes.length, true);
+  local.setUint16(26, nomeBytes.length, true);
+  const central = new DataView(new ArrayBuffer(46));
+  central.setUint32(0, 0x02014b50, true);
+  central.setUint16(4, 20, true);
+  central.setUint16(6, 20, true);
+  central.setUint16(8, 0x0800, true);
+  central.setUint32(16, crc, true);
+  central.setUint32(20, bytes.length, true);
+  central.setUint32(24, bytes.length, true);
+  central.setUint16(28, nomeBytes.length, true);
+  const inicioCentral = 30 + nomeBytes.length + bytes.length;
+  const fim = new DataView(new ArrayBuffer(22));
+  fim.setUint32(0, 0x06054b50, true);
+  fim.setUint16(8, 1, true);
+  fim.setUint16(10, 1, true);
+  fim.setUint32(12, 46 + nomeBytes.length, true);
+  fim.setUint32(16, inicioCentral, true);
+  const partes = [new Uint8Array(local.buffer), nomeBytes, bytes, new Uint8Array(central.buffer), nomeBytes, new Uint8Array(fim.buffer)];
+  const zip = new Uint8Array(partes.reduce((t, p) => t + p.length, 0));
+  let pos = 0;
+  for (const p of partes) {
+    zip.set(p, pos);
+    pos += p.length;
+  }
+  return zip;
+}
+
+// Substitutos das janelas confirm e prompt do navegador, que não funcionam na página publicada no Claude.
+function perguntar(texto, botao = "Continuar") {
+  return new Promise((responder) => {
+    const dlg = $("dlg-confirmar");
+    $("confirmar-texto").textContent = texto;
+    $("confirmar-ok").textContent = botao;
+    dlg.addEventListener("close", () => responder(dlg.returnValue === "ok"), { once: true });
+    abrirDialogo("dlg-confirmar");
+  });
+}
+
+function pedirNome(titulo, valor) {
+  return new Promise((responder) => {
+    const dlg = $("dlg-nome");
+    const campo = dlg.querySelector("input[name=nome]");
+    $("dlg-nome-titulo").textContent = titulo;
+    campo.value = valor;
+    dlg.addEventListener("close", () => responder(dlg.returnValue === "ok" ? campo.value.trim() || null : null), { once: true });
+    abrirDialogo("dlg-nome");
+    campo.select();
+  });
 }
 
 function abrirDialogo(id) {
@@ -1254,10 +1377,10 @@ function mostrarAba(aba) {
   atualizarBotoes();
 }
 
-function fecharAba(id) {
+async function fecharAba(id) {
   const aba = estado.abas.find((a) => a.id === id);
   if (!aba) return;
-  if (aba.modificado && !confirm(`${aba.nome} tem alterações não salvas. Fechar mesmo assim?`)) return;
+  if (aba.modificado && !(await perguntar(`${aba.nome} tem alterações não salvas. Fechar mesmo assim?`, "Fechar sem salvar"))) return;
   if (aba.tipo === "imagem") URL.revokeObjectURL(aba.aberto.url);
   const i = estado.abas.indexOf(aba);
   estado.abas.splice(i, 1);
@@ -1294,8 +1417,8 @@ function marcarModificado(aba) {
 // ------------------------------------------------------------------ pasta (servidor)
 
 async function carregarPasta() {
-  if (location.protocol === "file:") {
-    // Aberto direto do disco (Editor Shima.html): não há servidor nem lista da pasta.
+  if (location.protocol === "file:" || dentroDoClaude()) {
+    // Aberto direto do disco (Editor Shima.html) ou publicado no Claude: não há servidor nem lista da pasta.
     estado.servidor = false;
     desenharPasta();
     atualizarBotoes();
@@ -1975,10 +2098,10 @@ const ACOES = {
     if (!a.flutuante) return avisar("Não há colagem para fixar.");
     fixarFlutuante(a);
   },
-  "cortar-desenho"(a) {
+  async "cortar-desenho"(a) {
     fixarFlutuante(a);
     if (!exigirSelecao(a)) return;
-    if (!confirm(`Deixar o desenho com ${a.selecao.w} agulhas × ${a.selecao.h} carreiras, só com a área selecionada?`)) return;
+    if (!(await perguntar(`Deixar o desenho com ${a.selecao.w} agulhas × ${a.selecao.h} carreiras, só com a área selecionada?`, "Cortar"))) return;
     salvarHistorico(a);
     const b = recortarArea(a.doc, a.selecao);
     Object.assign(a.doc, { largura: b.w, altura: b.h, pixels: b.px });
@@ -2258,18 +2381,21 @@ async function salvarNaPasta(a, nome) {
   }
 }
 
-function baixarDat(a, nome = a.nome) {
+async function baixarDat(a, nome = a.nome) {
+  let bytes;
   try {
-    const bytes = bytesDoDesenho(a);
-    baixar(new Blob([bytes], { type: "application/octet-stream" }), nome);
-    if (a.origem !== "pasta") {
-      a.modificado = false;
-      desenharAbas();
-    }
-    avisar(`${nome} foi baixado (normalmente vai para a pasta Downloads). Copie-o para a pasta dos desenhos.`);
+    bytes = bytesDoDesenho(a);
   } catch (erro) {
-    avisar(`Erro ao gravar: ${erro.message}`, true);
+    return avisar(`Erro ao gravar: ${erro.message}`, true);
   }
+  const entregue = await baixar(bytes, nome);
+  if (!entregue) return;
+  if (a.origem !== "pasta") {
+    a.modificado = false;
+    desenharAbas();
+  }
+  if (entregue === nome) avisar(`${nome} foi baixado (normalmente vai para a pasta Downloads). Copie-o para a pasta dos desenhos.`);
+  else avisar(`${entregue} foi baixado. Dentro dele está ${nome}: extraia e copie para a pasta dos desenhos.`);
 }
 
 function salvar() {
@@ -2279,17 +2405,16 @@ function salvar() {
   else baixarDat(a);
 }
 
-function salvarComo() {
+async function salvarComo() {
   const a = abaDat();
   if (!a) return;
-  let nome = prompt("Nome do arquivo:", a.nome);
+  let nome = await pedirNome("Salvar como", a.nome);
   if (!nome) return;
-  nome = nome.trim();
   if (/[\\/]/.test(nome)) return avisar("O nome não pode ter barras.", true);
   if (!/\.dat$/i.test(nome)) nome += ".dat";
   const existe = estado.arquivosPasta.some((x) => x.nome === nome);
   if (estado.servidor) {
-    if (existe && nome !== a.nome && !confirm(`${nome} já existe na pasta. Substituir? (o original fica guardado como .bak)`)) return;
+    if (existe && nome !== a.nome && !(await perguntar(`${nome} já existe na pasta. Substituir? O original fica guardado como .bak.`, "Substituir"))) return;
     salvarNaPasta(a, nome);
   } else {
     a.nome = nome;
@@ -2358,7 +2483,7 @@ function atualizarPainel() {
     ["Agulhas", d.largura],
     ["Carreiras", d.altura],
     ["Cores em uso", `${usadas.length} de 256`],
-    ["Origem", a.origem === "pasta" ? `pasta ${estado.pasta}` : a.origem === "novo" ? "desenho novo" : "computador"],
+    ["Origem", { pasta: `pasta ${estado.pasta}`, novo: "desenho novo", exemplo: "exemplo já carregado" }[a.origem] || "computador"],
     ["Arquivo", a.tamanho ? bytesLegiveis(a.tamanho) : "ainda não salvo"],
     ["Formato", esc(String(d.assinatura || "").trim())],
   ]
@@ -2784,6 +2909,12 @@ window.addEventListener("resize", () => {
 });
 
 escolherFerramenta("lapis");
+if (window.SHIMA_EXEMPLO) {
+  // Versão publicada: abre já com um desenho de exemplo embutido na página.
+  const binario = atob(window.SHIMA_EXEMPLO.base64);
+  const bytes = Uint8Array.from(binario, (c) => c.charCodeAt(0));
+  abrirBuffer(window.SHIMA_EXEMPLO.nome, bytes.buffer, "exemplo");
+}
 carregarPasta().then(() => {
   const pedido = new URLSearchParams(location.search).get("abrir");
   if (pedido) abrirDaPasta(pedido);

@@ -261,6 +261,21 @@
   </form>
 </dialog>
 
+<dialog id="dlg-confirmar" aria-labelledby="confirmar-texto">
+  <form method="dialog" class="dialogo">
+    <p id="confirmar-texto" class="texto-dialogo"></p>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok" id="confirmar-ok">Continuar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-nome" aria-labelledby="dlg-nome-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-nome-titulo">Salvar como</h2>
+    <label class="campo">Nome do arquivo <input type="text" name="nome" id="campo-nome-arquivo" required></label>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Salvar</button></div>
+  </form>
+</dialog>
+
 <div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
 <div class="soltar" id="soltar" hidden><span>Solte para abrir</span></div>
 

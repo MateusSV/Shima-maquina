@@ -11,7 +11,7 @@ import warnings
 
 from pathlib import Path
 
-from gerar_editor_portatil import SAIDA_PADRAO, gerar_html
+from gerar_editor_portatil import EXEMPLO_PADRAO, SAIDA_PADRAO, gerar_artefato, gerar_html
 from ler_dat_shima import ler_dat
 from padroes import Parametros_Invalidos, simular
 from servidor import PASTA_DESENHOS, criar_servidor
@@ -233,6 +233,16 @@ class Test_Editor_Portatil(unittest.TestCase):
         self.assertNotIn('href="editor.css"', html)
         for trecho in ("function ler(buffer)", "function lerPrograma(buffer)", "function abrirLocais(arquivos)"):
             self.assertIn(trecho, html)
+
+    @unittest.skipUnless(EXEMPLO_PADRAO.exists(), "desenho de exemplo ausente")
+    def test_versao_publicada_comeca_pelo_titulo_e_traz_o_exemplo(self):
+        html = gerar_artefato()
+        self.assertTrue(html.startswith("<title>Editor Shima</title>"))
+        for tag in ("<!doctype", "<html", "<head>", "<body>", "</body>", "</html>"):
+            self.assertNotIn(tag, html)
+        self.assertIn("window.SHIMA_EXEMPLO", html)
+        self.assertNotIn("confirm(", html.replace("perguntar", ""))
+        self.assertNotIn(" prompt(", html)
 
     @unittest.skipUnless(SAIDA_PADRAO.exists(), "Editor Shima.html ainda não foi gerado")
     def test_arquivo_unico_esta_atualizado(self):
