@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor Shima</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<div class="app">
+
+<header class="topo">
+  <div class="marca">
+    <h1>Editor Shima</h1>
+    <span class="suave">.dat · .000 · .QFD</span>
+  </div>
+  <nav class="abas" id="abas" aria-label="Arquivos abertos"></nav>
+  <div class="acoes" id="acoes-dat" hidden>
+    <button type="button" class="botao principal" id="btn-salvar" title="Ctrl+S">Salvar</button>
+    <button type="button" class="botao" id="btn-salvar-como">Salvar como…</button>
+    <button type="button" class="botao" id="btn-baixar">Baixar .dat</button>
+    <button type="button" class="botao" id="btn-png">Exportar PNG</button>
+  </div>
+  <a class="link-simulador" href="index.html">Simulador</a>
+</header>
+
+<div class="corpo">
+
+<aside class="lateral" aria-label="Arquivos">
+  <section class="grupo" id="grupo-pasta">
+    <div class="titulo-grupo">
+      <h2 class="rotulo">Pasta <span id="nome-pasta" class="mono"></span></h2>
+      <button type="button" class="botao pequeno" id="btn-atualizar-pasta" aria-label="Atualizar a lista da pasta" title="Atualizar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/></svg>
+      </button>
+    </div>
+    <ul class="lista-pasta" id="lista-pasta"></ul>
+    <p class="suave pequeno" id="pasta-sem-servidor" hidden>Para ver a pasta, rode <code>python simulador/servidor.py</code> e abra <code>localhost:8000/editor.html</code>.</p>
+    <button type="button" class="botao largo" id="btn-abrir-todos">Abrir todos</button>
+  </section>
+
+  <section class="grupo">
+    <label class="botao largo" for="entrada-arquivo">Abrir do computador…</label>
+    <input type="file" id="entrada-arquivo" class="escondido" multiple>
+    <p class="suave pequeno">Ou arraste os arquivos para esta janela.</p>
+    <button type="button" class="botao largo" id="btn-novo">Novo desenho…</button>
+  </section>
+
+  <section class="grupo ajuda">
+    <h2 class="rotulo">Atalhos</h2>
+    <dl class="atalhos">
+      <dt>B E L R F G I M</dt><dd>ferramentas</dd>
+      <dt>Botão direito</dt><dd>pinta com a cor secundária</dd>
+      <dt>X</dt><dd>troca as cores</dd>
+      <dt>Ctrl+Z / Ctrl+Y</dt><dd>desfazer / refazer</dd>
+      <dt>Ctrl+C X V</dt><dd>copiar, recortar, colar</dd>
+      <dt>Ctrl+A</dt><dd>selecionar tudo</dd>
+      <dt>Enter / Esc</dt><dd>fixar / descartar colagem</dd>
+      <dt>Del</dt><dd>apagar seleção</dd>
+      <dt>Ctrl+roda, + −</dt><dd>zoom</dd>
+      <dt>Shift na linha</dt><dd>reta a 0°, 45° ou 90°</dd>
+    </dl>
+  </section>
+</aside>
+
+<main class="principal" id="principal">
+  <div class="vazio" id="vazio">
+    <h2>Abra um arquivo</h2>
+    <p class="suave">Escolha um arquivo da pasta ao lado, use “Abrir do computador” ou arraste os arquivos para cá.</p>
+    <ul class="suave formatos">
+      <li><strong>.dat</strong> desenho do KnitPaint: abre para edição.</li>
+      <li><strong>.000</strong> programa de tricô da máquina: abre para consulta.</li>
+      <li><strong>.QFD</strong> ajustes automáticos: abre para consulta.</li>
+      <li><strong>.png / .jpg</strong> imagem: pode ser importada num desenho.</li>
+    </ul>
+  </div>
+
+  <div class="area-dat" id="area-dat" hidden>
+    <div class="barra" role="toolbar" aria-label="Ferramentas de desenho">
+      <div class="ferramentas" id="ferramentas">
+        <button type="button" class="ferramenta" data-ferramenta="lapis" aria-label="Lápis (B)" title="Lápis (B)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4zM14 7l3 3"/></svg></button>
+        <button type="button" class="ferramenta" data-ferramenta="borracha" aria-label="Borracha (E)" title="Borracha: pinta com a cor de fundo (E)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 20h12M4.5 15.5l9-9 6 6-7.5 7.5H9l-4.5-4.5z"/></svg></button>
+        <button type="button" class="ferramenta" data-ferramenta="linha" aria-label="Linha (L)" title="Linha (L) — Shift trava o ângulo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5"/></svg></button>
+        <button type="button" class="ferramenta" data-ferramenta="retangulo" aria-label="Retângulo (R)" title="Retângulo (R)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/></svg></button>
+        <button type="button" class="ferramenta" data-ferramenta="retangulo-cheio" aria-label="Retângulo cheio (F)" title="Retângulo cheio (F)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z" fill="currentColor"/></svg></button>
+        <button type="button" class="ferramenta" data-ferramenta="balde" aria-label="Balde de tinta (G)" title="Balde de tinta (G)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11l7-7 7 7-7 7-7-7zM5 11h14M20 16c0 1.7-.8 3-1.5 3S17 17.7 17 16s1.5-3 1.5-3 1.5 1.3 1.5 3z"/></svg></button>
+        <button type="button" class="ferramenta" data-ferramenta="conta-gotas" aria-label="Conta-gotas (I)" title="Conta-gotas (I)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5l5 5-2.5 1-8 8H6v-3l8-8 .5-3zM12 8l4 4"/></svg></button>
+        <button type="button" class="ferramenta" data-ferramenta="selecao" aria-label="Seleção (M)" title="Seleção (M) — arraste dentro dela para mover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" /></svg></button>
+      </div>
+      <label class="campo-barra">Pincel
+        <select id="tamanho-pincel">
+          <option value="1">1 px</option><option value="2">2 px</option><option value="3">3 px</option>
+          <option value="5">5 px</option><option value="7">7 px</option><option value="9">9 px</option>
+        </select>
+      </label>
+      <div class="separador"></div>
+      <button type="button" class="botao icone" id="btn-desfazer" aria-label="Desfazer (Ctrl+Z)" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3"/></svg></button>
+      <button type="button" class="botao icone" id="btn-refazer" aria-label="Refazer (Ctrl+Y)" title="Refazer (Ctrl+Y)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9a5 5 0 000 10h3"/></svg></button>
+      <div class="separador"></div>
+      <button type="button" class="botao icone" id="btn-zoom-menos" aria-label="Diminuir zoom">−</button>
+      <select id="zoom" aria-label="Zoom"></select>
+      <button type="button" class="botao icone" id="btn-zoom-mais" aria-label="Aumentar zoom">+</button>
+      <button type="button" class="botao" id="btn-ajustar">Ajustar</button>
+      <label class="campo-barra"><input type="checkbox" id="mostrar-grade" checked> Grade</label>
+    </div>
+
+    <div class="janela" id="janela">
+      <div class="folha" id="folha">
+        <canvas id="tela"></canvas>
+        <div class="grade" id="grade" hidden></div>
+        <div class="caixa-selecao" id="caixa-selecao" hidden></div>
+        <div class="caixa-flutuante" id="caixa-flutuante" hidden></div>
+      </div>
+    </div>
+
+    <footer class="status mono" id="status">
+      <span id="status-posicao">—</span>
+      <span id="status-selecao"></span>
+      <span id="status-ferramenta"></span>
+      <span class="status-direita" id="status-tamanho"></span>
+    </footer>
+  </div>
+
+  <div class="inspetor" id="inspetor" hidden></div>
+</main>
+
+<aside class="painel" id="painel-dat" hidden aria-label="Cores e operações">
+  <section class="grupo">
+    <h2 class="rotulo">Cores</h2>
+    <div class="cores-atuais">
+      <div class="cor-atual">
+        <span class="amostra grande" id="amostra-primaria"></span>
+        <span class="pequeno">Primária <strong class="mono" id="numero-primaria"></strong></span>
+      </div>
+      <button type="button" class="botao icone" id="btn-trocar-cores" aria-label="Trocar cores (X)" title="Trocar cores (X)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h12l-3-3M17 17H5l3 3"/></svg></button>
+      <div class="cor-atual">
+        <span class="amostra grande" id="amostra-secundaria"></span>
+        <span class="pequeno">Secundária <strong class="mono" id="numero-secundaria"></strong></span>
+      </div>
+    </div>
+    <div class="linha-campos">
+      <label class="campo">Cor nº <input type="number" id="campo-primaria" min="0" max="255"></label>
+      <label class="campo">Fundo / borracha <input type="number" id="campo-fundo" min="0" max="255"></label>
+      <label class="campo">Cor na tela <input type="color" id="campo-rgb"></label>
+    </div>
+    <h3 class="sub">Em uso no desenho</h3>
+    <p class="suave pequeno">Clique: primária · botão direito: secundária</p>
+    <ul class="cores-uso" id="cores-uso"></ul>
+    <details class="paleta-completa">
+      <summary>Paleta completa (256 cores)</summary>
+      <div class="grade-paleta" id="grade-paleta"></div>
+    </details>
+  </section>
+
+  <section class="grupo">
+    <h2 class="rotulo">Seleção</h2>
+    <div class="botoes-grade">
+      <button type="button" class="botao" data-acao="selecionar-tudo">Selecionar tudo</button>
+      <button type="button" class="botao" data-acao="copiar">Copiar</button>
+      <button type="button" class="botao" data-acao="recortar">Recortar</button>
+      <button type="button" class="botao" data-acao="colar">Colar</button>
+      <button type="button" class="botao" data-acao="apagar">Apagar</button>
+      <button type="button" class="botao" data-acao="preencher">Preencher</button>
+      <button type="button" class="botao" data-acao="espelhar-h">Espelhar ↔</button>
+      <button type="button" class="botao" data-acao="espelhar-v">Espelhar ↕</button>
+      <button type="button" class="botao" data-acao="girar">Girar 90°</button>
+      <button type="button" class="botao" data-acao="repetir" title="Repete a área copiada até encher a seleção">Repetir cópia</button>
+      <button type="button" class="botao" data-acao="fixar">Fixar colagem</button>
+      <button type="button" class="botao" data-acao="cortar-desenho" title="Deixa o desenho do tamanho da seleção">Cortar desenho</button>
+    </div>
+    <label class="campo-check"><input type="checkbox" id="colar-transparente"> Colar sem a cor de fundo</label>
+  </section>
+
+  <section class="grupo">
+    <h2 class="rotulo">Desenho</h2>
+    <div class="botoes-grade">
+      <button type="button" class="botao" data-acao="substituir">Substituir cor…</button>
+      <button type="button" class="botao" data-acao="importar">Importar imagem…</button>
+      <button type="button" class="botao" data-acao="redimensionar">Redimensionar…</button>
+    </div>
+    <dl class="info" id="info-dat"></dl>
+  </section>
+</aside>
+
+</div>
+</div>
+
+<dialog id="dlg-substituir" aria-labelledby="dlg-substituir-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-substituir-titulo">Substituir cor</h2>
+    <div class="linha-campos">
+      <label class="campo">Trocar a cor nº <input type="number" name="de" min="0" max="255" required></label>
+      <label class="campo">pela cor nº <input type="number" name="para" min="0" max="255" required></label>
+    </div>
+    <label class="campo-check"><input type="checkbox" name="so-selecao"> Só dentro da seleção</label>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Substituir</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-redimensionar" aria-labelledby="dlg-redimensionar-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-redimensionar-titulo">Redimensionar desenho</h2>
+    <p class="suave pequeno">Muda o número de agulhas e de carreiras. O desenho não é esticado: a área nova recebe a cor de fundo.</p>
+    <div class="linha-campos">
+      <label class="campo">Agulhas (largura) <input type="number" name="largura" min="1" max="8000" required></label>
+      <label class="campo">Carreiras (altura) <input type="number" name="altura" min="1" max="8000" required></label>
+    </div>
+    <label class="campo">Manter o desenho
+      <select name="ancora">
+        <option value="baixo-esquerda">embaixo, à esquerda (carreira 1, agulha 1)</option>
+        <option value="baixo-centro">embaixo, no centro</option>
+        <option value="centro">no centro</option>
+      </select>
+    </label>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Redimensionar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-novo" aria-labelledby="dlg-novo-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-novo-titulo">Novo desenho</h2>
+    <p class="suave pequeno" id="novo-referencia"></p>
+    <label class="campo">Nome do arquivo <input type="text" name="nome" required></label>
+    <div class="linha-campos">
+      <label class="campo">Agulhas (largura) <input type="number" name="largura" min="1" max="8000" required></label>
+      <label class="campo">Carreiras (altura) <input type="number" name="altura" min="1" max="8000" required></label>
+      <label class="campo">Cor de fundo <input type="number" name="fundo" min="0" max="255" required></label>
+    </div>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Criar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-importar" aria-labelledby="dlg-importar-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-importar-titulo">Importar imagem</h2>
+    <p class="suave pequeno">A imagem vira pixels com números de cor e entra como colagem: posicione com a ferramenta Seleção e aperte Enter.</p>
+    <label class="campo">Imagem <input type="file" name="arquivo" accept="image/*"></label>
+    <p class="pequeno mono" id="importar-origem"></p>
+    <label class="campo">Converter as cores
+      <select name="modo">
+        <option value="duas">em duas cores pela claridade: escuro = primária, claro = secundária</option>
+        <option value="proxima">na cor mais parecida entre as cores em uso no desenho</option>
+      </select>
+    </label>
+    <label class="campo">Limite de claridade <input type="range" name="limiar" min="1" max="254" value="128"></label>
+    <label class="campo-check"><input type="checkbox" name="claro-transparente"> Partes claras ficam transparentes (só no modo duas cores)</label>
+    <label class="campo-check"><input type="checkbox" name="ajustar"> Ajustar ao tamanho da seleção</label>
+    <div class="linha-campos">
+      <label class="campo">Largura <input type="number" name="largura" min="1" max="8000"></label>
+      <label class="campo">Altura <input type="number" name="altura" min="1" max="8000"></label>
+    </div>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Importar</button></div>
+  </form>
+</dialog>
+
+<div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
+<div class="soltar" id="soltar" hidden><span>Solte para abrir</span></div>
+
+<script src="shima_dat.js"></script>
+<script src="shima_arquivos.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>

@@ -65,6 +65,8 @@ def ler_dat(caminho: Path) -> tuple[int, int, list[tuple[int, int, int]], bytes]
         raise ValueError(f"{caminho} não é um .dat compactado da Shima Seiki (assinatura SDS LZSS ausente).")
     tamanho = int.from_bytes(bruto[0x40:0x44], "little")
     dados = descompactar_lzss(bruto[0x44:])[:tamanho]
+    if len(dados) < tamanho:
+        raise ValueError(f"Arquivo truncado: {len(dados)} de {tamanho} bytes descompactados.")
 
     x_final, y_final = struct.unpack_from("<HH", dados, 4)
     largura, altura = x_final + 1, y_final + 1

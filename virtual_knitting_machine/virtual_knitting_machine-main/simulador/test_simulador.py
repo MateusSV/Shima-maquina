@@ -1,14 +1,21 @@
 """Testes do simulador: receitas na máquina real e a API HTTP."""
 
 import json
+import shutil
+import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.request
 import warnings
 
+from pathlib import Path
+
+from ler_dat_shima import ler_dat
 from padroes import Parametros_Invalidos, simular
-from servidor import criar_servidor
+from servidor import PASTA_DESENHOS, criar_servidor
+
+DAT_DE_EXEMPLO = PASTA_DESENHOS / "00FE_BLS_ESTAMPA_ONÇA.dat"
 
 
 def grade_do_tecido(resultado: dict) -> dict[tuple[int, int], str]:
@@ -110,6 +117,99 @@ class Test_Servidor(unittest.TestCase):
     def test_rota_inexistente(self):
         status, _, _ = self.get("/nao-existe")
         self.assertEqual(status, 404)
+
+
+@unittest.skipUnless(DAT_DE_EXEMPLO.exists(), "pasta de desenhos de exemplo ausente")
+class Test_Ler_Dat(unittest.TestCase):
+
+    def test_le_o_desenho_de_exemplo(self):
+        largura, altura, paleta, pixels = ler_dat(DAT_DE_EXEMPLO)
+        self.assertEqual((largura, altura), (1115, 590))
+        self.assertEqual(len(paleta), 256)
+        self.assertEqual(len(pixels), largura * altura)
+
+    def test_recusa_arquivo_que_nao_e_dat(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            falso = Path(pasta) / "falso.dat"
+            falso.write_bytes(b"isto nao e um dat")
+            with self.assertRaises(ValueError):
+                ler_dat(falso)
+
+
+class Test_Api_Arquivos(unittest.TestCase):
+
+    def setUp(self):
+        self.pasta = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.pasta)
+        self.dat = b"SDS LZSS COMPRESS Ver 1.00" + bytes(40)
+        (self.pasta / "DESENHO.dat").write_bytes(self.dat)
+        (self.pasta / "00_C_P.000").write_bytes(b"START\rF=00_C_P.000\t\rEND\r")
+        self.servidor = criar_servidor(0, pasta=self.pasta)
+        self.base = f"http://127.0.0.1:{self.servidor.server_address[1]}"
+        threading.Thread(target=self.servidor.serve_forever, daemon=True).start()
+        self.addCleanup(self.servidor.server_close)
+        self.addCleanup(self.servidor.shutdown)
+
+    def pedir(self, caminho, corpo=None):
+        pedido = urllib.request.Request(self.base + caminho, data=corpo, method="POST" if corpo is not None else "GET")
+        try:
+            with urllib.request.urlopen(pedido) as resposta:
+                return resposta.status, resposta.read()
+        except urllib.error.HTTPError as erro:
+            return erro.code, erro.read()
+
+    def test_lista_a_pasta(self):
+        status, corpo = self.pedir("/api/arquivos")
+        self.assertEqual(status, 200)
+        nomes = [a["nome"] for a in json.loads(corpo)["arquivos"]]
+        self.assertEqual(nomes, ["00_C_P.000", "DESENHO.dat"])
+
+    def test_le_um_arquivo(self):
+        status, corpo = self.pedir("/api/arquivos/DESENHO.dat")
+        self.assertEqual(status, 200)
+        self.assertEqual(corpo, self.dat)
+
+    def test_nome_com_acento_e_espaco(self):
+        (self.pasta / "ESTAMPA ONÇA.dat").write_bytes(self.dat)
+        status, corpo = self.pedir("/api/arquivos/" + urllib.request.quote("ESTAMPA ONÇA.dat"))
+        self.assertEqual(status, 200)
+        self.assertEqual(corpo, self.dat)
+
+    def test_nao_sai_da_pasta(self):
+        for caminho in ("/api/arquivos/..%2Fsegredo.dat", "/api/arquivos/%2E%2E", "/api/arquivos/a%5Cb.dat", "/api/arquivos/nao-existe.dat"):
+            status, _ = self.pedir(caminho)
+            self.assertEqual(status, 404, caminho)
+        status, _ = self.pedir("/api/arquivos/..%2Fsegredo.dat", corpo=self.dat)
+        self.assertEqual(status, 400)
+        self.assertFalse((self.pasta.parent / "segredo.dat").exists())
+
+    def test_grava_e_guarda_o_original(self):
+        novo = b"SDS LZSS COMPRESS Ver 1.00" + bytes(50)
+        status, corpo = self.pedir("/api/arquivos/DESENHO.dat", corpo=novo)
+        self.assertEqual(status, 200, corpo)
+        self.assertEqual((self.pasta / "DESENHO.dat").read_bytes(), novo)
+        self.assertEqual((self.pasta / "DESENHO.dat.bak").read_bytes(), self.dat)
+        # A cópia de segurança é feita só na primeira gravação.
+        self.pedir("/api/arquivos/DESENHO.dat", corpo=self.dat)
+        self.assertEqual((self.pasta / "DESENHO.dat.bak").read_bytes(), self.dat)
+
+    def test_cria_arquivo_novo(self):
+        status, _ = self.pedir("/api/arquivos/NOVO.dat", corpo=self.dat)
+        self.assertEqual(status, 200)
+        self.assertEqual((self.pasta / "NOVO.dat").read_bytes(), self.dat)
+        self.assertFalse((self.pasta / "NOVO.dat.bak").exists())
+
+    def test_recusa_gravar_o_que_nao_e_dat(self):
+        status, _ = self.pedir("/api/arquivos/00_C_P.000", corpo=self.dat)
+        self.assertEqual(status, 400)
+        status, _ = self.pedir("/api/arquivos/DESENHO.dat", corpo=b"qualquer coisa")
+        self.assertEqual(status, 400)
+        self.assertEqual((self.pasta / "DESENHO.dat").read_bytes(), self.dat)
+
+    def test_pagina_do_editor(self):
+        status, corpo = self.pedir("/editor.html")
+        self.assertEqual(status, 200)
+        self.assertIn(b"Editor Shima", corpo)
 
 
 if __name__ == "__main__":
