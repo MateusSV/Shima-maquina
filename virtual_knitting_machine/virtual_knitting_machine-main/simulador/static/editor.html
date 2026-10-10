@@ -117,6 +117,8 @@
       <button type="button" class="botao icone" id="btn-zoom-mais" aria-label="Aumentar zoom">+</button>
       <button type="button" class="botao" id="btn-ajustar">Ajustar</button>
       <label class="campo-barra"><input type="checkbox" id="mostrar-grade" checked> Grade</label>
+      <label class="campo-barra" title="Desenha simétrico: no meio da seleção ou, sem seleção, no meio do desenho"><input type="checkbox" id="espelhado"> Espelhado</label>
+      <label class="campo-barra" title="Mostra só a cor primária e apaga as outras, para achar onde ela aparece"><input type="checkbox" id="destacar-cor"> Destacar cor</label>
     </div>
 
     <div class="janela" id="janela">
@@ -158,6 +160,8 @@
       <label class="campo">Fundo / borracha <input type="number" id="campo-fundo" min="0" max="255"></label>
       <label class="campo">Cor na tela <input type="color" id="campo-rgb"></label>
     </div>
+    <label class="campo"><span id="rotulo-nome-cor">Nome da cor</span> <input type="text" id="campo-nome-cor" maxlength="60" autocomplete="off"></label>
+    <p class="suave pequeno">Os nomes com “?” são sugestões de referências públicas do KnitPaint e mudam entre versões: confira e escreva o seu.</p>
     <h3 class="sub">Em uso no desenho</h3>
     <p class="suave pequeno">Clique: primária · botão direito: secundária</p>
     <ul class="cores-uso" id="cores-uso"></ul>
@@ -165,6 +169,12 @@
       <summary>Paleta completa (256 cores)</summary>
       <div class="grade-paleta" id="grade-paleta"></div>
     </details>
+  </section>
+
+  <section class="grupo">
+    <h2 class="rotulo">Linhas de opção <span class="mono" id="titulo-opcoes"></span></h2>
+    <div id="lista-opcoes" class="lista-opcoes"></div>
+    <p class="suave pequeno">Os nomes com “?” vêm de referências públicas (R3 guia-fio, R5 cancelar malha, R6 ponto) e podem variar na sua versão do KnitPaint.</p>
   </section>
 
   <section class="grupo">
@@ -182,6 +192,15 @@
       <button type="button" class="botao" data-acao="repetir" title="Repete a área copiada até encher a seleção">Repetir cópia</button>
       <button type="button" class="botao" data-acao="fixar">Fixar colagem</button>
       <button type="button" class="botao" data-acao="cortar-desenho" title="Deixa o desenho do tamanho da seleção">Cortar desenho</button>
+      <button type="button" class="botao" data-acao="mudar-tamanho" title="Estica ou encolhe a seleção sem criar cores novas">Mudar tamanho…</button>
+    </div>
+    <h3 class="sub">Carreiras e agulhas da seleção</h3>
+    <p class="suave pequeno">Valem para a largura ou a altura inteira do desenho, com as linhas de opção, como no KnitPaint.</p>
+    <div class="botoes-grade">
+      <button type="button" class="botao" data-acao="duplicar-carreiras" title="Insere uma cópia das carreiras selecionadas logo acima delas">Duplicar carreiras</button>
+      <button type="button" class="botao" data-acao="excluir-carreiras">Excluir carreiras</button>
+      <button type="button" class="botao" data-acao="duplicar-agulhas" title="Insere uma cópia das agulhas selecionadas logo à esquerda delas">Duplicar agulhas</button>
+      <button type="button" class="botao" data-acao="excluir-agulhas">Excluir agulhas</button>
     </div>
     <label class="campo-check"><input type="checkbox" id="colar-transparente"> Colar sem a cor de fundo</label>
   </section>
@@ -265,6 +284,19 @@
       <label class="campo">Altura <input type="number" name="altura" min="1" max="8000"></label>
     </div>
     <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Importar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-esticar" aria-labelledby="dlg-esticar-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-esticar-titulo">Mudar tamanho da seleção</h2>
+    <p class="suave pequeno">Estica ou encolhe a área selecionada repetindo ou pulando pixels, sem criar cores novas. A base (carreira de baixo) fica no lugar.</p>
+    <div class="linha-campos">
+      <label class="campo">Agulhas (largura) <input type="number" name="largura" min="1" max="8000" required></label>
+      <label class="campo">Carreiras (altura) <input type="number" name="altura" min="1" max="8000" required></label>
+    </div>
+    <label class="campo-check"><input type="checkbox" name="proporcao" checked> Manter a proporção</label>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Aplicar</button></div>
   </form>
 </dialog>
 

@@ -211,7 +211,81 @@
     return p;
   }
 
-  const api = { ler, gravar, novo, compactar, descompactar };
+  // ----- Linhas de opção -----
+  // Ao lado de cada área de desenho o KnitPaint põe as linhas de opção (L1–L20 à esquerda, R1–R20 à direita).
+  // No arquivo, cada linha ocupa 2 agulhas: uma coluna-guia pintada com o número da linha (2 a 20) e uma
+  // coluna com os valores. A linha 1 fica colada à área de desenho. O bloco é reconhecido pelas colunas-guia
+  // 2, 3, 4, … a cada 2 agulhas, crescendo para longe do desenho.
+
+  function corDominante(doc, x) {
+    const { largura: W, altura: H, pixels: p } = doc;
+    const contagem = new Map();
+    let y0 = -1, y1 = -1, total = 0;
+    for (let y = 0; y < H; y++) {
+      const c = p[y * W + x];
+      if (!c) continue;
+      contagem.set(c, (contagem.get(c) || 0) + 1);
+      if (y0 < 0) y0 = y;
+      y1 = y;
+      total++;
+    }
+    if (total < 8) return null;
+    let cor = 0, n = 0;
+    for (const [c, k] of contagem) if (k > n) { cor = c; n = k; }
+    return n >= 0.8 * total ? { cor, y0, y1 } : null;
+  }
+
+  function linhasDeOpcao(doc, minimo = 8) {
+    const W = doc.largura;
+    const guias = Array.from({ length: W }, (_, x) => corDominante(doc, x));
+    const blocos = [];
+    for (let x = 0; x < W; x++) {
+      if (!guias[x] || guias[x].cor !== 2) continue;
+      for (const [lado, passo] of [["R", 2], ["L", -2]]) {
+        let ultima = 2;
+        while (ultima < 20) {
+          const g = guias[x + passo * (ultima - 1)];
+          if (!g || g.cor !== ultima + 1) break;
+          ultima++;
+        }
+        if (ultima < minimo) continue;
+        const { y0, y1 } = guias[x];
+        const colunas = {};
+        for (let k = 1; k <= ultima; k++) {
+          const guia = x + passo * (k - 2);
+          colunas[k] = lado === "R" ? [guia, guia + 1] : [guia - 1, guia];
+        }
+        blocos.push({ lado, ultima, carreiraInicio: y0, carreiraFim: y1, colunas, xMin: Math.min(...Object.values(colunas).flat()), xMax: Math.max(...Object.values(colunas).flat()) });
+      }
+    }
+    return blocos;
+  }
+
+  // Qual linha de opção fica na agulha x, carreira y (linha de cima = 0)?
+  function linhaDeOpcaoEm(blocos, x, y) {
+    for (const b of blocos) {
+      if (x < b.xMin || x > b.xMax || y < b.carreiraInicio || y > b.carreiraFim) continue;
+      for (const k in b.colunas) if (b.colunas[k].includes(x)) return { lado: b.lado, numero: Number(k), bloco: b };
+    }
+    return null;
+  }
+
+  // Valores das linhas de um bloco numa carreira, sem a cor-guia da própria linha.
+  function valoresDasLinhas(doc, bloco, y) {
+    const valores = [];
+    for (let k = 1; k <= bloco.ultima; k++) {
+      const cores = [];
+      for (const x of bloco.colunas[k]) {
+        const c = doc.pixels[y * doc.largura + x];
+        const guia = bloco.lado === "R" ? x === bloco.colunas[k][0] : x === bloco.colunas[k][1];
+        if (c && !(guia && c === k) && !cores.includes(c)) cores.push(c);
+      }
+      if (cores.length) valores.push({ linha: `${bloco.lado}${k}`, numero: k, cores });
+    }
+    return valores;
+  }
+
+  const api = { ler, gravar, novo, compactar, descompactar, linhasDeOpcao, linhaDeOpcaoEm, valoresDasLinhas };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.ShimaDat = api;
 })(typeof window !== "undefined" ? window : globalThis);

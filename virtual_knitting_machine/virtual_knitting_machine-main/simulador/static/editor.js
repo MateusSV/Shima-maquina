@@ -24,6 +24,43 @@ const FERRAMENTAS = {
   "conta-gotas": { nome: "Conta-gotas", tecla: "i" },
   selecao: { nome: "Seleção", tecla: "m" },
 };
+// Nomes de cores e de linhas de opção vindos de referências públicas do KnitPaint. Variam entre versões:
+// aparecem como sugestão ("?") até a pessoa confirmar ou trocar o nome na legenda.
+const SUGESTOES_CORES = {
+  1: "malha na frente",
+  2: "malha atrás",
+  3: "malha frente e atrás",
+  11: "tuck na frente",
+  12: "tuck atrás",
+  13: "largura do guia-fio",
+  16: "sem seleção (não tece)",
+};
+const NOMES_LINHAS = { R1: "economizador / repetição", R3: "guia-fio", R5: "cancelar malha", R6: "ponto (densidade)" };
+const CHAVE_LEGENDA = "editor-shima-legenda";
+
+function lerLegenda() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_LEGENDA) || "{}") || {};
+  } catch (erro) {
+    return {};
+  }
+}
+
+function gravarLegenda(legenda) {
+  try {
+    localStorage.setItem(CHAVE_LEGENDA, JSON.stringify(legenda));
+  } catch (erro) {
+    // Sem armazenamento: a legenda vale só até fechar a página.
+  }
+}
+
+const legenda = lerLegenda();
+
+function nomeDaCor(n) {
+  if (legenda[n]) return legenda[n];
+  return SUGESTOES_CORES[n] ? `${SUGESTOES_CORES[n]}?` : "";
+}
+
 const TIPOS = { dat: "desenho", programa: "programa", ajustes: "ajustes", imagem: "imagem", desconhecido: "outro" };
 
 const estado = {
@@ -42,6 +79,9 @@ const estado = {
   grade: true,
   colarTransparente: false,
   area: null, // área copiada: { w, h, px }
+  espelhado: false, // desenhar simétrico
+  destacar: false, // destacar a cor primária, apagando as outras
+  carreiraFoco: null, // carreira sob o cursor, para o painel de linhas de opção
   imagemImportar: null, // { nome, url } escolhida numa aba de imagem
 };
 
@@ -568,6 +608,7 @@ function prepararTela(aba) {
   }
   atualizarPainel();
   atualizarStatus();
+  desenharOpcoes();
 }
 
 function atualizarLut(paleta) {
@@ -584,7 +625,14 @@ function renderizar() {
   const d = a.doc;
   const px32 = new Uint32Array(imagem.data.buffer);
   const p = d.pixels;
-  for (let i = 0; i < p.length; i++) px32[i] = lut[p[i]];
+  if (estado.destacar) {
+    // Só a cor primária fica com a cor dela; o resto vira cinza claro.
+    const alvo = estado.primaria;
+    const apagado = ((255 << 24) | (205 << 16) | (205 << 8) | 205) >>> 0;
+    for (let i = 0; i < p.length; i++) px32[i] = p[i] === alvo ? lut[p[i]] : apagado;
+  } else {
+    for (let i = 0; i < p.length; i++) px32[i] = lut[p[i]];
+  }
   const f = a.flutuante;
   if (f) {
     for (let y = 0; y < f.h; y++) {
@@ -623,7 +671,7 @@ function aplicarTamanho(aba) {
   tela.style.height = h + "px";
   const grade = $("grade");
   grade.hidden = !(estado.grade && z >= ZOOM_GRADE);
-  grade.style.backgroundSize = `${z}px ${z}px`;
+  grade.style.backgroundSize = `${z}px ${z}px, ${z}px ${z}px, ${10 * z}px ${10 * z}px, ${10 * z}px ${10 * z}px`;
   $("zoom").value = String(z);
   posicionarCaixas();
 }
@@ -698,7 +746,13 @@ function limitarHistorico(aba) {
   }
 }
 
+function blocosDeOpcao(aba) {
+  if (!aba.opcoes) aba.opcoes = ShimaDat.linhasDeOpcao(aba.doc);
+  return aba.opcoes;
+}
+
 function restaurar(aba, r) {
+  aba.opcoes = null;
   const d = aba.doc;
   const mudouTamanho = r.largura !== d.largura || r.altura !== d.altura;
   Object.assign(d, { pixels: r.pixels, largura: r.largura, altura: r.altura, paleta: r.paleta });
@@ -749,7 +803,14 @@ function dentroDoDesenho(r, d) {
   return r.x >= 0 && r.y >= 0 && r.x + r.w <= d.largura && r.y + r.h <= d.altura;
 }
 
+let eixoEspelho = null; // com "Espelhado" ligado: soma das colunas simétricas (x + x' = eixo)
+
 function pintar(d, x, y, cor) {
+  if (eixoEspelho !== null) pintarSimples(d, eixoEspelho - x, y, cor);
+  pintarSimples(d, x, y, cor);
+}
+
+function pintarSimples(d, x, y, cor) {
   if (x >= 0 && y >= 0 && x < d.largura && y < d.altura) d.pixels[y * d.largura + x] = cor;
 }
 
@@ -948,6 +1009,8 @@ tela.addEventListener("pointerdown", (e) => {
   const f = estado.ferramenta;
   if (f !== "selecao") fixarFlutuante(a);
 
+  // Espelhado: a simetria é no meio da seleção ou, sem seleção, no meio do desenho.
+  eixoEspelho = estado.espelhado ? (a.selecao ? 2 * a.selecao.x + a.selecao.w - 1 : d.largura - 1) : null;
   if (f === "lapis" || f === "borracha") {
     salvarHistorico(a);
     const c = f === "borracha" ? estado.fundo : cor;
@@ -1018,6 +1081,7 @@ tela.addEventListener("pointermove", (e) => {
 });
 
 function terminarGesto() {
+  eixoEspelho = null;
   const a = abaDat();
   if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma")) atualizarPainel();
   gesto = null;
@@ -1141,6 +1205,27 @@ const ACOES = {
     if (!a.flutuante) return avisar("Não há colagem para fixar.");
     fixarFlutuante(a);
   },
+  "duplicar-carreiras"(a) {
+    alterarLinhas(a, "carreiras", "duplicar");
+  },
+  "excluir-carreiras"(a) {
+    alterarLinhas(a, "carreiras", "excluir");
+  },
+  "duplicar-agulhas"(a) {
+    alterarLinhas(a, "agulhas", "duplicar");
+  },
+  "excluir-agulhas"(a) {
+    alterarLinhas(a, "agulhas", "excluir");
+  },
+  "mudar-tamanho"(a) {
+    if (!a.flutuante && !exigirSelecao(a)) return;
+    const r = a.flutuante || a.selecao;
+    const form = $("dlg-esticar").querySelector("form");
+    form.largura.value = r.w;
+    form.altura.value = r.h;
+    form.dataset.proporcao = String(r.w / r.h);
+    abrirDialogo("dlg-esticar");
+  },
   async "cortar-desenho"(a) {
     fixarFlutuante(a);
     if (!exigirSelecao(a)) return;
@@ -1148,6 +1233,7 @@ const ACOES = {
     salvarHistorico(a);
     const b = recortarArea(a.doc, a.selecao);
     Object.assign(a.doc, { largura: b.w, altura: b.h, pixels: b.px });
+    a.opcoes = null;
     a.selecao = null;
     a.zoom = null;
     prepararTela(a);
@@ -1178,6 +1264,85 @@ $("painel-dat").addEventListener("click", (e) => {
   const botao = e.target.closest("[data-acao]");
   const a = abaDat();
   if (botao && a) ACOES[botao.dataset.acao](a);
+});
+
+// Duplica ou exclui carreiras (linhas inteiras) ou agulhas (colunas inteiras) da seleção, como o
+// "inserir/apagar linha" do KnitPaint: as linhas de opção vão junto, porque a operação pega a largura toda.
+function alterarLinhas(a, eixo, acao) {
+  fixarFlutuante(a);
+  if (!exigirSelecao(a)) return;
+  const d = a.doc, s = a.selecao;
+  const W = d.largura, H = d.altura;
+  const carreiras = eixo === "carreiras";
+  const n = carreiras ? s.h : s.w;
+  if (acao === "excluir" && n >= (carreiras ? H : W)) return avisar(`Não dá para excluir ${carreiras ? "todas as carreiras" : "todas as agulhas"}.`, true);
+  const novaL = carreiras ? W : acao === "duplicar" ? W + n : W - n;
+  const novaA = carreiras ? (acao === "duplicar" ? H + n : H - n) : H;
+  if (novaL > 8000 || novaA > 8000) return avisar("O desenho passaria de 8000 agulhas ou carreiras.", true);
+  salvarHistorico(a);
+  const px = new Uint8Array(novaL * novaA);
+  if (carreiras) {
+    // Linhas de cima para baixo: a cópia entra logo acima da seleção (carreiras de número maior).
+    const linhas = [];
+    for (let y = 0; y < H; y++) {
+      const dentro = y >= s.y && y < s.y + s.h;
+      if (acao === "duplicar" && y === s.y) for (let k = 0; k < s.h; k++) linhas.push(s.y + k);
+      if (!(acao === "excluir" && dentro)) linhas.push(y);
+    }
+    linhas.forEach((y, i) => px.set(d.pixels.subarray(y * W, (y + 1) * W), i * W));
+  } else {
+    const colunas = [];
+    for (let x = 0; x < W; x++) {
+      const dentro = x >= s.x && x < s.x + s.w;
+      if (acao === "duplicar" && x === s.x) for (let k = 0; k < s.w; k++) colunas.push(s.x + k);
+      if (!(acao === "excluir" && dentro)) colunas.push(x);
+    }
+    for (let y = 0; y < H; y++) for (let i = 0; i < colunas.length; i++) px[y * novaL + i] = d.pixels[y * W + colunas[i]];
+  }
+  Object.assign(d, { largura: novaL, altura: novaA, pixels: px });
+  a.opcoes = null;
+  a.selecao = acao === "duplicar" ? { ...s } : null;
+  prepararTela(a);
+  const nomeEixo = carreiras ? (n === 1 ? "carreira" : "carreiras") : n === 1 ? "agulha" : "agulhas";
+  avisar(`${n} ${nomeEixo} ${acao === "duplicar" ? (n === 1 ? "duplicada" : "duplicadas") : n === 1 ? "excluída" : "excluídas"}. Desenho agora com ${novaL} agulhas × ${novaA} carreiras.`);
+}
+
+function esticar(b, w, h) {
+  // Vizinho mais próximo: não cria cores novas, cada pixel continua sendo um número de cor do desenho.
+  const px = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(b.h - 1, Math.floor((y * b.h) / h));
+    for (let x = 0; x < w; x++) px[y * w + x] = b.px[sy * b.w + Math.min(b.w - 1, Math.floor((x * b.w) / w))];
+  }
+  return { ...b, w, h, px };
+}
+
+$("dlg-esticar").querySelector("form").largura.addEventListener("input", (e) => {
+  const form = e.target.form;
+  if (form.proporcao.checked) form.altura.value = Math.max(1, Math.round(Number(e.target.value) / Number(form.dataset.proporcao)));
+});
+$("dlg-esticar").querySelector("form").altura.addEventListener("input", (e) => {
+  const form = e.target.form;
+  if (form.proporcao.checked) form.largura.value = Math.max(1, Math.round(Number(e.target.value) * Number(form.dataset.proporcao)));
+});
+
+$("dlg-esticar").addEventListener("close", () => {
+  const dlg = $("dlg-esticar");
+  const a = abaDat();
+  if (dlg.returnValue !== "ok" || !a) return;
+  const form = dlg.querySelector("form");
+  const w = limitar(Math.round(Number(form.largura.value)), 1, 8000);
+  const h = limitar(Math.round(Number(form.altura.value)), 1, 8000);
+  if (!a.flutuante) {
+    if (!a.selecao) return;
+    levantarSelecao(a);
+  }
+  const f = a.flutuante;
+  a.flutuante = { ...esticar(f, w, h), x: f.x, y: f.y + f.h - h }; // mantém a base (carreira de baixo) no lugar
+  renderizar();
+  atualizarBotoes();
+  atualizarStatus();
+  avisar(`Seleção com ${w} × ${h}. Arraste para posicionar e aperte Enter para fixar.`);
 });
 
 $("dlg-substituir").addEventListener("close", () => {
@@ -1219,6 +1384,7 @@ $("dlg-redimensionar").addEventListener("close", () => {
   const temp = { largura, altura, pixels: novo.px };
   colarArea(temp, antigo, ox, oy, null);
   Object.assign(d, { largura, altura, pixels: novo.px });
+  a.opcoes = null;
   a.selecao = null;
   a.zoom = null;
   prepararTela(a);
@@ -1512,6 +1678,9 @@ function atualizarPainel() {
   $("campo-primaria").value = estado.primaria;
   $("campo-fundo").value = estado.fundo;
   $("campo-rgb").value = cor(estado.primaria);
+  $("campo-nome-cor").value = legenda[estado.primaria] || "";
+  $("campo-nome-cor").placeholder = SUGESTOES_CORES[estado.primaria] ? `${SUGESTOES_CORES[estado.primaria]}? (sugestão)` : "ex.: malha na frente";
+  $("rotulo-nome-cor").textContent = `Nome da cor ${estado.primaria}`;
 
   const contagem = contarCores(d);
   const usadas = [];
@@ -1521,7 +1690,7 @@ function atualizarPainel() {
       (c) => `<li><button type="button" class="cor-uso${c === estado.primaria ? " primaria" : ""}${c === estado.secundaria ? " secundaria" : ""}" data-cor="${c}" title="Cor ${c} — ${cor(c)}">
         <span class="amostra" style="background:${cor(c)}"></span>
         <span class="mono numero">${c}</span>
-        <span class="mono suave">${cor(c)}</span>
+        <span class="nome-cor${legenda[c] ? "" : " sugestao"}">${esc(nomeDaCor(c)) || `<span class="mono suave">${cor(c)}</span>`}</span>
         <span class="mono contagem">${contagem[c].toLocaleString("pt-BR")}</span>
       </button></li>`,
     )
@@ -1548,6 +1717,7 @@ function escolherCor(n, secundaria) {
   if (secundaria) estado.secundaria = n;
   else estado.primaria = n;
   atualizarPainel();
+  if (estado.destacar && !secundaria) renderizar();
 }
 
 for (const id of ["cores-uso", "grade-paleta"]) {
@@ -1578,7 +1748,22 @@ $("campo-rgb").addEventListener("change", (e) => {
   atualizarPainel();
   avisar(`A cor ${estado.primaria} agora aparece como ${e.target.value}. O número da cor não mudou.`);
 });
+$("campo-nome-cor").addEventListener("change", (e) => {
+  const texto = e.target.value.trim();
+  if (texto) legenda[estado.primaria] = texto;
+  else delete legenda[estado.primaria];
+  gravarLegenda(legenda);
+  atualizarPainel();
+});
 $("btn-trocar-cores").addEventListener("click", trocarCores);
+$("espelhado").addEventListener("change", (e) => {
+  estado.espelhado = e.target.checked;
+  atualizarStatus();
+});
+$("destacar-cor").addEventListener("change", (e) => {
+  estado.destacar = e.target.checked;
+  renderizar();
+});
 $("colar-transparente").addEventListener("change", (e) => {
   estado.colarTransparente = e.target.checked;
   const a = abaDat();
@@ -1613,6 +1798,41 @@ function atualizarBotoes() {
   tem("repetir", !!estado.area && !!a.selecao);
   tem("fixar", !!a.flutuante);
   tem("cortar-desenho", !!a.selecao);
+  for (const acao of ["duplicar-carreiras", "excluir-carreiras", "duplicar-agulhas", "excluir-agulhas"]) tem(acao, !!a.selecao);
+  tem("mudar-tamanho", sel);
+}
+
+function desenharOpcoes() {
+  const a = abaDat();
+  const el = $("lista-opcoes");
+  if (!a) return;
+  const blocos = blocosDeOpcao(a);
+  if (!blocos.length) {
+    $("titulo-opcoes").textContent = "";
+    el.innerHTML = `<p class="suave pequeno">Nenhum bloco de linhas de opção encontrado neste desenho.</p>`;
+    return;
+  }
+  const d = a.doc;
+  const y = estado.carreiraFoco;
+  const naFaixa = blocos.filter((b) => y !== null && y >= b.carreiraInicio && y <= b.carreiraFim);
+  if (!naFaixa.length) {
+    $("titulo-opcoes").textContent = "";
+    el.innerHTML = `<p class="suave pequeno">Passe o cursor sobre uma carreira entre ${d.altura - blocos[0].carreiraFim} e ${d.altura - blocos[0].carreiraInicio} para ver os valores de L1–L20 e R1–R20.</p>`;
+    return;
+  }
+  $("titulo-opcoes").textContent = `carreira ${d.altura - y}`;
+  el.innerHTML = naFaixa
+    .map((b) => {
+      const valores = ShimaDat.valoresDasLinhas(d, b, y);
+      const painel = Math.floor(blocos.indexOf(b) / 2) + 1;
+      const linhas = valores.length
+        ? valores
+            .map((v) => `<tr><th class="mono">${v.linha}</th><td class="mono">${v.cores.join(", ")}</td><td class="suave">${NOMES_LINHAS[v.linha] ? `${NOMES_LINHAS[v.linha]}?` : ""}</td></tr>`)
+            .join("")
+        : `<tr><td colspan="3" class="suave">sem valores</td></tr>`;
+      return `<table class="tabela tabela-opcoes"><caption>${b.lado === "L" ? "Esquerda" : "Direita"} · painel ${painel}</caption><tbody>${linhas}</tbody></table>`;
+    })
+    .join("");
 }
 
 function atualizarStatus(p) {
@@ -1621,13 +1841,20 @@ function atualizarStatus(p) {
   const d = a.doc;
   if (p && noDesenho(p, d)) {
     const n = d.pixels[p.y * d.largura + p.x];
-    $("status-posicao").textContent = `Agulha ${p.x + 1} · Carreira ${d.altura - p.y} · Cor ${n}`;
+    const nome = nomeDaCor(n);
+    const linha = ShimaDat.linhaDeOpcaoEm(blocosDeOpcao(a), p.x, p.y);
+    const textoLinha = linha ? ` · Linha de opção ${linha.lado}${linha.numero}${NOMES_LINHAS[linha.lado + linha.numero] ? `: ${NOMES_LINHAS[linha.lado + linha.numero]}?` : ""}` : "";
+    $("status-posicao").textContent = `Agulha ${p.x + 1} · Carreira ${d.altura - p.y} · Cor ${n}${nome ? ` (${nome})` : ""}${textoLinha}`;
+    if (estado.carreiraFoco !== p.y) {
+      estado.carreiraFoco = p.y;
+      desenharOpcoes();
+    }
   } else if (p !== undefined) {
     $("status-posicao").textContent = "—";
   }
   const r = a.flutuante || a.selecao;
   $("status-selecao").textContent = r ? `${a.flutuante ? "Colagem" : "Seleção"} ${r.w} × ${r.h}` : "";
-  $("status-ferramenta").textContent = `${FERRAMENTAS[estado.ferramenta].nome}${["lapis", "borracha", "linha", "retangulo"].includes(estado.ferramenta) ? ` · ${estado.pincel} px` : ""}`;
+  $("status-ferramenta").textContent = `${FERRAMENTAS[estado.ferramenta].nome}${["lapis", "borracha", "linha", "retangulo"].includes(estado.ferramenta) ? ` · ${estado.pincel} px` : ""}${estado.espelhado ? " · espelhado" : ""}`;
   $("status-tamanho").textContent = `${d.largura} × ${d.altura} · ${Math.round(a.zoom * 100)}%`;
 }
 

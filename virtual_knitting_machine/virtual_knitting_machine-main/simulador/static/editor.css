@@ -273,7 +273,10 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--destaque
   pointer-events: none;
   background-image:
     linear-gradient(to right, rgba(0, 0, 0, 0.28) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 1px, transparent 1px);
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 1px, transparent 1px),
+    linear-gradient(to right, rgba(0, 0, 0, 0.6) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 1px, transparent 1px);
+  background-position: left bottom; /* conta as carreiras de baixo para cima, como a máquina */
 }
 .caixa-selecao, .caixa-flutuante { position: absolute; pointer-events: none; }
 .caixa-selecao {
@@ -326,6 +329,13 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--destaque
 .cor-uso.secundaria { border-style: dashed; border-color: var(--suave); }
 .cor-uso .numero { font-weight: 500; }
 .cor-uso .contagem { color: var(--suave); }
+.cor-uso { grid-template-columns: auto 32px minmax(0, 1fr) auto; }
+.nome-cor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nome-cor.sugestao { color: var(--suave); font-style: italic; }
+.lista-opcoes { display: flex; flex-direction: column; gap: 8px; }
+.tabela-opcoes { font-size: 12px; }
+.tabela-opcoes caption { text-align: left; font-size: 11px; font-weight: 600; color: var(--suave); padding-bottom: 2px; }
+.tabela-opcoes th, .tabela-opcoes td { padding: 3px 6px; }
 .paleta-completa summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
 .grade-paleta { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 1px; margin-top: 6px; }
 .celula-paleta { aspect-ratio: 1; border: 0; padding: 0; border-radius: 1px; cursor: pointer; opacity: 0.55; }

@@ -37,6 +37,22 @@ python simulador/servidor.py
 
 Depois abra http://localhost:8000/editor.html no navegador. Para usar outra pasta: `--pasta "C:\caminho\da\pasta"`.
 
+### O que dá para fazer no `.dat`
+
+- Desenhar: lápis e borracha (1 a 9 px), linha, retângulo, balde, conta-gotas e **desenho espelhado** (simétrico).
+- Seleção: mover, copiar, colar, espelhar, girar, repetir um motivo, **mudar o tamanho** sem criar cores novas.
+- **Duplicar ou excluir carreiras e agulhas** da seleção, na largura ou altura inteira, levando junto as
+  linhas de opção (como o inserir/apagar linha do KnitPaint).
+- **Linhas de opção**: o editor reconhece os blocos L1–L20 e R1–R20 ao lado de cada painel, mostra no rodapé
+  qual linha está sob o cursor e lista os valores da carreira apontada (R3 guia-fio, R5 cancelar malha,
+  R6 ponto, segundo referências públicas: confira na sua versão).
+- **Legenda das cores**: dê nome a cada número de cor; os nomes ficam guardados no navegador.
+- **Destacar cor**: mostra só uma cor para achar onde ela aparece. Grade com linha forte a cada 10.
+- Substituir cor, redimensionar, importar imagem, desfazer/refazer, exportar PNG.
+
+O que o editor **não** faz: gerar o programa da máquina (`.000`) a partir do `.dat`. Isso é o
+processamento do KnitPaint. Para isso use o KnitPaint ou o SDS KnitPaint-Online da Shima Seiki.
+
 | Arquivo | O que é | No editor |
 | --- | --- | --- |
 | `.dat` | desenho do KnitPaint (SDS-ONE) | edição completa e gravação |

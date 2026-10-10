@@ -95,3 +95,33 @@ test("abre os ajustes .QFD: registros encadeados até o fim", semPasta, () => {
   assert.equal(q.resto, 0);
   assert.deepEqual(q.registros.slice(0, 3).map((r) => r.numero), [0, 1, 2]);
 });
+
+test("acha as linhas de opção de um desenho montado à mão", () => {
+  // Área de desenho em x 10–19; à direita, a linha 1 em x 20–21 e as guias 2..20 a partir de x 22.
+  const doc = ShimaDat.novo(70, 12, null);
+  const p = (x, y, c) => (doc.pixels[y * 70 + x] = c);
+  for (let y = 1; y <= 10; y++) {
+    for (let k = 2; k <= 20; k++) p(22 + 2 * (k - 2), y, k);
+    p(20, y, y % 2 ? 6 : 7);
+  }
+  p(30 + 1, 5, 12); // R6: ponto 12 na carreira y=5
+  const blocos = ShimaDat.linhasDeOpcao(doc);
+  assert.equal(blocos.length, 1);
+  assert.equal(blocos[0].lado, "R");
+  assert.deepEqual(blocos[0].colunas[6], [30, 31]);
+  assert.deepEqual(ShimaDat.linhaDeOpcaoEm(blocos, 31, 5).numero, 6);
+  const valores = ShimaDat.valoresDasLinhas(doc, blocos[0], 5);
+  assert.deepEqual(valores.find((v) => v.linha === "R6").cores, [12]);
+  assert.equal(ShimaDat.linhaDeOpcaoEm(blocos, 5, 5), null);
+});
+
+test("acha as linhas de opção do desenho de exemplo", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const blocos = ShimaDat.linhasDeOpcao(doc);
+  assert.deepEqual(blocos.map((b) => b.lado), ["L", "R", "L", "R"]);
+  const direita = blocos[1];
+  const y = doc.altura - 250; // carreira 250
+  const r = Object.fromEntries(ShimaDat.valoresDasLinhas(doc, direita, y).map((v) => [v.linha, v.cores]));
+  assert.deepEqual(r.R3, [4]); // guia-fio 4
+  assert.deepEqual(r.R6, [5]); // ponto 5
+});

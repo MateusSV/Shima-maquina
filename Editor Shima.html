@@ -283,7 +283,10 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--destaque
   pointer-events: none;
   background-image:
     linear-gradient(to right, rgba(0, 0, 0, 0.28) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 1px, transparent 1px);
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 1px, transparent 1px),
+    linear-gradient(to right, rgba(0, 0, 0, 0.6) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 1px, transparent 1px);
+  background-position: left bottom; /* conta as carreiras de baixo para cima, como a máquina */
 }
 .caixa-selecao, .caixa-flutuante { position: absolute; pointer-events: none; }
 .caixa-selecao {
@@ -336,6 +339,13 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--destaque
 .cor-uso.secundaria { border-style: dashed; border-color: var(--suave); }
 .cor-uso .numero { font-weight: 500; }
 .cor-uso .contagem { color: var(--suave); }
+.cor-uso { grid-template-columns: auto 32px minmax(0, 1fr) auto; }
+.nome-cor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nome-cor.sugestao { color: var(--suave); font-style: italic; }
+.lista-opcoes { display: flex; flex-direction: column; gap: 8px; }
+.tabela-opcoes { font-size: 12px; }
+.tabela-opcoes caption { text-align: left; font-size: 11px; font-weight: 600; color: var(--suave); padding-bottom: 2px; }
+.tabela-opcoes th, .tabela-opcoes td { padding: 3px 6px; }
 .paleta-completa summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
 .grade-paleta { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 1px; margin-top: 6px; }
 .celula-paleta { aspect-ratio: 1; border: 0; padding: 0; border-radius: 1px; cursor: pointer; opacity: 0.55; }
@@ -540,6 +550,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
       <button type="button" class="botao icone" id="btn-zoom-mais" aria-label="Aumentar zoom">+</button>
       <button type="button" class="botao" id="btn-ajustar">Ajustar</button>
       <label class="campo-barra"><input type="checkbox" id="mostrar-grade" checked> Grade</label>
+      <label class="campo-barra" title="Desenha simétrico: no meio da seleção ou, sem seleção, no meio do desenho"><input type="checkbox" id="espelhado"> Espelhado</label>
+      <label class="campo-barra" title="Mostra só a cor primária e apaga as outras, para achar onde ela aparece"><input type="checkbox" id="destacar-cor"> Destacar cor</label>
     </div>
 
     <div class="janela" id="janela">
@@ -581,6 +593,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
       <label class="campo">Fundo / borracha <input type="number" id="campo-fundo" min="0" max="255"></label>
       <label class="campo">Cor na tela <input type="color" id="campo-rgb"></label>
     </div>
+    <label class="campo"><span id="rotulo-nome-cor">Nome da cor</span> <input type="text" id="campo-nome-cor" maxlength="60" autocomplete="off"></label>
+    <p class="suave pequeno">Os nomes com “?” são sugestões de referências públicas do KnitPaint e mudam entre versões: confira e escreva o seu.</p>
     <h3 class="sub">Em uso no desenho</h3>
     <p class="suave pequeno">Clique: primária · botão direito: secundária</p>
     <ul class="cores-uso" id="cores-uso"></ul>
@@ -588,6 +602,12 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
       <summary>Paleta completa (256 cores)</summary>
       <div class="grade-paleta" id="grade-paleta"></div>
     </details>
+  </section>
+
+  <section class="grupo">
+    <h2 class="rotulo">Linhas de opção <span class="mono" id="titulo-opcoes"></span></h2>
+    <div id="lista-opcoes" class="lista-opcoes"></div>
+    <p class="suave pequeno">Os nomes com “?” vêm de referências públicas (R3 guia-fio, R5 cancelar malha, R6 ponto) e podem variar na sua versão do KnitPaint.</p>
   </section>
 
   <section class="grupo">
@@ -605,6 +625,15 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
       <button type="button" class="botao" data-acao="repetir" title="Repete a área copiada até encher a seleção">Repetir cópia</button>
       <button type="button" class="botao" data-acao="fixar">Fixar colagem</button>
       <button type="button" class="botao" data-acao="cortar-desenho" title="Deixa o desenho do tamanho da seleção">Cortar desenho</button>
+      <button type="button" class="botao" data-acao="mudar-tamanho" title="Estica ou encolhe a seleção sem criar cores novas">Mudar tamanho…</button>
+    </div>
+    <h3 class="sub">Carreiras e agulhas da seleção</h3>
+    <p class="suave pequeno">Valem para a largura ou a altura inteira do desenho, com as linhas de opção, como no KnitPaint.</p>
+    <div class="botoes-grade">
+      <button type="button" class="botao" data-acao="duplicar-carreiras" title="Insere uma cópia das carreiras selecionadas logo acima delas">Duplicar carreiras</button>
+      <button type="button" class="botao" data-acao="excluir-carreiras">Excluir carreiras</button>
+      <button type="button" class="botao" data-acao="duplicar-agulhas" title="Insere uma cópia das agulhas selecionadas logo à esquerda delas">Duplicar agulhas</button>
+      <button type="button" class="botao" data-acao="excluir-agulhas">Excluir agulhas</button>
     </div>
     <label class="campo-check"><input type="checkbox" id="colar-transparente"> Colar sem a cor de fundo</label>
   </section>
@@ -688,6 +717,19 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
       <label class="campo">Altura <input type="number" name="altura" min="1" max="8000"></label>
     </div>
     <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Importar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-esticar" aria-labelledby="dlg-esticar-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-esticar-titulo">Mudar tamanho da seleção</h2>
+    <p class="suave pequeno">Estica ou encolhe a área selecionada repetindo ou pulando pixels, sem criar cores novas. A base (carreira de baixo) fica no lugar.</p>
+    <div class="linha-campos">
+      <label class="campo">Agulhas (largura) <input type="number" name="largura" min="1" max="8000" required></label>
+      <label class="campo">Carreiras (altura) <input type="number" name="altura" min="1" max="8000" required></label>
+    </div>
+    <label class="campo-check"><input type="checkbox" name="proporcao" checked> Manter a proporção</label>
+    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Aplicar</button></div>
   </form>
 </dialog>
 
@@ -924,7 +966,81 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
     return p;
   }
 
-  const api = { ler, gravar, novo, compactar, descompactar };
+  // ----- Linhas de opção -----
+  // Ao lado de cada área de desenho o KnitPaint põe as linhas de opção (L1–L20 à esquerda, R1–R20 à direita).
+  // No arquivo, cada linha ocupa 2 agulhas: uma coluna-guia pintada com o número da linha (2 a 20) e uma
+  // coluna com os valores. A linha 1 fica colada à área de desenho. O bloco é reconhecido pelas colunas-guia
+  // 2, 3, 4, … a cada 2 agulhas, crescendo para longe do desenho.
+
+  function corDominante(doc, x) {
+    const { largura: W, altura: H, pixels: p } = doc;
+    const contagem = new Map();
+    let y0 = -1, y1 = -1, total = 0;
+    for (let y = 0; y < H; y++) {
+      const c = p[y * W + x];
+      if (!c) continue;
+      contagem.set(c, (contagem.get(c) || 0) + 1);
+      if (y0 < 0) y0 = y;
+      y1 = y;
+      total++;
+    }
+    if (total < 8) return null;
+    let cor = 0, n = 0;
+    for (const [c, k] of contagem) if (k > n) { cor = c; n = k; }
+    return n >= 0.8 * total ? { cor, y0, y1 } : null;
+  }
+
+  function linhasDeOpcao(doc, minimo = 8) {
+    const W = doc.largura;
+    const guias = Array.from({ length: W }, (_, x) => corDominante(doc, x));
+    const blocos = [];
+    for (let x = 0; x < W; x++) {
+      if (!guias[x] || guias[x].cor !== 2) continue;
+      for (const [lado, passo] of [["R", 2], ["L", -2]]) {
+        let ultima = 2;
+        while (ultima < 20) {
+          const g = guias[x + passo * (ultima - 1)];
+          if (!g || g.cor !== ultima + 1) break;
+          ultima++;
+        }
+        if (ultima < minimo) continue;
+        const { y0, y1 } = guias[x];
+        const colunas = {};
+        for (let k = 1; k <= ultima; k++) {
+          const guia = x + passo * (k - 2);
+          colunas[k] = lado === "R" ? [guia, guia + 1] : [guia - 1, guia];
+        }
+        blocos.push({ lado, ultima, carreiraInicio: y0, carreiraFim: y1, colunas, xMin: Math.min(...Object.values(colunas).flat()), xMax: Math.max(...Object.values(colunas).flat()) });
+      }
+    }
+    return blocos;
+  }
+
+  // Qual linha de opção fica na agulha x, carreira y (linha de cima = 0)?
+  function linhaDeOpcaoEm(blocos, x, y) {
+    for (const b of blocos) {
+      if (x < b.xMin || x > b.xMax || y < b.carreiraInicio || y > b.carreiraFim) continue;
+      for (const k in b.colunas) if (b.colunas[k].includes(x)) return { lado: b.lado, numero: Number(k), bloco: b };
+    }
+    return null;
+  }
+
+  // Valores das linhas de um bloco numa carreira, sem a cor-guia da própria linha.
+  function valoresDasLinhas(doc, bloco, y) {
+    const valores = [];
+    for (let k = 1; k <= bloco.ultima; k++) {
+      const cores = [];
+      for (const x of bloco.colunas[k]) {
+        const c = doc.pixels[y * doc.largura + x];
+        const guia = bloco.lado === "R" ? x === bloco.colunas[k][0] : x === bloco.colunas[k][1];
+        if (c && !(guia && c === k) && !cores.includes(c)) cores.push(c);
+      }
+      if (cores.length) valores.push({ linha: `${bloco.lado}${k}`, numero: k, cores });
+    }
+    return valores;
+  }
+
+  const api = { ler, gravar, novo, compactar, descompactar, linhasDeOpcao, linhaDeOpcaoEm, valoresDasLinhas };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.ShimaDat = api;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -1146,6 +1262,43 @@ const FERRAMENTAS = {
   "conta-gotas": { nome: "Conta-gotas", tecla: "i" },
   selecao: { nome: "Seleção", tecla: "m" },
 };
+// Nomes de cores e de linhas de opção vindos de referências públicas do KnitPaint. Variam entre versões:
+// aparecem como sugestão ("?") até a pessoa confirmar ou trocar o nome na legenda.
+const SUGESTOES_CORES = {
+  1: "malha na frente",
+  2: "malha atrás",
+  3: "malha frente e atrás",
+  11: "tuck na frente",
+  12: "tuck atrás",
+  13: "largura do guia-fio",
+  16: "sem seleção (não tece)",
+};
+const NOMES_LINHAS = { R1: "economizador / repetição", R3: "guia-fio", R5: "cancelar malha", R6: "ponto (densidade)" };
+const CHAVE_LEGENDA = "editor-shima-legenda";
+
+function lerLegenda() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_LEGENDA) || "{}") || {};
+  } catch (erro) {
+    return {};
+  }
+}
+
+function gravarLegenda(legenda) {
+  try {
+    localStorage.setItem(CHAVE_LEGENDA, JSON.stringify(legenda));
+  } catch (erro) {
+    // Sem armazenamento: a legenda vale só até fechar a página.
+  }
+}
+
+const legenda = lerLegenda();
+
+function nomeDaCor(n) {
+  if (legenda[n]) return legenda[n];
+  return SUGESTOES_CORES[n] ? `${SUGESTOES_CORES[n]}?` : "";
+}
+
 const TIPOS = { dat: "desenho", programa: "programa", ajustes: "ajustes", imagem: "imagem", desconhecido: "outro" };
 
 const estado = {
@@ -1164,6 +1317,9 @@ const estado = {
   grade: true,
   colarTransparente: false,
   area: null, // área copiada: { w, h, px }
+  espelhado: false, // desenhar simétrico
+  destacar: false, // destacar a cor primária, apagando as outras
+  carreiraFoco: null, // carreira sob o cursor, para o painel de linhas de opção
   imagemImportar: null, // { nome, url } escolhida numa aba de imagem
 };
 
@@ -1690,6 +1846,7 @@ function prepararTela(aba) {
   }
   atualizarPainel();
   atualizarStatus();
+  desenharOpcoes();
 }
 
 function atualizarLut(paleta) {
@@ -1706,7 +1863,14 @@ function renderizar() {
   const d = a.doc;
   const px32 = new Uint32Array(imagem.data.buffer);
   const p = d.pixels;
-  for (let i = 0; i < p.length; i++) px32[i] = lut[p[i]];
+  if (estado.destacar) {
+    // Só a cor primária fica com a cor dela; o resto vira cinza claro.
+    const alvo = estado.primaria;
+    const apagado = ((255 << 24) | (205 << 16) | (205 << 8) | 205) >>> 0;
+    for (let i = 0; i < p.length; i++) px32[i] = p[i] === alvo ? lut[p[i]] : apagado;
+  } else {
+    for (let i = 0; i < p.length; i++) px32[i] = lut[p[i]];
+  }
   const f = a.flutuante;
   if (f) {
     for (let y = 0; y < f.h; y++) {
@@ -1745,7 +1909,7 @@ function aplicarTamanho(aba) {
   tela.style.height = h + "px";
   const grade = $("grade");
   grade.hidden = !(estado.grade && z >= ZOOM_GRADE);
-  grade.style.backgroundSize = `${z}px ${z}px`;
+  grade.style.backgroundSize = `${z}px ${z}px, ${z}px ${z}px, ${10 * z}px ${10 * z}px, ${10 * z}px ${10 * z}px`;
   $("zoom").value = String(z);
   posicionarCaixas();
 }
@@ -1820,7 +1984,13 @@ function limitarHistorico(aba) {
   }
 }
 
+function blocosDeOpcao(aba) {
+  if (!aba.opcoes) aba.opcoes = ShimaDat.linhasDeOpcao(aba.doc);
+  return aba.opcoes;
+}
+
 function restaurar(aba, r) {
+  aba.opcoes = null;
   const d = aba.doc;
   const mudouTamanho = r.largura !== d.largura || r.altura !== d.altura;
   Object.assign(d, { pixels: r.pixels, largura: r.largura, altura: r.altura, paleta: r.paleta });
@@ -1871,7 +2041,14 @@ function dentroDoDesenho(r, d) {
   return r.x >= 0 && r.y >= 0 && r.x + r.w <= d.largura && r.y + r.h <= d.altura;
 }
 
+let eixoEspelho = null; // com "Espelhado" ligado: soma das colunas simétricas (x + x' = eixo)
+
 function pintar(d, x, y, cor) {
+  if (eixoEspelho !== null) pintarSimples(d, eixoEspelho - x, y, cor);
+  pintarSimples(d, x, y, cor);
+}
+
+function pintarSimples(d, x, y, cor) {
   if (x >= 0 && y >= 0 && x < d.largura && y < d.altura) d.pixels[y * d.largura + x] = cor;
 }
 
@@ -2070,6 +2247,8 @@ tela.addEventListener("pointerdown", (e) => {
   const f = estado.ferramenta;
   if (f !== "selecao") fixarFlutuante(a);
 
+  // Espelhado: a simetria é no meio da seleção ou, sem seleção, no meio do desenho.
+  eixoEspelho = estado.espelhado ? (a.selecao ? 2 * a.selecao.x + a.selecao.w - 1 : d.largura - 1) : null;
   if (f === "lapis" || f === "borracha") {
     salvarHistorico(a);
     const c = f === "borracha" ? estado.fundo : cor;
@@ -2140,6 +2319,7 @@ tela.addEventListener("pointermove", (e) => {
 });
 
 function terminarGesto() {
+  eixoEspelho = null;
   const a = abaDat();
   if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma")) atualizarPainel();
   gesto = null;
@@ -2263,6 +2443,27 @@ const ACOES = {
     if (!a.flutuante) return avisar("Não há colagem para fixar.");
     fixarFlutuante(a);
   },
+  "duplicar-carreiras"(a) {
+    alterarLinhas(a, "carreiras", "duplicar");
+  },
+  "excluir-carreiras"(a) {
+    alterarLinhas(a, "carreiras", "excluir");
+  },
+  "duplicar-agulhas"(a) {
+    alterarLinhas(a, "agulhas", "duplicar");
+  },
+  "excluir-agulhas"(a) {
+    alterarLinhas(a, "agulhas", "excluir");
+  },
+  "mudar-tamanho"(a) {
+    if (!a.flutuante && !exigirSelecao(a)) return;
+    const r = a.flutuante || a.selecao;
+    const form = $("dlg-esticar").querySelector("form");
+    form.largura.value = r.w;
+    form.altura.value = r.h;
+    form.dataset.proporcao = String(r.w / r.h);
+    abrirDialogo("dlg-esticar");
+  },
   async "cortar-desenho"(a) {
     fixarFlutuante(a);
     if (!exigirSelecao(a)) return;
@@ -2270,6 +2471,7 @@ const ACOES = {
     salvarHistorico(a);
     const b = recortarArea(a.doc, a.selecao);
     Object.assign(a.doc, { largura: b.w, altura: b.h, pixels: b.px });
+    a.opcoes = null;
     a.selecao = null;
     a.zoom = null;
     prepararTela(a);
@@ -2300,6 +2502,85 @@ $("painel-dat").addEventListener("click", (e) => {
   const botao = e.target.closest("[data-acao]");
   const a = abaDat();
   if (botao && a) ACOES[botao.dataset.acao](a);
+});
+
+// Duplica ou exclui carreiras (linhas inteiras) ou agulhas (colunas inteiras) da seleção, como o
+// "inserir/apagar linha" do KnitPaint: as linhas de opção vão junto, porque a operação pega a largura toda.
+function alterarLinhas(a, eixo, acao) {
+  fixarFlutuante(a);
+  if (!exigirSelecao(a)) return;
+  const d = a.doc, s = a.selecao;
+  const W = d.largura, H = d.altura;
+  const carreiras = eixo === "carreiras";
+  const n = carreiras ? s.h : s.w;
+  if (acao === "excluir" && n >= (carreiras ? H : W)) return avisar(`Não dá para excluir ${carreiras ? "todas as carreiras" : "todas as agulhas"}.`, true);
+  const novaL = carreiras ? W : acao === "duplicar" ? W + n : W - n;
+  const novaA = carreiras ? (acao === "duplicar" ? H + n : H - n) : H;
+  if (novaL > 8000 || novaA > 8000) return avisar("O desenho passaria de 8000 agulhas ou carreiras.", true);
+  salvarHistorico(a);
+  const px = new Uint8Array(novaL * novaA);
+  if (carreiras) {
+    // Linhas de cima para baixo: a cópia entra logo acima da seleção (carreiras de número maior).
+    const linhas = [];
+    for (let y = 0; y < H; y++) {
+      const dentro = y >= s.y && y < s.y + s.h;
+      if (acao === "duplicar" && y === s.y) for (let k = 0; k < s.h; k++) linhas.push(s.y + k);
+      if (!(acao === "excluir" && dentro)) linhas.push(y);
+    }
+    linhas.forEach((y, i) => px.set(d.pixels.subarray(y * W, (y + 1) * W), i * W));
+  } else {
+    const colunas = [];
+    for (let x = 0; x < W; x++) {
+      const dentro = x >= s.x && x < s.x + s.w;
+      if (acao === "duplicar" && x === s.x) for (let k = 0; k < s.w; k++) colunas.push(s.x + k);
+      if (!(acao === "excluir" && dentro)) colunas.push(x);
+    }
+    for (let y = 0; y < H; y++) for (let i = 0; i < colunas.length; i++) px[y * novaL + i] = d.pixels[y * W + colunas[i]];
+  }
+  Object.assign(d, { largura: novaL, altura: novaA, pixels: px });
+  a.opcoes = null;
+  a.selecao = acao === "duplicar" ? { ...s } : null;
+  prepararTela(a);
+  const nomeEixo = carreiras ? (n === 1 ? "carreira" : "carreiras") : n === 1 ? "agulha" : "agulhas";
+  avisar(`${n} ${nomeEixo} ${acao === "duplicar" ? (n === 1 ? "duplicada" : "duplicadas") : n === 1 ? "excluída" : "excluídas"}. Desenho agora com ${novaL} agulhas × ${novaA} carreiras.`);
+}
+
+function esticar(b, w, h) {
+  // Vizinho mais próximo: não cria cores novas, cada pixel continua sendo um número de cor do desenho.
+  const px = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(b.h - 1, Math.floor((y * b.h) / h));
+    for (let x = 0; x < w; x++) px[y * w + x] = b.px[sy * b.w + Math.min(b.w - 1, Math.floor((x * b.w) / w))];
+  }
+  return { ...b, w, h, px };
+}
+
+$("dlg-esticar").querySelector("form").largura.addEventListener("input", (e) => {
+  const form = e.target.form;
+  if (form.proporcao.checked) form.altura.value = Math.max(1, Math.round(Number(e.target.value) / Number(form.dataset.proporcao)));
+});
+$("dlg-esticar").querySelector("form").altura.addEventListener("input", (e) => {
+  const form = e.target.form;
+  if (form.proporcao.checked) form.largura.value = Math.max(1, Math.round(Number(e.target.value) * Number(form.dataset.proporcao)));
+});
+
+$("dlg-esticar").addEventListener("close", () => {
+  const dlg = $("dlg-esticar");
+  const a = abaDat();
+  if (dlg.returnValue !== "ok" || !a) return;
+  const form = dlg.querySelector("form");
+  const w = limitar(Math.round(Number(form.largura.value)), 1, 8000);
+  const h = limitar(Math.round(Number(form.altura.value)), 1, 8000);
+  if (!a.flutuante) {
+    if (!a.selecao) return;
+    levantarSelecao(a);
+  }
+  const f = a.flutuante;
+  a.flutuante = { ...esticar(f, w, h), x: f.x, y: f.y + f.h - h }; // mantém a base (carreira de baixo) no lugar
+  renderizar();
+  atualizarBotoes();
+  atualizarStatus();
+  avisar(`Seleção com ${w} × ${h}. Arraste para posicionar e aperte Enter para fixar.`);
 });
 
 $("dlg-substituir").addEventListener("close", () => {
@@ -2341,6 +2622,7 @@ $("dlg-redimensionar").addEventListener("close", () => {
   const temp = { largura, altura, pixels: novo.px };
   colarArea(temp, antigo, ox, oy, null);
   Object.assign(d, { largura, altura, pixels: novo.px });
+  a.opcoes = null;
   a.selecao = null;
   a.zoom = null;
   prepararTela(a);
@@ -2634,6 +2916,9 @@ function atualizarPainel() {
   $("campo-primaria").value = estado.primaria;
   $("campo-fundo").value = estado.fundo;
   $("campo-rgb").value = cor(estado.primaria);
+  $("campo-nome-cor").value = legenda[estado.primaria] || "";
+  $("campo-nome-cor").placeholder = SUGESTOES_CORES[estado.primaria] ? `${SUGESTOES_CORES[estado.primaria]}? (sugestão)` : "ex.: malha na frente";
+  $("rotulo-nome-cor").textContent = `Nome da cor ${estado.primaria}`;
 
   const contagem = contarCores(d);
   const usadas = [];
@@ -2643,7 +2928,7 @@ function atualizarPainel() {
       (c) => `<li><button type="button" class="cor-uso${c === estado.primaria ? " primaria" : ""}${c === estado.secundaria ? " secundaria" : ""}" data-cor="${c}" title="Cor ${c} — ${cor(c)}">
         <span class="amostra" style="background:${cor(c)}"></span>
         <span class="mono numero">${c}</span>
-        <span class="mono suave">${cor(c)}</span>
+        <span class="nome-cor${legenda[c] ? "" : " sugestao"}">${esc(nomeDaCor(c)) || `<span class="mono suave">${cor(c)}</span>`}</span>
         <span class="mono contagem">${contagem[c].toLocaleString("pt-BR")}</span>
       </button></li>`,
     )
@@ -2670,6 +2955,7 @@ function escolherCor(n, secundaria) {
   if (secundaria) estado.secundaria = n;
   else estado.primaria = n;
   atualizarPainel();
+  if (estado.destacar && !secundaria) renderizar();
 }
 
 for (const id of ["cores-uso", "grade-paleta"]) {
@@ -2700,7 +2986,22 @@ $("campo-rgb").addEventListener("change", (e) => {
   atualizarPainel();
   avisar(`A cor ${estado.primaria} agora aparece como ${e.target.value}. O número da cor não mudou.`);
 });
+$("campo-nome-cor").addEventListener("change", (e) => {
+  const texto = e.target.value.trim();
+  if (texto) legenda[estado.primaria] = texto;
+  else delete legenda[estado.primaria];
+  gravarLegenda(legenda);
+  atualizarPainel();
+});
 $("btn-trocar-cores").addEventListener("click", trocarCores);
+$("espelhado").addEventListener("change", (e) => {
+  estado.espelhado = e.target.checked;
+  atualizarStatus();
+});
+$("destacar-cor").addEventListener("change", (e) => {
+  estado.destacar = e.target.checked;
+  renderizar();
+});
 $("colar-transparente").addEventListener("change", (e) => {
   estado.colarTransparente = e.target.checked;
   const a = abaDat();
@@ -2735,6 +3036,41 @@ function atualizarBotoes() {
   tem("repetir", !!estado.area && !!a.selecao);
   tem("fixar", !!a.flutuante);
   tem("cortar-desenho", !!a.selecao);
+  for (const acao of ["duplicar-carreiras", "excluir-carreiras", "duplicar-agulhas", "excluir-agulhas"]) tem(acao, !!a.selecao);
+  tem("mudar-tamanho", sel);
+}
+
+function desenharOpcoes() {
+  const a = abaDat();
+  const el = $("lista-opcoes");
+  if (!a) return;
+  const blocos = blocosDeOpcao(a);
+  if (!blocos.length) {
+    $("titulo-opcoes").textContent = "";
+    el.innerHTML = `<p class="suave pequeno">Nenhum bloco de linhas de opção encontrado neste desenho.</p>`;
+    return;
+  }
+  const d = a.doc;
+  const y = estado.carreiraFoco;
+  const naFaixa = blocos.filter((b) => y !== null && y >= b.carreiraInicio && y <= b.carreiraFim);
+  if (!naFaixa.length) {
+    $("titulo-opcoes").textContent = "";
+    el.innerHTML = `<p class="suave pequeno">Passe o cursor sobre uma carreira entre ${d.altura - blocos[0].carreiraFim} e ${d.altura - blocos[0].carreiraInicio} para ver os valores de L1–L20 e R1–R20.</p>`;
+    return;
+  }
+  $("titulo-opcoes").textContent = `carreira ${d.altura - y}`;
+  el.innerHTML = naFaixa
+    .map((b) => {
+      const valores = ShimaDat.valoresDasLinhas(d, b, y);
+      const painel = Math.floor(blocos.indexOf(b) / 2) + 1;
+      const linhas = valores.length
+        ? valores
+            .map((v) => `<tr><th class="mono">${v.linha}</th><td class="mono">${v.cores.join(", ")}</td><td class="suave">${NOMES_LINHAS[v.linha] ? `${NOMES_LINHAS[v.linha]}?` : ""}</td></tr>`)
+            .join("")
+        : `<tr><td colspan="3" class="suave">sem valores</td></tr>`;
+      return `<table class="tabela tabela-opcoes"><caption>${b.lado === "L" ? "Esquerda" : "Direita"} · painel ${painel}</caption><tbody>${linhas}</tbody></table>`;
+    })
+    .join("");
 }
 
 function atualizarStatus(p) {
@@ -2743,13 +3079,20 @@ function atualizarStatus(p) {
   const d = a.doc;
   if (p && noDesenho(p, d)) {
     const n = d.pixels[p.y * d.largura + p.x];
-    $("status-posicao").textContent = `Agulha ${p.x + 1} · Carreira ${d.altura - p.y} · Cor ${n}`;
+    const nome = nomeDaCor(n);
+    const linha = ShimaDat.linhaDeOpcaoEm(blocosDeOpcao(a), p.x, p.y);
+    const textoLinha = linha ? ` · Linha de opção ${linha.lado}${linha.numero}${NOMES_LINHAS[linha.lado + linha.numero] ? `: ${NOMES_LINHAS[linha.lado + linha.numero]}?` : ""}` : "";
+    $("status-posicao").textContent = `Agulha ${p.x + 1} · Carreira ${d.altura - p.y} · Cor ${n}${nome ? ` (${nome})` : ""}${textoLinha}`;
+    if (estado.carreiraFoco !== p.y) {
+      estado.carreiraFoco = p.y;
+      desenharOpcoes();
+    }
   } else if (p !== undefined) {
     $("status-posicao").textContent = "—";
   }
   const r = a.flutuante || a.selecao;
   $("status-selecao").textContent = r ? `${a.flutuante ? "Colagem" : "Seleção"} ${r.w} × ${r.h}` : "";
-  $("status-ferramenta").textContent = `${FERRAMENTAS[estado.ferramenta].nome}${["lapis", "borracha", "linha", "retangulo"].includes(estado.ferramenta) ? ` · ${estado.pincel} px` : ""}`;
+  $("status-ferramenta").textContent = `${FERRAMENTAS[estado.ferramenta].nome}${["lapis", "borracha", "linha", "retangulo"].includes(estado.ferramenta) ? ` · ${estado.pincel} px` : ""}${estado.espelhado ? " · espelhado" : ""}`;
   $("status-tamanho").textContent = `${d.largura} × ${d.altura} · ${Math.round(a.zoom * 100)}%`;
 }
 
