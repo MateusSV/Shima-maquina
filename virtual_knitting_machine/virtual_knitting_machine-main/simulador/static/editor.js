@@ -30,6 +30,8 @@ const estado = {
   abas: [],
   atual: null,
   servidor: false,
+  pastaLocal: null, // pasta do computador conectada pelo navegador (Chrome/Edge)
+  pastaGuardada: null, // pasta da última vez, esperando permissão para reconectar
   pasta: "",
   arquivosPasta: [],
   ferramenta: "lapis",
@@ -309,37 +311,171 @@ function marcarModificado(aba) {
   }
 }
 
-// ------------------------------------------------------------------ pasta (servidor)
+// ------------------------------------------------------------------ pasta (servidor ou pasta conectada)
+// A pasta vem do servidor do projeto (Abrir Editor Shima.bat) ou de uma pasta do computador conectada
+// pelo navegador (File System Access, no Chrome e no Edge). As duas gravam o .dat direto na pasta e
+// guardam o original como <nome>.bak na primeira gravação.
+
+const acessoAPastasDisponivel = () => typeof window.showDirectoryPicker === "function" && !dentroDoClaude();
+const temPasta = () => estado.servidor || !!estado.pastaLocal;
 
 async function carregarPasta() {
-  if (location.protocol === "file:" || dentroDoClaude()) {
-    // Aberto direto do disco (Editor Shima.html) ou publicado no Claude: não há servidor nem lista da pasta.
-    estado.servidor = false;
-    desenharPasta();
-    atualizarBotoes();
-    return;
+  if (location.protocol !== "file:" && !dentroDoClaude() && !estado.pastaLocal) {
+    try {
+      const resposta = await fetch("/api/arquivos", { cache: "no-store" });
+      if (!resposta.ok) throw new Error(String(resposta.status));
+      const dados = await resposta.json();
+      estado.servidor = true;
+      estado.pasta = dados.pasta;
+      estado.arquivosPasta = dados.arquivos;
+      if (dados.erro) avisar(dados.erro, true);
+    } catch (erro) {
+      estado.servidor = false;
+    }
   }
-  try {
-    const resposta = await fetch("/api/arquivos", { cache: "no-store" });
-    if (!resposta.ok) throw new Error(String(resposta.status));
-    const dados = await resposta.json();
-    estado.servidor = true;
-    estado.pasta = dados.pasta;
-    estado.arquivosPasta = dados.arquivos;
-    if (dados.erro) avisar(dados.erro, true);
-  } catch (erro) {
-    estado.servidor = false;
+  if (!estado.servidor) {
     estado.arquivosPasta = [];
+    if (estado.pastaLocal) {
+      try {
+        estado.pasta = estado.pastaLocal.name;
+        estado.arquivosPasta = await listarPastaLocal(estado.pastaLocal);
+      } catch (erro) {
+        avisar(`Não foi possível ler a pasta ${estado.pastaLocal.name}: ${erro.message}. Conecte a pasta de novo.`, true);
+        desconectarPasta();
+      }
+    }
   }
   desenharPasta();
   atualizarBotoes();
 }
 
+async function listarPastaLocal(pasta) {
+  const arquivos = [];
+  for await (const [nome, item] of pasta.entries()) {
+    if (item.kind !== "file" || nome.startsWith(".") || /\.(tmp|crswap)$/i.test(nome)) continue;
+    arquivos.push({ nome, tamanho: (await item.getFile()).size });
+  }
+  return arquivos.sort((a, b) => a.nome.toLowerCase().localeCompare(b.nome.toLowerCase()));
+}
+
+async function existeNaPastaLocal(pasta, nome) {
+  try {
+    await pasta.getFileHandle(nome);
+    return true;
+  } catch (erro) {
+    return false;
+  }
+}
+
+async function gravarArquivoLocal(pasta, nome, dados) {
+  const escrita = await (await pasta.getFileHandle(nome, { create: true })).createWritable();
+  await escrita.write(dados);
+  await escrita.close(); // o navegador só troca o arquivo no fim, se tudo deu certo
+}
+
+async function gravarNaPastaLocal(pasta, nome, bytes) {
+  if (!/\.dat$/i.test(nome)) throw new Error("só arquivos .dat podem ser gravados pelo editor");
+  const copia = `${nome}.bak`;
+  if ((await existeNaPastaLocal(pasta, nome)) && !(await existeNaPastaLocal(pasta, copia))) {
+    const original = await (await pasta.getFileHandle(nome)).getFile();
+    await gravarArquivoLocal(pasta, copia, await original.arrayBuffer());
+  }
+  await gravarArquivoLocal(pasta, nome, bytes);
+  return { copia: (await existeNaPastaLocal(pasta, copia)) ? copia : null };
+}
+
+async function permissaoDaPasta(pasta, pedir) {
+  const opcoes = { mode: "readwrite" };
+  if (typeof pasta.queryPermission !== "function") return true;
+  if ((await pasta.queryPermission(opcoes)) === "granted") return true;
+  return pedir && (await pasta.requestPermission(opcoes)) === "granted";
+}
+
+async function conectarPasta(pasta, lembrar = true) {
+  // Abas abertas de outra pasta passam a ser arquivos avulsos: o "Salvar" delas não vai para a pasta nova.
+  for (const aba of estado.abas) if (aba.origem === "pasta") aba.origem = "local";
+  estado.pastaLocal = pasta;
+  estado.pastaGuardada = null;
+  if (lembrar) await lembrarPasta(pasta);
+  await carregarPasta();
+  desenharAbas();
+  desenharConexao();
+  avisar(`Pasta ${pasta.name} conectada: ${estado.arquivosPasta.length} arquivos. O Salvar grava direto nela.`);
+}
+
+function desconectarPasta() {
+  estado.pastaLocal = null;
+  estado.arquivosPasta = [];
+  for (const aba of estado.abas) if (aba.origem === "pasta") aba.origem = "local";
+  desenharPasta();
+  desenharConexao();
+}
+
+function desenharConexao() {
+  const disponivel = acessoAPastasDisponivel();
+  $("grupo-conectar").hidden = estado.servidor;
+  $("btn-conectar-pasta").hidden = !disponivel;
+  $("btn-conectar-pasta").textContent = estado.pastaLocal ? "Trocar de pasta…" : "Conectar uma pasta…";
+  $("btn-reconectar-pasta").hidden = !estado.pastaGuardada || !!estado.pastaLocal;
+  if (estado.pastaGuardada) $("btn-reconectar-pasta").textContent = `Reconectar a pasta ${estado.pastaGuardada.name}`;
+  $("texto-conectar").textContent = !disponivel
+    ? dentroDoClaude()
+      ? "Para gravar direto numa pasta do computador, use o Editor Shima.html no Chrome ou no Edge."
+      : "Para gravar direto numa pasta do computador, abra o editor no Chrome ou no Edge."
+    : estado.pastaLocal
+      ? "Os arquivos abertos da pasta são salvos direto nela."
+      : "Escolha a pasta dos desenhos (por exemplo, 07 122 SSGsv): os arquivos aparecem aqui e o Salvar grava direto nela.";
+}
+
+// A pasta escolhida fica guardada no navegador para a próxima vez (só o acesso, não os arquivos).
+function bancoDePastas() {
+  return new Promise((ok, falha) => {
+    const pedido = indexedDB.open("editor-shima", 1);
+    pedido.onupgradeneeded = () => pedido.result.createObjectStore("pastas");
+    pedido.onsuccess = () => ok(pedido.result);
+    pedido.onerror = () => falha(pedido.error);
+  });
+}
+
+async function lembrarPasta(pasta) {
+  try {
+    const banco = await bancoDePastas();
+    banco.transaction("pastas", "readwrite").objectStore("pastas").put(pasta, "ultima");
+  } catch (erro) {
+    // Sem armazenamento (janela anônima, por exemplo): só não lembra na próxima vez.
+  }
+}
+
+async function pastaLembrada() {
+  try {
+    const banco = await bancoDePastas();
+    return await new Promise((ok) => {
+      const pedido = banco.transaction("pastas").objectStore("pastas").get("ultima");
+      pedido.onsuccess = () => ok(pedido.result || null);
+      pedido.onerror = () => ok(null);
+    });
+  } catch (erro) {
+    return null;
+  }
+}
+
+async function retomarPastaLembrada() {
+  if (estado.servidor || !acessoAPastasDisponivel()) return;
+  const pasta = await pastaLembrada();
+  if (!pasta) return;
+  if (await permissaoDaPasta(pasta, false)) await conectarPasta(pasta, false);
+  else {
+    // O navegador só devolve o acesso depois de um clique: mostra o botão de reconectar.
+    estado.pastaGuardada = pasta;
+    desenharConexao();
+  }
+}
+
 function desenharPasta() {
   $("nome-pasta").textContent = estado.pasta;
-  $("grupo-pasta").hidden = !estado.servidor;
-  $("btn-abrir-todos").hidden = !estado.servidor || !estado.arquivosPasta.length;
-  $("btn-atualizar-pasta").hidden = !estado.servidor;
+  $("grupo-pasta").hidden = !temPasta();
+  $("btn-abrir-todos").hidden = !temPasta() || !estado.arquivosPasta.length;
+  $("btn-atualizar-pasta").hidden = !temPasta();
   $("lista-pasta").innerHTML = estado.arquivosPasta
     .map((a) => {
       const tipo = EXT_IMAGEM.test(a.nome) ? "imagem" : ShimaArquivos.tipoPeloNome(a.nome);
@@ -361,6 +497,10 @@ async function abrirDaPasta(nome) {
     return aberta;
   }
   try {
+    if (estado.pastaLocal) {
+      const arquivo = await (await estado.pastaLocal.getFileHandle(nome)).getFile();
+      return abrirBuffer(nome, await arquivo.arrayBuffer(), "pasta");
+    }
     const resposta = await fetch("/api/arquivos/" + encodeURIComponent(nome), { cache: "no-store" });
     if (!resposta.ok) throw new Error(`o servidor respondeu ${resposta.status}`);
     return abrirBuffer(nome, await resposta.arrayBuffer(), "pasta");
@@ -1260,13 +1400,19 @@ async function salvarNaPasta(a, nome) {
     return avisar(`Erro ao gravar: ${erro.message}`, true);
   }
   try {
-    const resposta = await fetch("/api/arquivos/" + encodeURIComponent(nome), {
-      method: "POST",
-      headers: { "Content-Type": "application/octet-stream", "X-Editor-Shima": "1" },
-      body: bytes,
-    });
-    const dados = await resposta.json();
-    if (!resposta.ok) throw new Error(dados.erro || resposta.status);
+    let dados;
+    if (estado.pastaLocal) {
+      if (!(await permissaoDaPasta(estado.pastaLocal, true))) throw new Error("o navegador não liberou a gravação na pasta");
+      dados = await gravarNaPastaLocal(estado.pastaLocal, nome, bytes);
+    } else {
+      const resposta = await fetch("/api/arquivos/" + encodeURIComponent(nome), {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream", "X-Editor-Shima": "1" },
+        body: bytes,
+      });
+      dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.erro || resposta.status);
+    }
     a.nome = nome;
     a.origem = "pasta";
     a.modificado = false;
@@ -1307,7 +1453,7 @@ async function podeGravarNaPasta(a, nome) {
 async function salvar() {
   const a = abaDat();
   if (!a) return;
-  if (estado.servidor && (a.origem === "pasta" || a.origem === "novo")) {
+  if (temPasta() && (a.origem === "pasta" || a.origem === "novo")) {
     if (await podeGravarNaPasta(a, a.nome)) salvarNaPasta(a, a.nome);
   } else baixarDat(a);
 }
@@ -1319,7 +1465,7 @@ async function salvarComo() {
   if (!nome) return;
   if (/[\\/]/.test(nome)) return avisar("O nome não pode ter barras.", true);
   if (!/\.dat$/i.test(nome)) nome += ".dat";
-  if (estado.servidor) {
+  if (temPasta()) {
     if (!(await podeGravarNaPasta(a, nome))) return;
     salvarNaPasta(a, nome);
   } else {
@@ -1451,7 +1597,7 @@ function atualizarBotoes() {
   const a = abaDat();
   $("btn-desfazer").disabled = !a || (!a.hist.length && !(a.flutuante && !a.flutuante.levantado));
   $("btn-refazer").disabled = !a || !a.refazer.length || !!a.flutuante;
-  $("btn-salvar").textContent = a && estado.servidor && (a.origem === "pasta" || a.origem === "novo") ? "Salvar na pasta" : "Salvar";
+  $("btn-salvar").textContent = a && temPasta() && (a.origem === "pasta" || a.origem === "novo") ? "Salvar na pasta" : "Salvar";
   if (!a) return;
   const tem = (acao, ok) => {
     const b = document.querySelector(`[data-acao="${acao}"]`);
@@ -1709,6 +1855,26 @@ $("lista-pasta").addEventListener("click", (e) => {
 });
 
 $("btn-abrir-todos").addEventListener("click", abrirTodos);
+$("btn-conectar-pasta").addEventListener("click", async () => {
+  try {
+    const pasta = await window.showDirectoryPicker({ id: "editor-shima", mode: "readwrite" });
+    if (await permissaoDaPasta(pasta, true)) await conectarPasta(pasta);
+    else avisar("Sem permissão para gravar, a pasta não foi conectada.", true);
+  } catch (erro) {
+    if (erro && erro.name === "AbortError") return; // a pessoa fechou a janela de escolha
+    avisar(`Não foi possível conectar a pasta: ${(erro && erro.message) || erro}`, true);
+  }
+});
+$("btn-reconectar-pasta").addEventListener("click", async () => {
+  const pasta = estado.pastaGuardada;
+  if (!pasta) return;
+  try {
+    if (await permissaoDaPasta(pasta, true)) await conectarPasta(pasta, false);
+    else avisar("O navegador não liberou o acesso. Use “Conectar uma pasta…” para escolher de novo.", true);
+  } catch (erro) {
+    avisar(`Não foi possível reconectar: ${(erro && erro.message) || erro}`, true);
+  }
+});
 $("btn-atualizar-pasta").addEventListener("click", carregarPasta);
 $("entrada-pasta").addEventListener("change", (e) => {
   abrirLocais([...e.target.files].sort((a, b) => a.name.localeCompare(b.name)));
@@ -1821,7 +1987,10 @@ if (window.SHIMA_EXEMPLO) {
   const bytes = Uint8Array.from(binario, (c) => c.charCodeAt(0));
   abrirBuffer(window.SHIMA_EXEMPLO.nome, bytes.buffer, "exemplo");
 }
-carregarPasta().then(() => {
+desenharConexao();
+carregarPasta().then(async () => {
+  desenharConexao();
+  await retomarPastaLembrada();
   const pedido = new URLSearchParams(location.search).get("abrir");
   if (pedido) abrirDaPasta(pedido);
 });

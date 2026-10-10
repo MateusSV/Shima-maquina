@@ -17,10 +17,12 @@ Baixe o repositório inteiro (no GitHub: **Code → Download ZIP**), descompacte
 
 1. Baixe o arquivo **`Editor Shima.html`** (está na raiz deste repositório).
 2. Dê dois cliques nele. Ele abre no navegador (Chrome, Edge ou Firefox), sem instalar nada.
-3. Arraste os arquivos `.dat`, `.000`, `.QFD` ou `.png` para a janela, ou use **Abrir uma pasta inteira…**
-   para abrir todos os arquivos de uma pasta como `07 122 SSGsv`.
-4. Para gravar, use **Salvar** (Ctrl+S): o navegador baixa o `.dat` editado, normalmente para a pasta
-   Downloads. Copie o arquivo de lá para a pasta dos desenhos.
+3. No **Chrome** ou no **Edge**, clique em **Conectar uma pasta…** e escolha a pasta dos desenhos (por exemplo,
+   `07 122 SSGsv`). Os arquivos aparecem na lista à esquerda, e o **Salvar** (Ctrl+S) grava direto na pasta,
+   guardando o original como `<nome>.bak` na primeira vez. O navegador pede permissão para editar a pasta;
+   da próxima vez, basta clicar em **Reconectar a pasta**.
+4. Em outros navegadores, arraste os arquivos para a janela ou use **Abrir uma pasta inteira…**. Nesse caso o
+   **Salvar** baixa o `.dat` (normalmente para a pasta Downloads), e você copia o arquivo para a pasta dos desenhos.
 
 ### Com o servidor do projeto (salva direto na pasta)
 

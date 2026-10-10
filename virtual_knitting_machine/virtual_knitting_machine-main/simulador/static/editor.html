@@ -40,6 +40,13 @@
     <button type="button" class="botao largo" id="btn-abrir-todos">Abrir todos</button>
   </section>
 
+  <section class="grupo" id="grupo-conectar">
+    <h2 class="rotulo">Pasta do computador</h2>
+    <button type="button" class="botao largo principal" id="btn-reconectar-pasta" hidden>Reconectar a pasta</button>
+    <button type="button" class="botao largo" id="btn-conectar-pasta" hidden>Conectar uma pasta…</button>
+    <p class="suave pequeno" id="texto-conectar"></p>
+  </section>
+
   <section class="grupo">
     <label class="botao largo" for="entrada-arquivo">Abrir arquivos…</label>
     <input type="file" id="entrada-arquivo" class="escondido" multiple>
@@ -74,7 +81,7 @@
       <strong>Arraste os arquivos para cá</strong>
       <span class="suave">ou clique para escolher no computador. Pode ser vários de uma vez.</span>
     </label>
-    <p class="suave">Para abrir todos os arquivos de uma pasta (por exemplo, <span class="mono">07 122 SSGsv</span>), use “Abrir uma pasta inteira” ao lado.</p>
+    <p class="suave">Para trabalhar direto na pasta dos desenhos (por exemplo, <span class="mono">07 122 SSGsv</span>), use “Conectar uma pasta…” ao lado: os arquivos aparecem na lista e o Salvar grava na própria pasta.</p>
     <ul class="suave formatos">
       <li><strong>.dat</strong> desenho do KnitPaint: abre para edição.</li>
       <li><strong>.000</strong> programa de tricô da máquina: abre para consulta.</li>
