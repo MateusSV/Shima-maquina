@@ -1,0 +1,2 @@
+# Shima-maquina
+Shima projeto
