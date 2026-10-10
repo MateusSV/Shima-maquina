@@ -1,0 +1,98 @@
+<?xml version="1.0" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:xlink="http://www.w3.org/1999/xlink" baseProfile="full" height="108.0px" version="1.1" viewBox="-18.4 -19 258.6 108.0" width="258.6px">
+  <defs/>
+  <g id="NeedleBed">
+    <g id="B_Bed">
+      <rect fill="none" height="20" id="b0" stroke="black" stroke-width="1" width="20" x="0" y="0"/>
+      <rect fill="none" height="20" id="b1" stroke="black" stroke-width="1" width="20" x="20" y="0"/>
+      <rect fill="none" height="20" id="b2" stroke="black" stroke-width="1" width="20" x="40" y="0"/>
+      <rect fill="none" height="20" id="b3" stroke="black" stroke-width="1" width="20" x="60" y="0"/>
+      <rect fill="none" height="20" id="b4" stroke="black" stroke-width="1" width="20" x="80" y="0"/>
+      <rect fill="none" height="20" id="b5" stroke="black" stroke-width="1" width="20" x="100" y="0"/>
+      <rect fill="none" height="20" id="b6" stroke="black" stroke-width="1" width="20" x="120" y="0"/>
+      <rect fill="none" height="20" id="b7" stroke="black" stroke-width="1" width="20" x="140" y="0"/>
+      <rect fill="none" height="20" id="b8" stroke="black" stroke-width="1" width="20" x="160" y="0"/>
+      <rect fill="none" height="20" id="b9" stroke="black" stroke-width="1" width="20" x="180" y="0"/>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b0" text-anchor="middle" x="10" y="-5">0</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b1" text-anchor="middle" x="30" y="-5">1</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b2" text-anchor="middle" x="50" y="-5">2</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b3" text-anchor="middle" x="70" y="-5">3</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b4" text-anchor="middle" x="90" y="-5">4</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b5" text-anchor="middle" x="110" y="-5">5</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b6" text-anchor="middle" x="130" y="-5">6</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b7" text-anchor="middle" x="150" y="-5">7</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b8" text-anchor="middle" x="170" y="-5">8</text>
+      <text alignment-baseline="baseline" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_b9" text-anchor="middle" x="190" y="-5">9</text>
+      <text alignment-baseline="middle" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="B_left_label" text-anchor="end" x="-5" y="10">B</text>
+      <text alignment-baseline="middle" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="B_right_label" text-anchor="start" x="205" y="10">B</text>
+    </g>
+    <g id="F_Bed">
+      <rect fill="none" height="20" id="f0" stroke="black" stroke-width="1" width="20" x="0" y="20"/>
+      <rect fill="none" height="20" id="f1" stroke="black" stroke-width="1" width="20" x="20" y="20"/>
+      <rect fill="none" height="20" id="f2" stroke="black" stroke-width="1" width="20" x="40" y="20"/>
+      <rect fill="none" height="20" id="f3" stroke="black" stroke-width="1" width="20" x="60" y="20"/>
+      <rect fill="none" height="20" id="f4" stroke="black" stroke-width="1" width="20" x="80" y="20"/>
+      <rect fill="none" height="20" id="f5" stroke="black" stroke-width="1" width="20" x="100" y="20"/>
+      <rect fill="none" height="20" id="f6" stroke="black" stroke-width="1" width="20" x="120" y="20"/>
+      <rect fill="none" height="20" id="f7" stroke="black" stroke-width="1" width="20" x="140" y="20"/>
+      <rect fill="none" height="20" id="f8" stroke="black" stroke-width="1" width="20" x="160" y="20"/>
+      <rect fill="none" height="20" id="f9" stroke="black" stroke-width="1" width="20" x="180" y="20"/>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f0" text-anchor="middle" x="10" y="45">0</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f1" text-anchor="middle" x="30" y="45">1</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f2" text-anchor="middle" x="50" y="45">2</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f3" text-anchor="middle" x="70" y="45">3</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f4" text-anchor="middle" x="90" y="45">4</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f5" text-anchor="middle" x="110" y="45">5</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f6" text-anchor="middle" x="130" y="45">6</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f7" text-anchor="middle" x="150" y="45">7</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f8" text-anchor="middle" x="170" y="45">8</text>
+      <text alignment-baseline="hanging" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="label_f9" text-anchor="middle" x="190" y="45">9</text>
+      <text alignment-baseline="middle" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="F_left_label" text-anchor="end" x="-5" y="30">F</text>
+      <text alignment-baseline="middle" fill="black" font-family="Arial" font-size="14" font-style="normal" font-weight="normal" id="F_right_label" text-anchor="start" x="205" y="30">F</text>
+    </g>
+  </g>
+  <path d="M 150,10.0 C 150,30.0 170,10.0 170,30.0" fill="none" id="87_on_b7_to_88_on_f8" stroke="firebrick" stroke-width="1"/>
+  <path d="M 30,10.0 C 30,30.0 50,10.0 50,30.0" fill="none" id="81_on_b1_to_82_on_f2" stroke="firebrick" stroke-width="1"/>
+  <path d="M 10,30.0 C 10,10.0 30,30.0 30,10.0" fill="none" id="80_on_f0_to_81_on_b1" stroke="firebrick" stroke-width="1"/>
+  <path d="M 70,10.0 C 70,30.0 90,10.0 90,30.0" fill="none" id="83_on_b3_to_84_on_f4" stroke="firebrick" stroke-width="1"/>
+  <path d="M 130,30.0 C 130,10.0 150,30.0 150,10.0" fill="none" id="86_on_f6_to_87_on_b7" stroke="firebrick" stroke-width="1"/>
+  <path d="M 170,30.0 C 170,10.0 190,30.0 190,10.0" fill="none" id="88_on_f8_to_89_on_b9" stroke="firebrick" stroke-width="1"/>
+  <path d="M 110,10.0 C 110,30.0 130,10.0 130,30.0" fill="none" id="85_on_b5_to_86_on_f6" stroke="firebrick" stroke-width="1"/>
+  <path d="M 50,30.0 C 50,10.0 70,30.0 70,10.0" fill="none" id="82_on_f2_to_83_on_b3" stroke="firebrick" stroke-width="1"/>
+  <path d="M 90,30.0 C 90,10.0 110,30.0 110,10.0" fill="none" id="84_on_f4_to_85_on_b5" stroke="firebrick" stroke-width="1"/>
+  <g id="Loop_Stack_on_f0">
+    <circle cx="10" cy="30.0" fill="#c96464" id="80_on_c1_on_f0" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_f2">
+    <circle cx="50" cy="30.0" fill="#c96464" id="82_on_c1_on_f2" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_f4">
+    <circle cx="90" cy="30.0" fill="#c96464" id="84_on_c1_on_f4" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_f6">
+    <circle cx="130" cy="30.0" fill="#c96464" id="86_on_c1_on_f6" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_f8">
+    <circle cx="170" cy="30.0" fill="#c96464" id="88_on_c1_on_f8" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_b1">
+    <circle cx="30" cy="10.0" fill="#c96464" id="81_on_c1_on_b1" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_b3">
+    <circle cx="70" cy="10.0" fill="#c96464" id="83_on_c1_on_b3" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_b5">
+    <circle cx="110" cy="10.0" fill="#c96464" id="85_on_c1_on_b5" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_b7">
+    <circle cx="150" cy="10.0" fill="#c96464" id="87_on_c1_on_b7" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <g id="Loop_Stack_on_b9">
+    <circle cx="190" cy="10.0" fill="#c96464" id="89_on_c1_on_b9" r="7.5" stroke="firebrick" stroke-width="1"/>
+  </g>
+  <polygon fill="#c96464" id="c1" points="200,-5.0 197.0,-10.196152422706632 203.0,-10.196152422706632" stroke="firebrick" stroke-width="1"/>
+  <g id="Carrier_Legend">
+    <text alignment-baseline="middle" fill="firebrick" font-family="Arial" font-size="14" font-style="normal" font-weight="bold" id="label_C1" text-anchor="start" x="218.4" y="0">C1</text>
+  </g>
+  <polygon fill="grey" id="Carriage" points="200,74.0 186.66666666666666,59.0 160,59.0 160,89.0 186.66666666666666,89.0" stroke="black" stroke-width="1"/>
+</svg>

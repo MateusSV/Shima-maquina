@@ -1,0 +1,94 @@
+# =============================================================================
+# PRE-COMMIT HOOKS CONFIGURATION
+# =============================================================================
+repos:
+  # ==========================================================================
+  # BASIC FILE QUALITY AND FORMATTING CHECKS
+  # ==========================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: fix-byte-order-marker
+      - id: check-ast
+
+  # ==========================================================================
+  # IMPORT ORGANIZATION
+  # ==========================================================================
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: isort (import sorting)
+        args: [--settings-path=pyproject.toml]
+
+  # ==========================================================================
+  # CODE FORMATTING
+  # ==========================================================================
+  - repo: https://github.com/psf/black
+    rev: 26.3.1
+    hooks:
+      - id: black
+        name: black (code formatting)
+        args: [--config=pyproject.toml]
+        language_version: python3
+
+  # ==========================================================================
+  # LINTING
+  # ==========================================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        name: ruff (linting)
+        args: [--fix, --exit-non-zero-on-fix, --config=pyproject.toml]
+
+  # ==========================================================================
+  # STATIC TYPE CHECKING
+  # ==========================================================================
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (type checking)
+        entry: poetry run mypy
+        language: system
+        types: [python]
+        args: [-p, virtual_knitting_machine]
+        pass_filenames: false
+        require_serial: true
+
+# =============================================================================
+# PRE-COMMIT GLOBAL CONFIGURATION
+# =============================================================================
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [commit]
+fail_fast: false
+
+# =============================================================================
+# EXCLUSION PATTERNS
+# =============================================================================
+exclude: |
+  (?x)^(
+      \.git/.*|
+      \.venv/.*|
+      \.mypy_cache/.*|
+      \.pytest_cache/.*|
+      \.ruff_cache/.*|
+      __pycache__/.*|
+      .*\.egg-info/.*|
+      dist/.*|
+      build/.*|
+      docs/_build/.*|
+      docs/build/.*|
+      htmlcov/.*|
+      \.coverage.*|
+  )$

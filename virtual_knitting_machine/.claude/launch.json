@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "simulador",
+      "runtimeExecutable": "virtual_knitting_machine-main/.venv/Scripts/python.exe",
+      "runtimeArgs": ["virtual_knitting_machine-main/simulador/servidor.py"],
+      "port": 8000,
+      "autoPort": true
+    }
+  ]
+}

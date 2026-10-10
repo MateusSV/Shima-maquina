@@ -1,0 +1,218 @@
+# =============================================================================
+# POETRY BUILD SYSTEM CONFIGURATION
+# =============================================================================
+# This section tells Poetry how to build your package
+[build-system]
+requires = ["poetry-core>=2.3.1,<3.0.0"]  # Poetry build backend version
+build-backend = "poetry.core.masonry.api"  # Use Poetry's build system
+
+# =============================================================================
+# PROJECT METADATA AND CONFIGURATION
+# =============================================================================
+# All the information about your project that will appear on PyPI
+[tool.poetry]
+name = "virtual-knitting-machine"
+version = "0.0.31"
+description = 'A data structure representing the state and operations of a virtual V-Bed with sliders whole garment knitting machine based on the whole garment knitting machines made by Shima Seiki.'
+authors = ["Megan Hofmann <m.hofmann@northeastern.edu>"]       # Primary authors
+maintainers = ["Megan Hofmann <m.hofmann@northeastern.edu>"]   # Current maintainers
+license = "MIT"                 # License type (shows up on PyPI)
+readme = "README.md"            # File to use as long description on PyPI
+homepage = "https://mhofmann-khoury.github.io/virtual_knitting_machine/"     # Project website
+repository = "https://github.com/mhofmann-Khoury/virtual_knitting_machine"   # Source code location
+documentation = "https://mhofmann-khoury.github.io/virtual_knitting_machine/"            # Documentation site
+keywords = [                    # Keywords for PyPI search
+    "knit",
+    "machine knit",
+    "textile",
+    "Northeastern",
+    "ACT Lab",
+    "fabrication",
+    "Shima Seiki",
+]
+classifiers = [                 # PyPI classifiers for categorization
+    "Development Status :: 2 - Pre-Alpha",                   # Project maturity
+    "Natural Language :: English",                           # Human language
+    "Intended Audience :: Developers",                       # Who this is for
+    "Intended Audience :: Manufacturing",                    # Industry audience
+    "Intended Audience :: Science/Research",                 # Research audience
+    "License :: OSI Approved :: MIT License",               # License classifier
+    "Operating System :: OS Independent",                   # Platform support
+    "Programming Language :: Python :: 3",                 # Python support
+    "Programming Language :: Python :: 3.11",              # Specific versions
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",                      # Subject area
+    "Typing :: Typed"
+]
+
+# =============================================================================
+# PACKAGE STRUCTURE CONFIGURATION
+# =============================================================================
+# Tell Poetry where to find your Python packages in your repository
+packages = [
+    {include = "virtual_knitting_machine", from = "src"},  # Package is in src/ directory
+    # This means Poetry will look for src/knit_script/ as your main package
+]
+
+# =============================================================================
+# FILES TO INCLUDE/EXCLUDE IN DISTRIBUTION
+# =============================================================================
+# Include additional files when building the package for distribution
+include = [
+    "README.md",                    # Project description
+    "LICENSE",                      # License file
+    "docs/**/*",                    # All documentation files
+    "src/virtual_knitting_machine/py.typed"
+]
+
+# Exclude files from the distribution package (keeps package size down)
+exclude = [
+    "tests/**/*",                   # Don't include test files in distribution
+    "docs/_build",                  # Don't include built documentation
+    "*.pyc",                        # No compiled Python files
+    "__pycache__",                  # No Python cache directories
+    ".coverage",                    # No coverage data files
+    "htmlcov",                      # No coverage HTML reports
+    ".gitignore",                   # No git ignore file
+]
+
+# =============================================================================
+# RUNTIME DEPENDENCIES
+# =============================================================================
+# These are packages your project needs to run in production
+[tool.poetry.dependencies]
+python = ">=3.11,<3.14"                        # Minimum Python version (allows 3.11.x, 3.12.x, etc.)
+knit-graphs = ">=0.1.4"
+svgwrite = ">=1.4.3"
+webcolors = ">=25.10.0"
+
+# =============================================================================
+# DEVELOPMENT DEPENDENCIES
+# =============================================================================
+[tool.poetry.group.dev.dependencies]
+black = "^26.3.1"
+ruff = "^0.7.4"
+isort = "^5.13.2"
+mypy = "^1.13.0"
+pre-commit = "^3.8.0"
+
+# =============================================================================
+# DOCUMENTATION-SPECIFIC DEPENDENCIES
+# =============================================================================
+[tool.poetry.group.docs.dependencies]
+sphinx = "^7.4.0"
+sphinx-rtd-theme = "^3.0.0"
+sphinx-autoapi = "^3.4.0"
+myst-parser = "^4.0.0"
+
+# =============================================================================
+# BLACK CODE FORMATTER CONFIGURATION
+# =============================================================================
+[tool.black]
+line-length = 200
+target-version = ["py311"]
+extend-exclude = "tests"
+
+# =============================================================================
+# RUFF LINTER CONFIGURATION
+# =============================================================================
+[tool.ruff]
+line-length = 200
+target-version = "py311"
+
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "docs",
+    "tests",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+]
+
+ignore = [
+    "E501",   # Line too long (handled by Black)
+    "E741",   # Ambiguous variable name (l, O, I)
+    "N801",   # CapWords convention ignored
+    "N802",
+    "N999",   # Module name conventions ignored
+    "UP038",  # Use older isinstance tuple syntax for mypy compatibility
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",   # Allow assert statements in tests
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# =============================================================================
+# ISORT IMPORT SORTER CONFIGURATION
+# =============================================================================
+[tool.isort]
+profile = "black"
+line_length = 200
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+known_first_party = ["virtual_knitting_machine"]
+skip_glob = ["tests/*"]
+
+# =============================================================================
+# MYPY STATIC TYPE CHECKER CONFIGURATION
+# =============================================================================
+[tool.mypy]
+myyp_path = "src"
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = false
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+ignore_missing_imports = true
+allow_redefinition = true
+allow_untyped_globals = true
+implicit_reexport = true
+
+disable_error_code = [
+    "attr-defined",
+    "no-redef",
+]
+
+exclude = [
+    "tests/",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false

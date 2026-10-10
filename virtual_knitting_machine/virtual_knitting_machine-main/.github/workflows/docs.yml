@@ -1,0 +1,127 @@
+name: Documentation
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  POETRY_VERSION: "1.8.3"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # ===========================================================================
+  # BUILD DOCUMENTATION
+  # ===========================================================================
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached dependencies
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-docs-ubuntu-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root --with docs
+
+      - name: Install project
+        run: poetry install --no-interaction
+
+      - name: Set up documentation environment
+        run: |
+          mkdir -p docs/source/_static
+          mkdir -p docs/source/api
+          poetry run sphinx-apidoc -o docs/source/api src/virtual_knitting_machine/ --force --module-first --separate --no-toc
+
+      - name: Build Sphinx documentation
+        run: |
+          poetry run sphinx-build -b html docs/source/ docs/build/html/ -W --keep-going
+          touch docs/build/html/.nojekyll
+          if [ ! -f "docs/build/html/404.html" ]; then
+            echo '<!DOCTYPE html>
+            <html>
+            <head>
+              <title>Page Not Found</title>
+              <meta http-equiv="refresh" content="0; url=/" />
+            </head>
+            <body>
+              <p>Redirecting to documentation home...</p>
+            </body>
+            </html>' > docs/build/html/404.html
+          fi
+
+      - name: Validate documentation
+        run: |
+          if [ ! -f "docs/build/html/index.html" ]; then
+            echo "❌ index.html not found in build output"
+            exit 1
+          fi
+          echo "✅ Documentation validation passed"
+          echo "📊 Total HTML files: $(find docs/build/html -name "*.html" | wc -l)"
+          echo "📊 Build size: $(du -sh docs/build/html)"
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-html
+          path: docs/build/html/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build/html/
+
+  # ===========================================================================
+  # DEPLOY TO GITHUB PAGES
+  # ===========================================================================
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build-docs
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Post deployment summary
+        run: |
+          echo "✅ Documentation deployed: ${{ steps.deployment.outputs.page_url }}"
