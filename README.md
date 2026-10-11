@@ -41,12 +41,15 @@ Depois abra http://localhost:8000/editor.html no navegador. Para usar outra past
 
 - Desenhar: lápis e borracha (1 a 9 px), linha, retângulo, balde, conta-gotas e **desenho espelhado** (simétrico).
 - Seleção: mover, copiar, colar, espelhar, girar, repetir um motivo, **mudar o tamanho** sem criar cores novas.
+  Para tirar a seleção: Esc, o botão **Tirar seleção** ou um clique sem arrastar com a ferramenta Seleção.
 - **Duplicar ou excluir carreiras e agulhas** da seleção, na largura ou altura inteira, levando junto as
   linhas de opção (como o inserir/apagar linha do KnitPaint).
 - **Linhas de opção**: o editor reconhece os blocos L1–L20 e R1–R20 ao lado de cada painel, mostra no rodapé
   qual linha está sob o cursor e lista os valores da carreira apontada (R3 guia-fio, R5 cancelar malha,
   R6 ponto, segundo referências públicas: confira na sua versão).
-- **Legenda das cores**: dê nome a cada número de cor; os nomes ficam guardados no navegador.
+- **Legenda das cores**: dê nome a cada número de cor; os nomes ficam guardados no navegador. Em **Códigos com
+  nome** ficam os códigos de ponto conhecidos (1, 2, 3, 11, 12, 13, 16, 51, 52, 60, 61, 70, 71…), para escolher
+  mesmo os que ainda não estão no desenho.
 - **Destacar cor**: mostra só uma cor para achar onde ela aparece. Grade com linha forte a cada 10.
 - **Réguas**: os números das carreiras (à esquerda, contadas de baixo, como a máquina) e das agulhas (embaixo)
   acompanham a rolagem e o zoom, com a seleção marcada. A barra de baixo mostra a seleção com a faixa de
@@ -57,7 +60,8 @@ Depois abra http://localhost:8000/editor.html no navegador. Para usar outra past
 
 No painel à direita, em **Desenvolver o modelo**, **Biblioteca de pontos** e **Linhas de opção**. São 10
 etapas, na ordem do protótipo (o número aparece em cada botão; a 3 é o desenho e a 5, as linhas de opção), e
-cada diálogo diz em que etapa está e tem o botão **Próximo**:
+cada diálogo diz em que etapa está e tem os botões para a etapa anterior e a **Próxima** (na última, **Voltar ao
+início**):
 
 - **Modelo**: escolha o estilo (painel reto, gola careca, gola V, cardigã, regata, gola polo), a densidade
   da amostra (colunas e carreiras em 10 cm), a máquina, a finura e as medidas em cm; o editor calcula as
@@ -81,17 +85,20 @@ cada diálogo diz em que etapa está e tem o botão **Próximo**:
 - **Voltar ao original** (em Desenho): volta a aba a como o arquivo foi aberto (dá para desfazer). A barra de
   baixo mostra também o trecho do ponto (início, barra, corpo…).
 - **Símbolos**: com zoom de 800% ou mais, mostra o tipo de ponto de cada código (frente, atrás, tuck, sem
-  seleção, mover).
+  seleção, mover, transferência).
 - **Gerar padrão**: listras (com `cor:carreiras:guia`, o guia-fio de cada listra vai para a R3 da seleção),
   losango (argyle), **onça** (rosetas que se repetem sem emenda; “Sortear” troca as rosetas), **logo em
   pontos** (de um texto ou de uma imagem PNG/JPG, com a largura em cm, separado em 2 a 4 fios na proporção da
   amostra; “Usar as cores da imagem” escolhe para cada fio a cor da paleta mais parecida) e texto em letras
   de pixels.
-- **Jacquard e intarsia**: fios soltos no avesso em flutuação, birdseye, escada ou tubular, com a maior
-  flutuação marcada no desenho, quantas carreiras a máquina tece (uma por fio) e a **vista do avesso**
+- **Jacquard e intarsia**: fios soltos no avesso em flutuação, birdseye, escada ou tubular (com o que cada um
+  tem de bom e de ruim e o que fazer quando sobra fio solto longo), com a maior flutuação marcada no desenho,
+  quantas carreiras a máquina tece (uma por fio) e a **vista do avesso**
   (espelhada e conforme a estrutura: salpicada no birdseye, o negativo no tubular, as colunas da escada e os
   fios soltos na cor deles); quantos guia-fios a intarsia precisa, as áreas pequenas, o mapa e a tabela de cada
-  guia (cor, carreiras e áreas). Passando o mouse no mapa: agulha, carreira, cor, área e guia.
+  guia (cor, carreiras e áreas). Passando o mouse no mapa: agulha, carreira, cor, área e guia. Não contam como
+  fio as marcas (0, 13, 16, 60/70) nem as cores com menos de 5% dos pontos; sem seleção (ou aberto pelo
+  Verificar), ele analisa o corpo do painel e, como o Verificar, também deixa de fora os códigos de ponto.
 - **Linhas de opção**: a grade mostra as 20 linhas de cada lado, com as que têm valores marcadas; escolha uma
   (na grade, na tabela da carreira ou com o conta-gotas) para ver as faixas de valores por carreira, o que ela
   faz (R1 a R6, ou um lembrete de que racking, velocidade e puxador também usam linhas), dar um nome a ela e
@@ -99,11 +106,14 @@ cada diálogo diz em que etapa está e tem o botão **Próximo**:
   **Escurecer o desenho** deixa só as linhas de opção em destaque.
 - **Verificar**: procura carreiras com malha sem guia-fio (R3) ou sem ponto (R6), cancelar malha (R5) com
   guia-fio, falta da largura do guia (13), flutuações longas (16), painéis diferentes e trechos difíceis na
-  forma das peças do Modelo. Marca como **ERRO** a transferência (60/70) com guia-fio na R3 ou em carreira que
+  forma das peças do Modelo (aviso, depois de abrir o Modelo ou a Forma; a Ficha não conta, porque não são do
+  desenho), e mostra a ourela alternada e a entrada do fio (guia-fio sem malha). Marca
+  como **ERRO** a transferência (60/70) com guia-fio na R3 ou em carreira que
   tricota sem a R5, e o corpo que não dá para tecer nem em jacquard (fios soltos longos com o avesso escolhido
   no Jacquard) nem em intarsia (mais guias do que a máquina tem); quando só um dos dois não serve, é aviso. Cada
   item tem um botão para a ferramenta que resolve (a linha de opção, o ponto no Processar, o jacquard, a
-  forma). Mostra as agulhas das duas fronturas com o carro passando, carreira a carreira.
+  forma). Mostra as agulhas das duas fronturas com o carro passando, carreira a carreira; na transferência
+  (60/70) a laçada passa para a frontura em que a agulha tricota depois.
 - **Pacotes e altura**: o painel dividido em trechos (início, barra, transferência, corpo, final) pelas linhas
   R5 e R6, com os códigos, guias e pontos de cada um (clique num trecho para destacá-lo ou selecioná-lo no
   desenho); troque o início (com fio de desperdício e separação), a barra (tubular, ribana 1×1 ou 2×2, ou
@@ -117,14 +127,16 @@ cada diálogo diz em que etapa está e tem o botão **Próximo**:
   desenvolve a peça e estima o tempo; o resumo baixa em `.txt`. O último passo lista os `.000` e `.QFD` da
   pasta (bytes, seções, linhas e registros, e quanto um ajuste difere do outro) e leva ao Verificar.
 - **Simular malha**: prévia da malha (frente ou avesso, tipo de fio, cor pelo guia-fio ou pelo desenho), com
-  **variantes de cor** prontas ou guardadas por você e a **peça inteira** do Modelo em 2D, com o desenho
+  **variantes de cor** prontas ou guardadas por você (a escolhida fica marcada) e a **peça inteira** do Modelo em 2D, com o desenho
   repetido.
 - **Ficha técnica**: código, descrição, máquina, tempo, fio, pesos, data e fio de cada guia (os mesmos do
   Processar); o código e a descrição saem do nome do arquivo (`00FE_BLS_ESTAMPA_ONÇA` → `00FE` e
   `BLS ESTAMPA ONÇA`); estimativa do tempo de tecimento; baixa em `.txt` ou escreve a ficha no desenho em letras
-  de pixels. **Enviar à máquina** baixa um `.zip` com os arquivos abertos escolhidos (o desenho como está agora,
-  `.000`, `.QFD`) e os resumos; já vêm marcados os de mesmo nome e os `.000` e `.QFD` da mesma pasta (abra a
-  pasta inteira, ou os arquivos dela juntos). **Antes de tecer** lista o que ainda falta conferir (cada item pode
+  de pixels; cada campo diz de onde vem e o que escrever. **Enviar à máquina** baixa um `.zip` com os arquivos
+  abertos escolhidos (o desenho como está agora, `.000`, `.QFD`, com o tamanho de cada um) e os resumos; já vêm
+  marcados os de mesmo nome e os `.000` e `.QFD` da mesma pasta (abra a pasta inteira, ou os arquivos dela
+  juntos). No Chrome e no Edge, **Gravar numa pasta…** grava os mesmos arquivos direto no pendrive (pergunta
+  antes de substituir). **Antes de tecer** lista o que ainda falta conferir (cada item pode
   ser marcado à mão, inclusive a amostra tecida e aprovada).
 
 Os significados de códigos e linhas de opção vêm de referências públicas do KnitPaint e mudam entre
@@ -133,7 +145,8 @@ Processar, dos Pacotes e da Ficha ficam guardados no navegador, por nome de arqu
 
 O que o editor **não** faz: gerar o programa da máquina (`.000`) e os ajustes (`.QFD`) a partir do `.dat`.
 Isso é o processamento do KnitPaint; use os valores do Processar no KnitPaint ou no SDS KnitPaint-Online da
-Shima Seiki. O navegador também não grava direto no pendrive nem na rede da máquina: baixe o `.zip` e copie.
+Shima Seiki. O navegador também não alcança a rede da máquina; o pendrive só no Chrome e no Edge (nos outros,
+baixe o `.zip` e copie).
 
 | Arquivo | O que é | No editor |
 | --- | --- | --- |

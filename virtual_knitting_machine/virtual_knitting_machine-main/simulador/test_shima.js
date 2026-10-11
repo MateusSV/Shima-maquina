@@ -265,12 +265,17 @@ test("linhas de opção do exemplo: painéis, faixas, pintar valor e verificaç�
     ["aviso", "Carreiras com malha e sem guia-fio (R3) (painel 1)", "187–188, 365"],
     ["aviso", "Carreiras com malha e sem número de ponto (R6) (painel 1)", "187–188, 365"],
     ["info", "Transferência sem fio: coerente (painel 1)", "201–202"],
+    ["info", "Guia-fio 1 sem malha (entrada do fio?) (painel 1)", "189–190"],
+    ["info", "Ourela alternada (painel 1)", "203–359"],
     ["aviso", "Carreiras com malha e sem guia-fio (R3) (painel 2)", "187–188, 365"],
     ["aviso", "Carreiras com malha e sem número de ponto (R6) (painel 2)", "187–188, 365"],
     ["info", "Transferência sem fio: coerente (painel 2)", "201–202"],
+    ["info", "Guia-fio 1 sem malha (entrada do fio?) (painel 2)", "189–190"],
+    ["info", "Ourela alternada (painel 2)", "203–359"],
     ["aviso", "Os painéis são diferentes", ""],
   ]);
-  assert.match(itens[6].texto, /Painel 1: 203 agulhas de malha, 179 carreiras, R2 = 55\. Painel 2: 199 agulhas de malha, 179 carreiras, R2 = 30/);
+  assert.match(itens[4].texto, /as agulhas 452, 454, 652 e 654 da borda da malha alternam os códigos 2 e 16/);
+  assert.match(itens[10].texto, /Painel 1: 203 agulhas de malha, 179 carreiras, R2 = 55\. Painel 2: 199 agulhas de malha, 179 carreiras, R2 = 30/);
 
   // Altura com o bloco da R2 (216–223) repetido 55 vezes.
   const dev = Recursos.desenvolvimento(doc, paineis[0], { "216-223": 55 }); // chave pelas carreiras, de baixo
@@ -407,6 +412,22 @@ test("verificar: transferência com fio é erro", semPasta, () => {
   doc.pixels[y * doc.largura + p.x0 + 10] = 1;
   const tecendo = Recursos.verificarDesenho(doc, ShimaDat.linhasDeOpcao(doc), { flutuacaoMaxima: 5 }).find((i) => i.regra === "transferencia-tecendo");
   assert.deepEqual([tecendo.nivel, tecendo.carreiras], ["erro", "202"]);
+});
+
+test("verificar: ourela só nas bordas e entrada do fio só com marcas", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const H = doc.altura, W = doc.largura;
+  const regras = () =>
+    Recursos.verificarDesenho(doc, ShimaDat.linhasDeOpcao(doc), { flutuacaoMaxima: 5 })
+      .filter((i) => i.regra === "ourela" || i.regra === "guia-sem-malha")
+      .map((i) => `${i.regra} ${i.titulo.includes("painel 1") ? 1 : 2}`);
+  assert.deepEqual(regras(), ["guia-sem-malha 1", "ourela 1", "guia-sem-malha 2", "ourela 2"]);
+  // Corpo inteiro alternando 51 e 52 (tubular): é o desenho, não a ourela.
+  for (let c = 203; c <= 359; c++) for (let x = 451; x <= 653; x++) doc.pixels[(H - c) * W + x] = c % 2 ? 51 : 52;
+  assert.deepEqual(regras(), ["guia-sem-malha 1", "guia-sem-malha 2", "ourela 2"]);
+  // Cor de desenho (não é marca) na carreira com guia: não é entrada do fio.
+  doc.pixels[(H - 189) * W + 500] = doc.pixels[(H - 190) * W + 500] = 5;
+  assert.deepEqual(regras(), ["guia-sem-malha 2", "ourela 2"]);
 });
 
 test("pacotes: trechos do exemplo, desperdício, ribana, arremate e sem barra", semPasta, () => {

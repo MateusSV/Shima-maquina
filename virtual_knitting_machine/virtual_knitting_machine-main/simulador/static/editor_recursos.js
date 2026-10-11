@@ -241,6 +241,16 @@ function tracarSimbolo(c, tipo, px, py, z) {
     c.lineTo(X(0.7), Y(0.3));
     c.lineTo(X(0.5), Y(0.66));
     c.closePath();
+  } else if (tipo === "transfere") {
+    // Seta dupla na vertical: o ponto passa de uma frontura para a outra.
+    c.moveTo(X(0.5), Y(0.16));
+    c.lineTo(X(0.5), Y(0.84));
+    c.moveTo(X(0.34), Y(0.32));
+    c.lineTo(X(0.5), Y(0.16));
+    c.lineTo(X(0.66), Y(0.32));
+    c.moveTo(X(0.34), Y(0.68));
+    c.lineTo(X(0.5), Y(0.84));
+    c.lineTo(X(0.66), Y(0.68));
   }
 }
 
@@ -301,6 +311,7 @@ const LEGENDA_SIMBOLOS = [
   ["flutua", "16", "sem seleção"],
   ["mover-esq", "61", "frente, mover ←"],
   ["mover-dir", "71", "frente, mover →"],
+  ["transfere", "60 70", "transferência"],
   ["guia", "13", "largura do guia"],
 ];
 
@@ -578,8 +589,8 @@ function linhasUsadas(a, p) {
 
 const AJUDA_LINHAS = {
   R1: "Num manual antigo da Shima, a R1 marca a repetição que fica dentro de outra (economizador). A coluna de dentro costuma alternar 6 e 7 a cada carreira, como a ida e a volta do carro; o valor vai na de fora.",
-  R2: "Os blocos desta linha se repetem na máquina: diga quantas vezes em Pacotes e altura ou no Processar.",
-  R3: "No Processar, cada número desta linha vira um guia-fio, com o fio, a cor e o lado por onde ele entra.",
+  R2: "Os blocos desta linha se repetem na máquina: diga quantas vezes em Pacotes e altura ou no Processar. O valor da R2 pode ser só um endereço do bloco, não o número de repetições.",
+  R3: "O número é um endereço do guia-fio (até 127 combinações), ajustado no processamento: no Processar, cada número desta linha vira um guia-fio, com o fio, a cor e o lado por onde ele entra.",
   R5: "As carreiras com R5 não tricotam (cancelar malha). Pacotes e altura usa esta linha para achar as carreiras de transferência.",
   R6: "No Processar, cada número desta linha recebe o valor de ponto da frente e de trás. Pacotes e altura usa esta linha para achar a barra e o corpo.",
 };
@@ -818,7 +829,15 @@ function calcularModeloAtual() {
 
 const textoPontos = (m) => `= ${m.pontos} ${m.eixo === "h" ? "agulhas" : "carreiras"}`;
 
+// Desde que a pessoa abriu o Modelo ou a Forma, o Verificar mostra os trechos difíceis das peças.
+function marcarModeloEmUso() {
+  if (modelo.emUso) return;
+  modelo.emUso = true;
+  gravarArmazenado(CHAVE_MODELO, modelo);
+}
+
 function abrirModelo() {
+  marcarModeloEmUso();
   const form = $("dlg-modelo").querySelector("form");
   form.estilo.innerHTML = RM.ESTILOS.map((e) => `<option value="${e.id}">${esc(e.nome)}</option>`).join("");
   form.estilo.value = modelo.estilo;
@@ -1061,6 +1080,27 @@ function esquemaSvg(peca, f, plano, densidade) {
   return `<svg viewBox="0 0 ${vbW} ${vbH}" role="img" aria-label="${esc(`Esquema da peça ${nome}`)}">${partes.join("")}</svg>`;
 }
 
+// "Cava de 20 cm (80 carreiras) · ombro de 11 cm (33 agulhas) · barra de 5 cm (20 carreiras)."
+function medidasDoEsquema(f, plano) {
+  const cmX = 10 / Math.max(0.1, decimal(modelo.colunas, 30)), cmY = 10 / Math.max(0.1, decimal(modelo.carreiras, 40));
+  const ag = (n) => `${cm1(n * cmX)} cm (${n} agulha${n === 1 ? "" : "s"})`, ca = (n) => `${cm1(n * cmY)} cm (${n} carreira${n === 1 ? "" : "s"})`;
+  const partes = [];
+  const barra = Math.round(f.barra || 0);
+  if (f.tipo === "corpo") {
+    // O arremate final é o dos ombros (dois na peça inteira, um na frente do cardigã).
+    const topo = plano.linhas[plano.H - 1].arrem.reduce((t, [p, q]) => t + q - p + 1, 0);
+    partes.push(`Cava de ${ca(Math.round(f.cava))}`, `ombro de ${ag(Math.round(topo / (f.meia ? 1 : 2)))}`);
+  } else if (f.tipo === "manga") {
+    const inicio = plano.linhas[0].segs[0] || plano.linhas[0].arrem[0];
+    if (inicio) partes.push(`Punho de ${ag(inicio[1] - inicio[0] + 1)}`);
+    partes.push(`copa de ${ca(Math.round(f.copa))}`);
+  }
+  if (barra > 0) partes.push(`barra de ${ca(barra)}`);
+  if (!partes.length) return "";
+  const texto = partes.join(" · ");
+  return `${texto[0].toUpperCase()}${texto.slice(1)}.`;
+}
+
 function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
   const peca = r.pecas[limitar(esquemaPeca, 0, r.pecas.length - 1)];
   const forma = formaDaPeca(peca, r);
@@ -1075,7 +1115,7 @@ function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
   el.innerHTML = esquemaSvg(peca, forma, plano, modelo);
   const qtd = peca.qtd > 1 ? ` (${peca.qtd} peças)` : "";
   const ajustada = formaOpcoes.ajustes[chaveAjuste(r, peca)] ? ", com os ajustes feitos na Forma" : "";
-  legenda.textContent = `${peca.nome}${qtd}: ${plano.W} agulhas × ${plano.H} carreiras, desenhada ponto a ponto pela forma e pela densidade da amostra${ajustada}.`;
+  legenda.textContent = `${peca.nome}${qtd}: ${plano.W} agulhas × ${plano.H} carreiras, desenhada ponto a ponto pela forma e pela densidade da amostra${ajustada}. ${medidasDoEsquema(forma, plano)}`;
 }
 
 {
@@ -1211,6 +1251,7 @@ function formaDaPeca(peca, r = ultimoModelo || calcularModeloAtual()) {
 }
 
 function abrirForma(indice = formaPeca) {
+  marcarModeloEmUso();
   const r = ultimoModelo || calcularModeloAtual();
   if (limitar(indice, 0, r.pecas.length - 1) !== formaPeca) formaDestaque = null;
   formaPeca = limitar(indice, 0, r.pecas.length - 1);
@@ -1591,7 +1632,7 @@ function imagemDoLogo(form) {
   return { w, h, px, fonte, medias: q.medias };
 }
 
-const RESERVADAS_FIO = new Set([0, 13, 16]); // sem malha, largura do guia e sem seleção não são cor de fio
+const RESERVADAS_FIO = new Set([0, 13, 16, 60, 70]); // sem malha, largura do guia, sem seleção e transferência não são cor de fio
 
 // Para cada fio, a cor da paleta mais parecida com a cor dele na imagem (sem repetir a mesma cor).
 function coresDaImagemNosFios(form) {
@@ -1806,16 +1847,39 @@ function aplicarListrasComR3(a, form) {
 let jacquard = null;
 const LIMITE_JACQUARD = 300000; // pontos analisados de uma vez
 
-function abrirJacquard() {
+// Cores que são fio no jacquard. Nunca contam o 0, as marcas (13 largura do guia, 16 sem seleção) e a
+// transferência (60/70). Sem seleção também ficam de fora as cores com menos de 5% dos pontos (ourela e marcas)
+// e, no corpo de um painel, os códigos de ponto (uma ribana de 1 e 2 não é jacquard), como no Verificar.
+const NAO_FIO = RESERVADAS_FIO;
+const REGRA_FIO_VERIFICAR = { minimo: 0.05, semCodigosDePonto: true };
+function coresDeFio(cores, r, { minimo = 0, semCodigosDePonto = false } = {}) {
+  return new Set(cores.filter((c) => !NAO_FIO.has(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor))).map((c) => c.cor));
+}
+
+// regraDoVerificar: quem vem de um item do Verificar analisa com a mesma regra de fio dele.
+function abrirJacquard(regraDoVerificar = null) {
   const a = abaDat();
   if (!a) return;
   fixarFlutuante(a);
-  const { r, texto } = areaDeAnalise(a, "analisando");
+  let { r, texto } = areaDeAnalise(a, "analisando");
+  // Na seleção também ficam de fora as cores com menos de 5% dos pontos (ourela, marcas), como antes.
+  let regra = regraDoVerificar || { minimo: 0.05 };
+  if (!a.selecao) {
+    // Sem seleção: o corpo do painel que está na tela, com a mesma regra de fio do Verificar.
+    const corpo = corpoVisivel(a);
+    if (corpo) {
+      r = corpo.r;
+      regra = { minimo: 0.05, semCodigosDePonto: true };
+      texto = `Sem seleção: analisando o corpo do painel ${corpo.p.numero} (carreiras ${corpo.trecho.de}–${corpo.trecho.ate}, agulhas ${r.x + 1}–${r.x + r.w}). Contam como fio as cores com pelo menos 5% dos pontos que não são códigos de ponto. Para ver outra parte, selecione-a antes de abrir.`;
+    } else regra = { minimo: 0.05 };
+  }
   if (r.w * r.h > LIMITE_JACQUARD) {
     return avisar(`A área tem ${(r.w * r.h).toLocaleString("pt-BR")} pontos. Selecione o motivo (até ${LIMITE_JACQUARD.toLocaleString("pt-BR")} pontos) e abra de novo.`, true);
   }
   const d = a.doc;
-  jacquard = { a, r, cores: RM.coresDaArea(d.pixels, d.largura, r), intarsia: RM.guiasIntarsia(d.pixels, d.largura, r) };
+  const cores = RM.coresDaArea(d.pixels, d.largura, r);
+  const fios = coresDeFio(cores, r, regra);
+  jacquard = { a, r, cores, fios, automatico: !a.selecao, intarsia: RM.guiasIntarsia(d.pixels, d.largura, r, fios) };
   $("jacquard-area").textContent = texto;
   abrirJanela("dlg-jacquard");
   analisarJacquard();
@@ -1824,37 +1888,45 @@ function abrirJacquard() {
 const amostraCor = (d, cor) => `<span class="amostra" style="background:${hexCor(d.paleta[cor])}"></span><span class="mono">${cor}</span>`;
 
 const EXPLICA_AVESSO = {
-  flutuacao: () => "Cada cor passa solta por trás onde não aparece na frente.",
-  birdseye: () => "O avesso prende as cores em pontos alternados (salpicado): fios curtos e tecido mais firme.",
-  escada: (n) => `Cada cor prende no avesso a cada ${n} agulhas.`,
-  tubular: () => "No tubular o avesso tece todas as cores: não sobra fio solto, mas o tecido fica duplo e mais pesado.",
+  flutuacao: () => "Flutuação: sem malha atrás, cada cor corre solta pelo avesso onde não aparece na frente. É o mais leve, mas fio longo engancha: limite a flutuação.",
+  birdseye: () => "Birdseye (olho de pássaro): as cores que não aparecem na frente tricotam atrás em agulhas alternadas (salpicado). Fios curtos; é o mais pesado, com tecido plano, liso e firme.",
+  escada: (n) => `Escada (ladder-back): cada cor prende atrás só a cada ${n} agulhas. Mais leve que o birdseye e com mais volume.`,
+  tubular: () => "Tubular: frente e avesso viram dois tecidos ligados pelo desenho; o avesso tece todas as cores e não sobra fio solto. Firme, duplo e com pouco caimento.",
+};
+// O que fazer quando sobram fios soltos longos, conforme o avesso escolhido.
+const CONSELHO_AVESSO = {
+  flutuacao: () => "Use birdseye ou escada para prender os fios no avesso, ou diminua o desenho.",
+  escada: (n) => `Prenda a cada menos agulhas na escada (hoje ${n}) ou use birdseye.`,
+  birdseye: () => "Com muitas cores até o birdseye deixa fio solto: use menos cores na carreira.",
 };
 
 function analisarJacquard() {
   if (!jacquard) return;
-  const { a, r, cores, intarsia } = jacquard;
+  const { a, r, cores, fios, intarsia } = jacquard;
   const d = a.doc, H = d.altura;
   const form = $("dlg-jacquard").querySelector("form");
   const estrutura = form.estrutura.value;
   const escada = inteiro(form.escada.value, 4, 2, 12);
   const maximo = inteiro(form.maximo.value, 5, 1, 99);
   form.escada.disabled = estrutura !== "escada";
-  const fl = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada);
+  const fl = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada, fios);
   const longas = fl.lista.filter((f) => f.comprimento > maximo);
   const maior = fl.lista.reduce((m, f) => (!m || f.comprimento > m.comprimento ? f : m), null);
   Object.assign(jacquard, { longas, maior, fl, maximo, estrutura, escada });
   const mostrar = cores.slice(0, 24);
-  let html = `<div class="cores-area">${mostrar.map((c) => `<span>${amostraCor(d, c.cor)} <span class="suave">× ${c.n.toLocaleString("pt-BR")}</span></span>`).join("")}${
-    cores.length > mostrar.length ? `<span class="suave">+${cores.length - mostrar.length}</span>` : ""
-  }</div>`;
-  html += `<p>${cores.length} ${cores.length === 1 ? "cor" : "cores"} na área. ${EXPLICA_AVESSO[estrutura](escada)}</p>`;
-  const k = cores.filter((c) => c.cor !== 0 && c.n >= 0.05 * r.w * r.h).length; // ourela e marcas não contam
+  let html = `<div class="cores-area">${mostrar
+    .map((c) => `<span${fios.has(c.cor) ? "" : ' class="nao-fio"'}>${amostraCor(d, c.cor)} <span class="suave">× ${c.n.toLocaleString("pt-BR")}${fios.has(c.cor) ? "" : " · não é fio"}</span></span>`)
+    .join("")}${cores.length > mostrar.length ? `<span class="suave">+${cores.length - mostrar.length}</span>` : ""}</div>`;
+  const k = fios.size;
+  html += `<p>${cores.length} ${cores.length === 1 ? "cor" : "cores"} na área${k === cores.length ? "" : `, ${k} como fio`}. ${EXPLICA_AVESSO[estrutura](escada)}</p>`;
   if (k > 1) {
     html += `<p>${k} fios · ${r.h.toLocaleString("pt-BR")} carreiras de desenho = <strong>${(k * r.h).toLocaleString("pt-BR")} carreiras na máquina</strong> (uma por fio).</p>`;
+  } else {
+    html += `<p class="suave">Menos de dois fios na área: não há jacquard para analisar.${jacquard.automatico ? " Selecione a área do desenho de cores e abra de novo." : ""}</p>`;
   }
-  if (cores.length > 1 && estrutura !== "tubular") {
+  if (k > 1 && estrutura !== "tubular") {
     html += longas.length
-      ? `<p class="alerta">${longas.length.toLocaleString("pt-BR")} fios soltos com mais de ${maximo} agulhas.</p>`
+      ? `<p class="alerta">${longas.length.toLocaleString("pt-BR")} fios soltos com mais de ${maximo} agulhas. ${(CONSELHO_AVESSO[estrutura] || (() => ""))(escada)}</p>`
       : `<p class="ok-texto">Nenhum fio solto com mais de ${maximo} agulhas.</p>`;
     if (maior) {
       html += `<p>O maior tem ${maior.comprimento} agulhas: cor ${maior.cor}, carreira ${H - maior.y}, agulhas ${maior.x0 + 1}–${maior.x1 + 1}.</p>
@@ -1868,6 +1940,12 @@ function analisarJacquard() {
   intarsia.guias.forEach((g) => porCor.set(g.cor, (porCor.get(g.cor) || 0) + 1));
   const n = intarsia.guias.length;
   const pequenas = intarsia.areas.filter((ar) => ar.n < 12).length;
+  if (fios.size < 2) {
+    $("intarsia-resultado").innerHTML = `<div class="resultado"><p class="suave">Menos de dois fios na área: não há intarsia para analisar.</p></div>`;
+    $("intarsia-tabela").innerHTML = "";
+    desenharMapaJacquard();
+    return;
+  }
   $("intarsia-resultado").innerHTML = `<div class="resultado">
     <p class="${n > disponiveis ? "alerta" : "ok-texto"}">Precisa de ${n} guia-fio${n === 1 ? "" : "s"}${n > disponiveis ? `, mais que os ${disponiveis} da máquina` : ""}.</p>
     <div class="cores-area">${[...porCor].slice(0, 24).map(([cor, k]) => `<span>${amostraCor(d, cor)} <span class="suave">${k} guia${k === 1 ? "" : "s"}</span></span>`).join("")}</div>
@@ -1913,7 +1991,9 @@ function desenharAvessoJacquard(g, z) {
     for (let x = 0; x < r.w; x++) {
       const frente = img.px[y * r.w + x];
       let v = frente, apagar = true;
-      if (k > 1 && estrutura === "birdseye") {
+      if (!indice.has(frente)) {
+        // Não é fio (marca, ourela, fora da malha): fica como está, escurecida.
+      } else if (k > 1 && estrutura === "birdseye") {
         v = cores[(k - ((x + y) % k)) % k];
         apagar = false;
       } else if (k > 1 && estrutura === "tubular") {
@@ -2036,7 +2116,8 @@ function lerPontoDoJacquard(e) {
   const d = a.doc, i = y * r.w + x;
   const cor = d.pixels[(r.y + y) * d.largura + r.x + x];
   const nome = nomeDaCor(cor);
-  el.textContent = `Agulha ${r.x + x + 1} · carreira ${d.altura - (r.y + y)} · cor ${cor}${nome ? ` (${nome})` : ""} · área ${intarsia.areaDe[i] + 1} (guia ${intarsia.guiaDe[i]} na intarsia)`;
+  const onde = intarsia.areaDe[i] < 0 ? "não conta como fio" : `área ${intarsia.areaDe[i] + 1} (guia ${intarsia.guiaDe[i]} na intarsia)`;
+  el.textContent = `Agulha ${r.x + x + 1} · carreira ${d.altura - (r.y + y)} · cor ${cor}${nome ? ` (${nome})` : ""} · ${onde}`;
 }
 $("jacquard-mapa").addEventListener("pointermove", lerPontoDoJacquard);
 $("jacquard-mapa").addEventListener("pointerdown", lerPontoDoJacquard);
@@ -2080,8 +2161,8 @@ function rodarVerificacao() {
   desenharItensVerif();
 }
 
-// Tudo o que o Verificar mostra (as regras do desenho, as de cor e os trechos difíceis do Modelo, que são só
-// informação); a Ficha conta os erros e os avisos daqui.
+// Tudo o que o Verificar mostra: as regras do desenho, as de cor e os trechos difíceis das peças do Modelo
+// (avisos que a Ficha não conta, porque não são deste desenho).
 function itensDoVerificar(a, maximo) {
   const itens = RM.verificarDesenho(a.doc, blocosDeOpcao(a), { flutuacaoMaxima: maximo });
   const cor = itensDeCor(a, maximo);
@@ -2107,15 +2188,11 @@ function itensDeCor(a, maximo) {
     const r = { x: m.x0, y: d.altura - corpo.ate, w: m.x1 - m.x0 + 1, h: corpo.ate - corpo.de + 1 };
     if (r.w * r.h > LIMITE_JACQUARD) continue;
     // Uma ribana (1 e 2) ou a forma (0 em volta) não são jacquard: códigos de ponto e o 0 não contam como fio.
-    const principais = new Set(
-      RM.coresDaArea(d.pixels, d.largura, r)
-        .filter((c) => c.cor !== 0 && !RM.tipoDePonto(c.cor) && c.n >= 0.05 * r.w * r.h)
-        .map((c) => c.cor),
-    );
+    const principais = coresDeFio(RM.coresDaArea(d.pixels, d.largura, r), r, REGRA_FIO_VERIFICAR);
     if (principais.size < 2) continue;
     const nome = ` (painel ${p.numero})`;
-    const longas = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada).lista.filter((f) => principais.has(f.cor) && f.comprimento > maximo);
-    const guias = RM.guiasIntarsia(d.pixels, d.largura, r).guias.filter((g) => principais.has(g.cor)).length;
+    const longas = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada, principais).lista.filter((f) => f.comprimento > maximo);
+    const guias = RM.guiasIntarsia(d.pixels, d.largura, r, principais).guias.length;
     // Jacquard e intarsia são dois jeitos de tecer o mesmo desenho: só é erro quando nenhum dos dois serve.
     const semJacquard = longas.length > 0, semIntarsia = guias > disponiveis;
     const nivel = semJacquard && semIntarsia ? "erro" : "aviso";
@@ -2161,6 +2238,8 @@ const ONDE_NA_FORMA = { Cava: "na cava", Gola: "na gola", "Gola V": "na gola V",
 
 // Trechos difíceis nas peças do Modelo (com os ajustes da Forma): diminuições ou aumentos fortes seguidos.
 function itensDaForma() {
+  // Só depois de abrir o Modelo ou a Forma: sem isso, as peças de exemplo dariam avisos em todo arquivo.
+  if (!modelo.emUso) return [];
   const r = ultimoModelo || calcularModeloAtual();
   const itens = [];
   r.pecas.forEach((peca, indice) => {
@@ -2171,7 +2250,7 @@ function itensDaForma() {
       const parte = t.passo.split(":")[0];
       const tipo = parte === "Aumentos" ? "aumentos" : "diminuições";
       itens.push({
-        nivel: "info",
+        nivel: "aviso",
         regra: "forma",
         peca: indice,
         passo: t.passo,
@@ -2190,6 +2269,7 @@ const FERRAMENTAS_VERIF = {
   "cancela-com-guia": "Abrir a linha R5",
   "cancela-coerente": "Abrir a linha R5",
   "transferencia-com-guia": "Abrir a linha R3",
+  "guia-sem-malha": "Abrir a linha R3",
   "transferencia-tecendo": "Abrir a linha R5",
   "transferencia-sem-r5": "Abrir a linha R5",
   "transferencia-coerente": "Abrir a linha R5",
@@ -2203,6 +2283,7 @@ const LINHA_DO_ITEM = {
   "cancela-com-guia": "R5",
   "cancela-coerente": "R5",
   "transferencia-com-guia": "R3",
+  "guia-sem-malha": "R3",
   "transferencia-tecendo": "R5",
   "transferencia-sem-r5": "R5",
   "transferencia-coerente": "R5",
@@ -2226,7 +2307,7 @@ function abrirFerramentaDoItem(item) {
   } else if (item.regra === "sem-ponto") abrirProcessar(RM.PASSOS_PROCESSAMENTO.findIndex((s) => s.id === "ponto"));
   else if (item.regra === "jacquard" || item.regra === "intarsia") {
     selecionarNoDesenho(a, item.area);
-    abrirJacquard();
+    abrirJacquard(REGRA_FIO_VERIFICAR);
     if (item.regra === "intarsia" && jacquard) {
       $("dlg-jacquard").querySelector("form").vista.value = "guias";
       analisarJacquard();
@@ -2337,8 +2418,10 @@ function atualizarInfoVerif() {
   const direita = sentidoDaCarreira(ar, y, c);
   const form = $("dlg-verificar").querySelector("form");
   if (document.activeElement !== form.carreira) form.carreira.value = c;
+  const transferencias = [...conta].filter(([v]) => RM.tipoDePonto(v) === "transfere").reduce((t, [, n]) => t + n, 0);
   $("verificar-info").innerHTML = [
     ["Carreira", String(c)],
+    ...(transferencias ? [["Transferência", `${transferencias} agulha${transferencias === 1 ? "" : "s"}: o ponto vai para a frontura em que a agulha tricota depois`]] : []),
     ["Sentido", `${direita ? "→ para a direita" : "← para a esquerda"}${r1.length ? ` (R1 = ${r1.join("/")})` : ""}`],
     ["Guia-fio (R3)", valoresR(ar, 3, y).join(", ") || "—"],
     ["Ponto (R6)", valoresR(ar, 6, y).join(", ") || "—"],
@@ -2366,6 +2449,8 @@ function acaoDoPonto(v) {
       return { frente: 1, tras: 0, mover: -1 };
     case "mover-dir":
       return { frente: 1, tras: 0, mover: 1 };
+    case "transfere":
+      return { frente: 0, tras: 0, transfere: true };
     default:
       return { frente: 0, tras: 0 };
   }
@@ -2428,13 +2513,51 @@ function desenharAgulhas() {
   g.fillText("frontura de trás", 24, 2);
   g.fillText("frontura da frente", 24, 340);
   const passou = (i) => (paraDireita ? carroX > xAg(i) : carroX < xAg(i));
+  // Na transferência (60/70) o ponto vai para a frontura em que a agulha tricota depois (procurando algumas
+  // carreiras acima); sem como saber, as laçadas ficam onde estavam e a seta tem duas pontas.
+  const destino = (yy, i) => {
+    for (let k = 1; k <= 6; k++) {
+      const ac = acaoDoPonto(codigoEm(yy - k, i));
+      if (ac.transfere || (!ac.frente && !ac.tras)) continue;
+      return ac.frente > 0 && !ac.tras ? "frente" : ac.tras > 0 && !ac.frente ? "tras" : null;
+    }
+    return null;
+  };
+  // Laçadas nas agulhas depois da carreira yy: a malha deixa a laçada nova; a agulha parada (sem seleção, 99)
+  // fica com a de antes, por quantas carreiras for; o 0 (fora da peça, depois de arrematar ou diminuir) não
+  // tem laçada; a transferência leva a de antes para o destino.
+  const lacos = (yy, i) => {
+    const transferencias = [];
+    let estado = { frente: 0, tras: 0 };
+    for (let k = 0; yy + k <= ar.y1; k++) {
+      const v = codigoEm(yy + k, i);
+      const ac = acaoDoPonto(v);
+      if (ac.frente || ac.tras) {
+        estado = ac;
+        break;
+      }
+      if (v === 0) break;
+      if (ac.transfere) transferencias.push(yy + k);
+    }
+    // As transferências valem de baixo para cima.
+    for (let j = transferencias.length - 1; j >= 0; j--) {
+      const tem = estado.frente > 0 || estado.tras > 0 ? 1 : 0;
+      const para = destino(transferencias[j], i);
+      if (para === "frente") estado = { frente: tem, tras: 0 };
+      else if (para === "tras") estado = { frente: 0, tras: tem };
+    }
+    return estado;
+  };
   const caminho = [];
   for (let i = 0; i < jan; i++) {
     const v = codigoEm(y, i);
     const acao = acaoDoPonto(v);
+    const para = acao.transfere ? destino(y, i) : null;
     const x = xAg(i);
     const perto = Math.max(0, 1 - Math.abs(carroX - x) / 40);
-    const sobeF = acao.frente * perto, sobeT = acao.tras * perto;
+    // Na transferência sobe a agulha que entrega o ponto (as duas, quando não dá para saber o sentido).
+    const sobeF = (acao.transfere ? (para === "tras" ? 1 : para ? 0 : 0.6) : acao.frente) * perto;
+    const sobeT = (acao.transfere ? (para === "frente" ? 1 : para ? 0 : 0.6) : acao.tras) * perto;
     const yF = 232 - sobeF * 52, yT = 108 + sobeT * 52;
     g.strokeStyle = "#7C8494";
     g.lineWidth = 2;
@@ -2452,10 +2575,11 @@ function desenharAgulhas() {
     g.beginPath();
     g.arc(x, yT, 3, 0, Math.PI * 2);
     g.fill();
-    const antes = acaoDoPonto(codigoEm(y + 1, i));
+    const antes = lacos(y + 1, i);
+    const depois = lacos(y, i);
     const feito = passou(i);
-    const lacoF = feito ? acao.frente : antes.frente;
-    const lacoT = feito ? acao.tras : antes.tras;
+    const lacoF = feito ? depois.frente : antes.frente;
+    const lacoT = feito ? depois.tras : antes.tras;
     g.strokeStyle = feito ? corFio || "#5E6574" : "#3A404C";
     g.lineWidth = 2.5;
     if (lacoF > 0) {
@@ -2466,6 +2590,25 @@ function desenharAgulhas() {
     if (lacoT > 0) {
       g.beginPath();
       g.ellipse(x, 126, 6, lacoT < 1 ? 4 : 7, 0, 0, Math.PI * 2);
+      g.stroke();
+    }
+    if (feito && acao.transfere) {
+      // Transferência: seta da frontura que entrega para a que recebe (as duas pontas quando não dá para saber).
+      g.strokeStyle = destaque;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(x + 9, 138);
+      g.lineTo(x + 9, 202);
+      if (para !== "frente") {
+        g.moveTo(x + 5, 144);
+        g.lineTo(x + 9, 138);
+        g.lineTo(x + 13, 144);
+      }
+      if (para !== "tras") {
+        g.moveTo(x + 5, 196);
+        g.lineTo(x + 9, 202);
+        g.lineTo(x + 13, 196);
+      }
       g.stroke();
     }
     if (feito && acao.mover) {
@@ -2979,7 +3122,7 @@ function desenharVariantes() {
     .map((v, i) => {
       const cores = (v.cores || coresOriginais()).slice(0, n);
       const minha = i >= VARIANTES_PRONTAS.length;
-      return `<div class="item-variante"><button type="button" class="variante" data-variante="${i}" title="Usar as cores ${esc(v.nome)}"><span>${esc(v.nome)}</span><span class="amostras" aria-hidden="true">${cores
+      return `<div class="item-variante"><button type="button" class="variante" data-variante="${i}" aria-pressed="${v === simul.variante}" title="Usar as cores ${esc(v.nome)}"><span>${esc(v.nome)}</span><span class="amostras" aria-hidden="true">${cores
         .map((c) => `<span style="background:${c}"></span>`)
         .join("")}</span></button>${minha ? `<button type="button" class="apagar-motivo" data-apagar-variante="${i - VARIANTES_PRONTAS.length}" aria-label="Apagar ${esc(v.nome)}" title="Apagar">×</button>` : ""}</div>`;
     })
@@ -2987,8 +3130,18 @@ function desenharVariantes() {
 }
 
 // As cores da variante vão para os fios na ordem (e voltam ao começo se houver mais fios que cores).
+// Marca a variante escolhida nos botões que já estão na tela (redesenhar tiraria o foco do botão).
+function marcarVariante() {
+  const lista = [...VARIANTES_PRONTAS, ...minhasVariantes];
+  $("simular-variantes")
+    .querySelectorAll("[data-variante]")
+    .forEach((b) => b.setAttribute("aria-pressed", String(lista[Number(b.dataset.variante)] === simul.variante)));
+}
+
 function aplicarVariante(v) {
   const porGuia = porGuiaNaSimulacao();
+  simul.variante = v; // fica marcada até mudar uma cor à mão
+  marcarVariante();
   if (!v.cores) {
     if (porGuia) simul.coresGuia = { ...simul.original };
     else simul.trocas = {};
@@ -3152,7 +3305,7 @@ function desenharSimulacao() {
       // O avesso é visto por trás: espelhado, com frente e atrás trocados.
       const v = d.pixels[y * d.largura + area.x + (avesso ? area.w - 1 - xx : xx)];
       let tipo = todosEmMalha ? "frente" : RM.tipoDePonto(v);
-      if (!tipo || tipo === "guia") continue;
+      if (!tipo || tipo === "guia" || tipo === "transfere") continue;
       if (avesso) tipo = TROCA_AVESSO[tipo] || tipo;
       const cor = porGuia ? corDaLinha : simul.trocas[v] || hexCor(d.paleta[v]);
       const x0 = xx * cw, y0 = yy * ch;
@@ -3183,6 +3336,11 @@ function desenharSimulacao() {
     const chave = alvo.dataset.fioSim;
     if (chave && chave[0] === "g") simul.coresGuia[chave.slice(1)] = alvo.value;
     else if (chave) simul.trocas[chave.slice(1)] = alvo.value;
+    // Uma cor mudada à mão (ou outro jeito de colorir) já não é a variante escolhida.
+    if ((chave || alvo.name === "cores") && simul.variante) {
+      simul.variante = null;
+      marcarVariante();
+    }
     if (alvo.name === "cores") {
       desenharFiosSimular();
       desenharVariantes();
@@ -3198,6 +3356,7 @@ function desenharSimulacao() {
       if (!v || !(await perguntar(`Apagar a variante ${v.nome}?`, "Apagar"))) return;
       minhasVariantes.splice(minhasVariantes.indexOf(v), 1);
       gravarArmazenado(CHAVE_VARIANTES, minhasVariantes);
+      if (simul && simul.variante === v) simul.variante = null;
       if (simul) desenharVariantes();
       return;
     }
@@ -3234,8 +3393,8 @@ function desenharSimulacao() {
 const CHAVE_PROCESSAMENTO = "editor-shima-processamento:";
 const EXPLICA_PASSOS = {
   maquina: "A máquina e a finura do programa. A finura também entra no tempo de tecimento e na ficha.",
-  guias: "Cada número da R3 vira um guia-fio da máquina, com o fio, a cor e o lado por onde ele entra.",
-  economizador: "Quantas vezes cada bloco marcado na R2 se repete. O desenho guarda cada bloco uma vez só.",
+  guias: "Cada número da R3 vira um guia-fio da máquina, com o fio, a cor e o lado por onde ele entra. Usar o mesmo número na R3 e no guia da máquina evita confusão (o editor já começa assim).",
+  economizador: "Quantas vezes cada bloco marcado na R2 se repete. O desenho guarda cada bloco uma vez só, e o valor da R2 pode ser só um endereço: escreva aqui o número de repetições.",
   puxador: "A força do puxador em cada trecho da peça. Costuma ser maior no início e na barra.",
   ponto: "Cada número da R6 recebe o valor de ponto (o tamanho da laçada) da frontura da frente e da de trás.",
   velocidade: "A velocidade do carro em cada trecho, em m/s. Costuma ser menor no início e nas transferências.",
@@ -3632,6 +3791,17 @@ function rodarProcessamento() {
 
 const CHAVE_FICHA = "editor-shima-ficha:";
 const ROTULOS_FICHA = { codigo: "Código", descricao: "Descrição", maquina: "Máquina", tempo: "Tempo de tecimento", fio: "Fio", bruto: "Peso bruto", liquido: "Peso líquido", data: "Data" };
+// De onde vem cada campo da ficha e um exemplo do que escrever.
+const DICAS_FICHA = {
+  codigo: ["do nome do arquivo", "ex.: 00FE"],
+  descricao: ["do nome do arquivo", "ex.: BLS ESTAMPA ONÇA"],
+  maquina: ["do Processar ou do nome da pasta", "ex.: SSG122SV 7G"],
+  tempo: ["tempo de tecimento de uma peça", "use a estimativa abaixo"],
+  fio: ["fio principal", "composição e título, ex.: algodão 2/30"],
+  bruto: ["peça tecida, antes do acabamento, em gramas", "gramas"],
+  liquido: ["peça pronta, em gramas", "gramas"],
+  data: ["dia da ficha", "dd/mm/aaaa"],
+};
 const TIPOS_ARQUIVO = { dat: "desenho", programa: "programa", ajustes: "ajustes", imagem: "imagem" };
 let ficha = null;
 
@@ -3772,9 +3942,12 @@ function abrirFicha() {
     },
   };
   const v = ficha.dados;
-  $("ficha-campos").innerHTML = RM.CAMPOS_FICHA.map(
-    ([id]) => `<label class="campo">${ROTULOS_FICHA[id]} <input type="text" maxlength="60" data-campo="${id}" value="${esc(v.campos[id] || "")}" autocomplete="off"></label>`,
-  ).join("");
+  $("ficha-campos").innerHTML = RM.CAMPOS_FICHA.map(([id]) => {
+    const [dica, exemplo] = DICAS_FICHA[id] || ["", ""];
+    return `<div class="campo-com-dica"><label class="campo">${ROTULOS_FICHA[id]} <input type="text" maxlength="60" data-campo="${id}" value="${esc(v.campos[id] || "")}" placeholder="${esc(
+      exemplo,
+    )}" aria-describedby="dica-ficha-${id}" autocomplete="off"></label><span class="unidade" id="dica-ficha-${id}">${esc(dica)}</span></div>`;
+  }).join("");
   $("ficha-guias").innerHTML = ficha.guias.length
     ? ficha.guias
         .map((g) => {
@@ -3790,6 +3963,7 @@ function abrirFicha() {
   form.corTexto.value = v.corTexto;
   form.corFundo.value = v.corFundo;
   form.escala.value = String(v.escala);
+  $("ficha-pasta").hidden = !acessoAPastasDisponivel();
   desenharArquivosFicha();
   abrirJanela("dlg-ficha");
   desenharFicha();
@@ -3843,22 +4017,30 @@ function desenharArquivosFicha() {
   $("ficha-arquivos").innerHTML = estado.abas
     .map((x) => {
       const marcado = x === a || juntos.has(x) || baseDoNome(x.nome) === base;
+      // O desenho vai como está agora: o tamanho é o do arquivo que seria gravado.
+      const bytes = x.tipo === "dat" ? bytesDoDesenho(x).length : x.tamanho;
+      const tamanho = `${bytes.toLocaleString("pt-BR")} bytes`;
       return `<li><label><input type="checkbox" data-arquivo="${x.id}"${marcado ? " checked" : ""}><span class="nome-arquivo">${esc(x.nome)}${
         x.modificado ? ' <span class="suave">(alterado)</span>' : ""
-      }</span><span class="suave mono">${esc(TIPOS_ARQUIVO[x.tipo] || x.tipo)}</span></label></li>`;
+      }</span><span class="suave mono">${esc(TIPOS_ARQUIVO[x.tipo] || x.tipo)} · ${tamanho}</span></label></li>`;
     })
     .join("");
+  atualizarBotoesEnviar();
 }
 
 // Junta os arquivos escolhidos (o desenho como está agora) e, se pedido, a ficha e o resumo do processamento.
-async function baixarZipDaFicha() {
-  if (!ficha) return;
+// Os arquivos escolhidos para levar à máquina (o desenho como está agora) e, se pedido, a ficha e o resumo do
+// processamento. Devolve [{ nome, bytes }] ou null (com o aviso dado).
+async function arquivosDaFicha() {
   const { a } = ficha;
   const form = $("dlg-ficha").querySelector("form");
   const escolhidas = [...$("ficha-arquivos").querySelectorAll("[data-arquivo]:checked")]
     .map((el) => estado.abas.find((x) => x.id === Number(el.dataset.arquivo)))
     .filter(Boolean);
-  if (!escolhidas.length && !form.zipResumo.checked) return avisar("Marque pelo menos um arquivo para o .zip.");
+  if (!escolhidas.length && !form.zipResumo.checked) {
+    avisar("Marque pelo menos um arquivo.");
+    return null;
+  }
   const arquivos = [];
   const usados = new Set();
   const nomeLivre = (nome) => {
@@ -3876,16 +4058,73 @@ async function baixarZipDaFicha() {
       if (bytes) arquivos.push({ nome: nomeLivre(x.nome), bytes });
     }
   } catch (erro) {
-    return avisar(`Não foi possível juntar os arquivos: ${erro.message}`, true);
+    avisar(`Não foi possível juntar os arquivos: ${erro.message}`, true);
+    return null;
   }
   if (form.zipResumo.checked) {
     const texto = (linhas) => new TextEncoder().encode(linhas.join("\r\n") + "\r\n");
     arquivos.push({ nome: nomeLivre(trocarExtensao(a.nome, "_FICHA.txt")), bytes: texto(imagemDaFicha().linhas) });
     arquivos.push({ nome: nomeLivre(trocarExtensao(a.nome, "_PROCESSAMENTO.txt")), bytes: texto(resumoDoProcessamento(a)) });
   }
-  const nome = trocarExtensao(a.nome, "_MAQUINA.zip");
+  return arquivos;
+}
+
+async function baixarZipDaFicha() {
+  if (!ficha) return;
+  const arquivos = await arquivosDaFicha();
+  if (!arquivos) return;
+  const nome = trocarExtensao(ficha.a.nome, "_MAQUINA.zip");
   const entregue = await baixar(new Blob([zipComArquivos(arquivos)], { type: "application/zip" }), nome);
   if (entregue) avisar(`${entregue} com ${arquivos.length} arquivo${arquivos.length === 1 ? "" : "s"}: extraia e copie para o pendrive da máquina.`);
+}
+
+// No Chrome e no Edge dá para gravar direto numa pasta escolhida, como a do pendrive da máquina.
+async function gravarNaPastaDaFicha() {
+  if (!ficha || !acessoAPastasDisponivel()) return;
+  // A janela da pasta vem primeiro, enquanto o clique ainda vale para o navegador.
+  let pasta;
+  try {
+    pasta = await window.showDirectoryPicker({ id: "pendrive", mode: "readwrite" });
+  } catch (erro) {
+    if (erro && erro.name !== "AbortError") avisar(`Não foi possível abrir a pasta: ${erro.message}`, true);
+    return;
+  }
+  if (estado.pastaLocal && (await pasta.isSameEntry(estado.pastaLocal).catch(() => false))) {
+    return avisar("Essa é a pasta dos desenhos conectada ao editor. Escolha a pasta do pendrive (para guardar o desenho, use Salvar).", true);
+  }
+  const arquivos = await arquivosDaFicha();
+  if (!arquivos) return;
+  try {
+    const existentes = [];
+    for (const f of arquivos) {
+      try {
+        await pasta.getFileHandle(f.nome);
+        existentes.push(f.nome);
+      } catch (erro) {
+        // Ainda não existe: vai ser criado.
+      }
+    }
+    if (existentes.length && !(await perguntar(`Na pasta ${pasta.name} já existe${existentes.length === 1 ? "" : "m"}: ${existentes.join(", ")}. Substituir?`, "Substituir"))) return;
+    for (const f of arquivos) {
+      const gravavel = await (await pasta.getFileHandle(f.nome, { create: true })).createWritable();
+      await gravavel.write(f.bytes);
+      await gravavel.close();
+    }
+    avisar(`${arquivos.length} arquivo${arquivos.length === 1 ? "" : "s"} gravado${arquivos.length === 1 ? "" : "s"} em ${pasta.name}.`);
+  } catch (erro) {
+    avisar(`Não foi possível gravar na pasta: ${erro.message}`, true);
+  }
+}
+
+// Quantos arquivos vão (os marcados e os dois .txt, se pedidos), nos botões do .zip e da pasta.
+function atualizarBotoesEnviar() {
+  if (!ficha) return;
+  const form = $("dlg-ficha").querySelector("form");
+  const n = $("ficha-arquivos").querySelectorAll("[data-arquivo]:checked").length + (form.zipResumo.checked ? 2 : 0);
+  const quantos = `${n} arquivo${n === 1 ? "" : "s"}`;
+  $("ficha-zip").textContent = `Baixar .zip (${quantos})`;
+  $("ficha-pasta").textContent = `Gravar numa pasta… (${quantos})`;
+  $("ficha-zip").disabled = $("ficha-pasta").disabled = !n;
 }
 
 // O que conferir antes de levar à máquina, com o que falta e onde resolver.
@@ -3895,8 +4134,14 @@ function itensAntesDeTecer() {
   if (ficha.verificacao === null) {
     // Conta os erros e os avisos do Verificar, com o mesmo limite de fio solto do diálogo dele.
     const maximo = inteiro($("dlg-verificar").querySelector("form").maximo.value, 5, 1, 500);
-    const lista = itensDoVerificar(a, maximo);
-    ficha.verificacao = { erros: lista.filter((i) => i.nivel === "erro").length, avisos: lista.filter((i) => i.nivel === "aviso").length };
+    // Os trechos difíceis são das peças do Modelo, não deste desenho: ficam no Verificar, fora desta conta.
+    const todos = itensDoVerificar(a, maximo);
+    const lista = todos.filter((i) => i.regra !== "forma");
+    ficha.verificacao = {
+      erros: lista.filter((i) => i.nivel === "erro").length,
+      avisos: lista.filter((i) => i.nivel === "aviso").length,
+      forma: todos.length - lista.length,
+    };
   }
   const uso = RM.usoDoProcessamento(a.doc, blocos);
   const pd = completarGuias(processamentoDe(a), uso);
@@ -3907,18 +4152,21 @@ function itensAntesDeTecer() {
   const vazios = ["codigo", "descricao", "maquina", "fio"].filter((k) => !preenchido(c[k])).map((k) => ROTULOS_FICHA[k].toLowerCase());
   const doPrograma = arquivosDoPrograma(a);
   const programas = doPrograma.programas.length > 0 && doPrograma.ajustes.length > 0;
-  const { erros, avisos } = ficha.verificacao;
+  const { erros, avisos, forma } = ficha.verificacao;
+  const daForma = forma ? `; e ${forma} trecho${forma === 1 ? "" : "s"} difíce${forma === 1 ? "l" : "is"} na forma do Modelo, que não conta${forma === 1 ? "" : "m"} aqui` : "";
   const plural = (n, nome) => `${n} ${nome}${n === 1 ? "" : "s"}`;
   const itens = [
     {
       id: "verificar",
       ok: !erros && !avisos,
-      titulo: "Verificar sem erros nem avisos",
-      detalhe: erros
-        ? `${plural(erros, "erro")}${avisos ? ` e ${plural(avisos, "aviso")}` : ""} no Verificar: corrija os erros antes de tecer`
-        : avisos
-          ? `${plural(avisos, "aviso")} no Verificar: confira se são esperados`
-          : "nenhum erro nem aviso nas regras do Verificar",
+      titulo: "Verificar: desenho sem erros nem avisos",
+      detalhe: `${
+        erros
+          ? `${plural(erros, "erro")}${avisos ? ` e ${plural(avisos, "aviso")}` : ""} no desenho: corrija os erros antes de tecer`
+          : avisos
+            ? `${plural(avisos, "aviso")} no desenho: confira se são esperados`
+            : "nenhum erro nem aviso nas regras do desenho"
+      }${daForma}`,
       ir: "verificar",
       botao: "Verificar…",
     },
@@ -4012,6 +4260,10 @@ function desenharChecklist() {
     baixar(new Blob([linhas.join("\r\n") + "\r\n"], { type: "text/plain" }), trocarExtensao(ficha.a.nome, "_FICHA.txt"));
   });
   $("ficha-zip").addEventListener("click", baixarZipDaFicha);
+  $("ficha-pasta").addEventListener("click", gravarNaPastaDaFicha);
+  $("ficha-pasta").hidden = !acessoAPastasDisponivel();
+  $("ficha-arquivos").addEventListener("change", atualizarBotoesEnviar);
+  $("dlg-ficha").querySelector("form").zipResumo.addEventListener("change", atualizarBotoesEnviar);
   $("ficha-checklist").addEventListener("change", (e) => {
     const id = e.target.dataset.conferido;
     if (!id || !ficha) return;
@@ -4094,20 +4346,26 @@ const ETAPA_DO_DIALOGO = {
 
 function irParaEtapa(id) {
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
-  if (id === "desenho") return avisar("Etapa 3: desenhe no editor. A biblioteca de pontos e o carimbo ficam no painel à direita.");
+  if (id === "desenho") return avisar("Etapa 3: desenhe no editor (a biblioteca de pontos e o carimbo ficam no painel à direita). Depois siga para a 4: Gerar padrão ou Jacquard e intarsia.");
   if (id === "linhas") {
     $("lista-opcoes").scrollIntoView({ block: "start" });
-    return avisar("Etapa 5: escolha uma linha de opção no painel à direita para ver e pintar os valores dela.");
+    return avisar("Etapa 5: escolha uma linha de opção no painel à direita para ver e pintar os valores dela. Depois siga para a 6: Pacotes e altura.");
   }
   RECURSOS[id]();
 }
 
 for (const [dialogo, id] of Object.entries(ETAPA_DO_DIALOGO)) {
   const i = ETAPAS.findIndex((e) => e.id === id);
-  const proxima = ETAPAS[i + 1];
+  const anterior = ETAPAS[i - 1], proxima = ETAPAS[i + 1];
   const barra = $(dialogo).querySelector(".botoes-dialogo");
   barra.insertAdjacentHTML("afterbegin", `<span class="etapa-dialogo">Etapa ${i + 1} de ${ETAPAS.length} · ${esc(ETAPAS[i].texto)}</span>`);
-  if (proxima) barra.querySelector('[value="fechar"]').insertAdjacentHTML("afterend", `<button type="button" class="botao" data-proxima-etapa="${proxima.id}">Próximo: ${esc(proxima.nome)} →</button>`);
+  const botoes = [
+    anterior ? `<button type="button" class="botao" data-proxima-etapa="${anterior.id}">← ${esc(anterior.nome)}</button>` : "",
+    proxima
+      ? `<button type="button" class="botao" data-proxima-etapa="${proxima.id}">Próximo: ${esc(proxima.nome)} →</button>`
+      : `<button type="button" class="botao" data-proxima-etapa="${ETAPAS[0].id}">Voltar ao início</button>`,
+  ].join("");
+  barra.querySelector('[value="fechar"]').insertAdjacentHTML("afterend", botoes);
 }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-proxima-etapa]");

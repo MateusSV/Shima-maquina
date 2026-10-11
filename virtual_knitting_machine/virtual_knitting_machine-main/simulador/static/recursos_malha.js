@@ -621,8 +621,11 @@
 
   // Fios soltos no avesso: em cada carreira, para cada cor, os trechos entre dois pontos daquela cor
   // em que o fio não tece nem prende. Devolve { cores, lista } com posições absolutas.
-  function flutuacoes(px, W, ret, estrutura = "flutuacao", escada = 4) {
-    const cores = coresDaArea(px, W, ret).map((c) => c.cor);
+  // apenas: as cores que são fio (as outras não contam nem para a regra de prender do avesso).
+  function flutuacoes(px, W, ret, estrutura = "flutuacao", escada = 4, apenas = null) {
+    const cores = coresDaArea(px, W, ret)
+      .map((c) => c.cor)
+      .filter((c) => !apenas || apenas.has(c));
     const k = cores.length;
     const lista = [];
     if (k < 2 || estrutura === "tubular") return { cores, lista };
@@ -644,7 +647,8 @@
   // carreira, o guia continua no trecho de cima que encosta no seu; guias que ficaram sem trecho voltam a
   // servir para outro trecho da mesma cor. Por cor, usa o mínimo possível: o maior número de trechos
   // daquela cor numa mesma carreira.
-  function guiasIntarsia(px, W, ret) {
+  // apenas: as cores que são fio (os trechos das outras não pedem guia).
+  function guiasIntarsia(px, W, ret, apenas = null) {
     const guiaDe = new Int32Array(ret.w * ret.h).fill(-1);
     const areaDe = new Int32Array(ret.w * ret.h).fill(-1);
     const guias = [];
@@ -660,7 +664,7 @@
         const cor = px[y * W + ret.x + x];
         let x2 = x + 1;
         while (x2 < ret.w && px[y * W + ret.x + x2] === cor) x2++;
-        trechos.push({ cor, x0: x, x1: x2 - 1 });
+        if (!apenas || apenas.has(cor)) trechos.push({ cor, x0: x, x1: x2 - 1 });
         x = x2;
       }
       const usados = new Set();
@@ -1375,6 +1379,7 @@
   // frente e mover). Os outros (13 largura do guia, 16 sem seleção, transferências) não contam como malha.
   const TECE = new Set([1, 2, 3, 11, 12, 51, 52, 61, 71]);
   const TRANSFERE = new Set([60, 70]); // só transferência, sem tricotar
+  const MARCAS = new Set([0, 13, 16, 99]); // fora, largura do guia, sem seleção e o 99 dos arquivos (nada tece)
 
   function intervalos(carreiras) {
     const ord = [...carreiras].sort((a, b) => a - b);
@@ -1386,6 +1391,42 @@
       i = j;
     }
     return partes.join(", ");
+  }
+
+  const listaComE = (l) => (l.length > 1 ? `${l.slice(0, -1).join(", ")} e ${l[l.length - 1]}` : String(l[0]));
+
+  // Ourela: agulhas das bordas da malha (até 4 de cada lado) que, no corpo, alternam dois códigos a cada carreira
+  // (como 2 e 16). Devolve { agulhas (numeradas a partir de 1), codigos, de, ate, x0, x1 } ou null.
+  function ourelaAlternada(doc, p) {
+    const m = areaDeMalha(doc, p);
+    const corpo = m && trechosDoPainel(doc, p).find((t) => t.id === "corpo");
+    if (!corpo || corpo.ate - corpo.de < 3) return null;
+    const H = doc.altura, W = doc.largura;
+    const colunas = new Set();
+    for (let k = 0; k < 4; k++) {
+      if (m.x0 + k <= m.x1) colunas.add(m.x0 + k);
+      if (m.x1 - k >= m.x0) colunas.add(m.x1 - k);
+    }
+    // Uma coluna alterna dois códigos quando quase toda carreira troca: devolve os dois códigos ou null.
+    const alterna = (x) => {
+      const vals = [];
+      for (let c = corpo.de; c <= corpo.ate; c++) vals.push(doc.pixels[(H - c) * W + x]);
+      const dif = new Set(vals);
+      let trocas = 0;
+      for (let k = 1; k < vals.length; k++) if (vals[k] !== vals[k - 1]) trocas++;
+      return dif.size === 2 && trocas >= 0.8 * (vals.length - 1) ? [...dif].sort((a, b) => a - b).join() : null;
+    };
+    // Se o meio da malha alterna os mesmos códigos (tubular, listras de uma carreira), é o desenho, não a ourela.
+    const meio = new Set([0.25, 0.5, 0.75].map((f) => alterna(Math.round(m.x0 + f * (m.x1 - m.x0)))).filter(Boolean));
+    const achadas = [], codigos = new Set();
+    for (const x of [...colunas].sort((a, b) => a - b)) {
+      const par = alterna(x);
+      if (!par || meio.has(par)) continue;
+      achadas.push(x + 1);
+      par.split(",").forEach((v) => codigos.add(Number(v)));
+    }
+    if (!achadas.length) return null;
+    return { agulhas: achadas, codigos: [...codigos].sort((a, b) => a - b), de: corpo.de, ate: corpo.ate, x0: m.x0, x1: m.x1 };
   }
 
   function verificarDesenho(doc, blocos, opcoes = {}) {
@@ -1404,10 +1445,11 @@
         continue;
       }
       const semGuia = [], semPonto = [], cancelaComGuia = [], cancela = [], semLargura = [], soltos = [];
-      const transfere = [], transfereComGuia = [], transfereTecendo = [], transfereSemR5 = [];
+      const transfere = [], transfereComGuia = [], transfereTecendo = [], transfereSemR5 = [], guiaSemMalha = [];
+      const guiasSemMalha = new Set();
       let esquerda = Infinity, direita = -Infinity;
       for (let y = p.y0; y <= p.y1; y++) {
-        let tece = false, tem13 = false, transf = false, seguidos = 0, maior = 0;
+        let tece = false, tem13 = false, transf = false, soMarcas = true, seguidos = 0, maior = 0;
         for (let x = p.x0; x <= p.x1; x++) {
           const v = px[y * W + x];
           if (TECE.has(v)) {
@@ -1417,6 +1459,7 @@
           }
           if (v === 13) tem13 = true;
           if (TRANSFERE.has(v)) transf = true;
+          if (!MARCAS.has(v)) soMarcas = false;
           seguidos = v === 16 ? seguidos + 1 : 0;
           maior = Math.max(maior, seguidos);
         }
@@ -1432,6 +1475,11 @@
           if (!r5) (tece ? transfereTecendo : transfereSemR5).push(c);
           if (!r3 && r5) transfere.push(c);
         } else if (tem(5)) (tem(3) ? cancelaComGuia : cancela).push(c);
+        else if (tem(3) && soMarcas) {
+          // O guia passa sem nenhuma agulha tecer: normalmente a entrada do fio no começo da peça.
+          guiaSemMalha.push(c);
+          valoresDaLinha(doc, p.R, 3, y).forEach((v) => guiasSemMalha.add(v));
+        }
         if (tece && !tem13) semLargura.push(c);
         if (maior > limite) soltos.push(c);
       }
@@ -1467,6 +1515,29 @@
         itens.push({ nivel: "info", regra: "transferencia-coerente", titulo: `Transferência sem fio: coerente${nome}`, texto: "Nas carreiras de transferência (60/70) a R5 cancela a malha e a R3 está vazia: as agulhas só passam os pontos de uma frontura para a outra.", ...onde(transfere) });
       if (cancelaComGuia.length) itens.push({ nivel: "aviso", regra: "cancela-com-guia", titulo: `Cancelar malha (R5) com guia-fio (R3)${nome}`, texto: "A carreira não tece, mas tem guia-fio. Confira se o guia deve passar nessa carreira.", ...onde(cancelaComGuia) });
       else if (cancela.length) itens.push({ nivel: "info", regra: "cancela-coerente", titulo: `Cancelar malha sem guia-fio: coerente${nome}`, texto: "Nas carreiras com R5 a malha é cancelada e a R3 está vazia: as agulhas só transferem ou esperam.", ...onde(cancela) });
+      if (guiaSemMalha.length) {
+        const gs = [...guiasSemMalha].sort((a, b) => a - b);
+        itens.push({
+          nivel: "info",
+          regra: "guia-sem-malha",
+          titulo: `Guia-fio ${gs.join(", ")} sem malha (entrada do fio?)${nome}`,
+          texto: "Nestas carreiras a R3 tem guia-fio, mas nenhuma agulha tece na área do painel: o guia só passa. Parece ser a entrada do fio; confira se é de propósito.",
+          ...onde(guiaSemMalha),
+        });
+      }
+      const ourela = ourelaAlternada(doc, p);
+      if (ourela)
+        itens.push({
+          nivel: "info",
+          regra: "ourela",
+          painel: p.numero,
+          titulo: `Ourela alternada${nome}`,
+          texto: `No corpo, ${ourela.agulhas.length === 1 ? "a agulha" : "as agulhas"} ${listaComE(ourela.agulhas)} da borda da malha ${ourela.agulhas.length === 1 ? "alterna" : "alternam"} os códigos ${listaComE(ourela.codigos)} a cada carreira. É a ourela: confira se é de propósito.`,
+          carreiras: `${ourela.de}–${ourela.ate}`,
+          y: H - ourela.ate,
+          x0: ourela.x0,
+          x1: ourela.x1,
+        });
       if (semLargura.length) itens.push({ nivel: "aviso", regra: "sem-largura", titulo: `Carreiras com malha sem a largura do guia-fio (13)${nome}`, texto: "O código 13 marca até onde o guia-fio vai. Estas carreiras tecem, mas não têm a marca na área do painel.", ...onde(semLargura) });
       if (soltos.length) itens.push({ nivel: "aviso", regra: "soltos-16", titulo: `Flutuações longas (16)${nome}`, texto: `Há mais de ${limite} agulhas seguidas sem seleção (16) na mesma carreira: o fio fica solto por trás.`, ...onde(soltos) });
       const r2 = new Set();
@@ -1487,7 +1558,7 @@
         });
       }
     }
-    if (!itens.some((i) => i.nivel !== "info")) itens.push({ nivel: "info", regra: "nenhum", titulo: "Nenhum problema encontrado", texto: "As regras de guia-fio, ponto, cancelar malha, transferência, largura do guia e flutuação passaram." });
+    if (!itens.some((i) => i.nivel !== "info")) itens.push({ nivel: "info", regra: "nenhum", titulo: "Nenhum problema no desenho", texto: "As regras de guia-fio, ponto, cancelar malha, transferência, largura do guia e flutuação passaram." });
     return itens;
   }
 
@@ -1505,7 +1576,7 @@
     return (carreiras * Math.max(1, numero(pecas, 1)) * metros) / velocidade;
   }
 
-  const SIMBOLOS = { 1: "frente", 51: "frente", 2: "tras", 52: "tras", 3: "ambos", 11: "tuck-frente", 12: "tuck-tras", 16: "flutua", 61: "mover-esq", 71: "mover-dir", 13: "guia" };
+  const SIMBOLOS = { 1: "frente", 51: "frente", 2: "tras", 52: "tras", 3: "ambos", 11: "tuck-frente", 12: "tuck-tras", 16: "flutua", 61: "mover-esq", 71: "mover-dir", 13: "guia", 60: "transfere", 70: "transfere" };
   const tipoDePonto = (codigo) => SIMBOLOS[codigo] || null;
 
   const semAcento = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();

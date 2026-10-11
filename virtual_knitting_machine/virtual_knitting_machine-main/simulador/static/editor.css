@@ -502,7 +502,7 @@ details > summary { cursor: pointer; }
 .passos .passo-aviso { color: var(--erro); }
 .codigos-forma .campo { flex: 1 1 120px; }
 .campos-forma { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.campos-forma .unidade { font-size: 11px; color: var(--suave); }
+.campos-forma .unidade, .campos-ficha .unidade { font-size: 11px; color: var(--suave); }
 .campos-forma .ajustado input { border-color: var(--destaque); background: var(--destaque-fundo); }
 
 .campos-gerar { display: flex; flex-direction: column; gap: 8px; }
@@ -529,6 +529,7 @@ details > summary { cursor: pointer; }
 .fios { display: flex; flex-direction: column; gap: 6px; }
 .fio { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 8px; font-size: 13px; }
 .campos-ficha { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.campo-com-dica { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tabela-pecas td, .tabela-pecas th { font-size: 12px; }
 
 /* processamento, pacotes, esquema e o resto do que veio do protótipo */
@@ -601,6 +602,7 @@ details > summary { cursor: pointer; }
 .dica-estilo { margin: 0; padding: 8px 10px; background: var(--destaque-fundo); border-left: 3px solid var(--destaque); border-radius: 4px; font-size: 13px; line-height: 1.5; }
 .arquivos-programa { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .arquivos-programa li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 8px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 6px; font-size: 13px; }
+.cores-area .nao-fio .amostra { opacity: 0.4; }
 .etiqueta-arquivo { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: var(--ok); }
 .etiqueta-arquivo.tipo-ajustes { color: var(--destaque); }
 .esquema text { fill: var(--tinta); font-family: "IBM Plex Mono", monospace; font-size: 13px; }
@@ -614,6 +616,7 @@ details > summary { cursor: pointer; }
 .item-variante { position: relative; display: flex; min-width: 0; }
 .variante { flex: 1 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 6px 8px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 8px; color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer; min-width: 0; }
 .variante:hover { border-color: var(--tinta); }
+.variante[aria-pressed="true"] { border-color: var(--destaque); background: var(--destaque-fundo); }
 .variante .amostras { display: flex; gap: 3px; }
 .variante .amostras span { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--botao-borda); }
 
