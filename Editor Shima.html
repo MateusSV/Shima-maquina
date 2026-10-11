@@ -8246,6 +8246,7 @@ function rodarProcessamento() {
   const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
   const nPaineis = RM.paineis(blocosDeOpcao(a)).length;
   linha("", `Lendo ${a.nome}: ${a.doc.largura} × ${a.doc.altura} pontos, ${plural(nPaineis, "painel", "painéis")}.`);
+  if (!uso.trechos.length) linha("alerta", "Sem as linhas de opção R1–R20 ao lado de um painel: não há guia-fio, ponto nem trechos para processar.");
   linha(faltas.maquina ? "alerta" : "ok", `Máquina: ${dados.maquina || "sem máquina"} · ${dados.finura ? `finura ${dados.finura}G` : "sem finura"}.`);
   linha(faltas.guias ? "alerta" : "ok", `Guia-fios: ${plural(uso.guias.length, "valor", "valores")} na R3${faltas.guias ? `, faltam ${faltas.guias} campos (guia ou fio)` : ", todos com guia e fio"}.`);
   linha(faltas.economizador ? "alerta" : "ok", `Economizador: ${plural(uso.blocosR2.length, "bloco", "blocos")} na R2${faltas.economizador ? `, ${faltas.economizador} sem repetições` : ""}.`);
