@@ -59,7 +59,7 @@
   <section class="grupo ajuda">
     <h2 class="rotulo">Atalhos</h2>
     <dl class="atalhos">
-      <dt>B E L R F G I M</dt><dd>ferramentas</dd>
+      <dt>B E L R F G I M K</dt><dd>ferramentas</dd>
       <dt>Botão direito</dt><dd>pinta com a cor secundária</dd>
       <dt>X</dt><dd>troca as cores</dd>
       <dt>Ctrl+Z / Ctrl+Y</dt><dd>desfazer / refazer</dd>
@@ -101,6 +101,7 @@
         <button type="button" class="ferramenta" data-ferramenta="balde" aria-label="Balde de tinta (G)" title="Balde de tinta (G)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11l7-7 7 7-7 7-7-7zM5 11h14M20 16c0 1.7-.8 3-1.5 3S17 17.7 17 16s1.5-3 1.5-3 1.5 1.3 1.5 3z"/></svg></button>
         <button type="button" class="ferramenta" data-ferramenta="conta-gotas" aria-label="Conta-gotas (I)" title="Conta-gotas (I)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5l5 5-2.5 1-8 8H6v-3l8-8 .5-3zM12 8l4 4"/></svg></button>
         <button type="button" class="ferramenta" data-ferramenta="selecao" aria-label="Seleção (M)" title="Seleção (M) — arraste dentro dela para mover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" /></svg></button>
+        <button type="button" class="ferramenta" data-ferramenta="carimbo" aria-label="Carimbo de ponto (K)" title="Carimbo de ponto (K): põe o motivo da biblioteca com o canto de baixo à esquerda no clique"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v6l3 3v3H6v-3l3-3zM5 19h14v2H5z"/></svg></button>
       </div>
       <label class="campo-barra">Pincel
         <select id="tamanho-pincel">
@@ -119,12 +120,14 @@
       <label class="campo-barra"><input type="checkbox" id="mostrar-grade" checked> Grade</label>
       <label class="campo-barra" title="Desenha simétrico: no meio da seleção ou, sem seleção, no meio do desenho"><input type="checkbox" id="espelhado"> Espelhado</label>
       <label class="campo-barra" title="Mostra só a cor primária e apaga as outras, para achar onde ela aparece"><input type="checkbox" id="destacar-cor"> Destacar cor</label>
+      <label class="campo-barra" title="Desenha o tipo de ponto de cada código (frente, atrás, tuck, sem seleção, mover) com zoom de 800% ou mais"><input type="checkbox" id="mostrar-simbolos"> Símbolos</label>
     </div>
 
     <div class="janela" id="janela">
       <div class="folha" id="folha">
         <canvas id="tela"></canvas>
         <div class="grade" id="grade" hidden></div>
+        <canvas class="simbolos" id="simbolos" hidden></canvas>
         <div class="caixa-selecao" id="caixa-selecao" hidden></div>
         <div class="caixa-flutuante" id="caixa-flutuante" hidden></div>
       </div>
@@ -172,9 +175,68 @@
   </section>
 
   <section class="grupo">
+    <h2 class="rotulo">Desenvolver o modelo</h2>
+    <div class="botoes-grade">
+      <button type="button" class="botao" data-recurso="modelo" title="Medidas em cm viram agulhas e carreiras pela densidade da amostra">Modelo…</button>
+      <button type="button" class="botao" data-recurso="forma" title="Diminuições, aumentos, arremates e malha parcial de cada peça">Forma…</button>
+      <button type="button" class="botao" data-recurso="gerar" title="Listras, losango (argyle) e texto">Gerar padrão…</button>
+      <button type="button" class="botao" data-recurso="jacquard" title="Fios soltos do jacquard e guia-fios da intarsia">Jacquard e intarsia…</button>
+      <button type="button" class="botao" data-recurso="verificar" title="Procura falhas antes de ir para a máquina e mostra as agulhas carreira a carreira">Verificar…</button>
+      <button type="button" class="botao" data-recurso="desenvolver" title="Altura da peça com os blocos do economizador (R2) repetidos">Altura com repetições…</button>
+      <button type="button" class="botao" data-recurso="simular" title="Prévia da malha com o tipo de fio e as cores">Simular malha…</button>
+      <button type="button" class="botao" data-recurso="ficha" title="Ficha técnica, tempo de tecimento e texto escrito no desenho">Ficha técnica…</button>
+    </div>
+  </section>
+
+  <section class="grupo">
+    <h2 class="rotulo">Biblioteca de pontos</h2>
+    <div class="chips" id="categorias-biblioteca" role="group" aria-label="Categorias de motivos"></div>
+    <div class="motivos" id="motivos-biblioteca"></div>
+    <p class="pequeno" id="motivo-atual"></p>
+    <div class="botoes-grade">
+      <button type="button" class="botao" data-acao="usar-copia" title="Usa a área copiada (Ctrl+C) como motivo do carimbo">Usar a cópia</button>
+      <button type="button" class="botao" data-acao="guardar-motivo" title="Guarda o motivo do carimbo em Meus motivos, neste navegador">Guardar motivo</button>
+    </div>
+    <h3 class="sub">Repetir o motivo</h3>
+    <div class="linha-campos">
+      <label class="campo">Repetição
+        <select id="tipo-repeticao">
+          <option value="normal">normal</option>
+          <option value="degraus">em degraus</option>
+        </select>
+      </label>
+      <label class="campo" title="Quantas agulhas cada fileira de motivos anda em relação à de baixo">Deslocamento <input type="number" id="deslocamento-repeticao" min="-99" max="99" value="1"></label>
+    </div>
+    <button type="button" class="botao" data-acao="repetir-motivo" title="Enche a seleção com o motivo, começando no canto de baixo à esquerda">Repetir o motivo na seleção</button>
+    <p class="suave pequeno">Carimbo (K): clique para pôr o motivo com o canto de baixo à esquerda no ponto; arrastando, ele se repete alinhado. Os motivos usam códigos de referências públicas (1 frente, 2 atrás, 11 tuck, 16 sem seleção, 61/71 mover) que podem mudar na sua versão.</p>
+    <details class="legenda-simbolos">
+      <summary>Símbolos dos pontos</summary>
+      <ul class="lista-simbolos" id="legenda-simbolos"></ul>
+    </details>
+  </section>
+
+  <section class="grupo">
     <h2 class="rotulo">Linhas de opção <span class="mono" id="titulo-opcoes"></span></h2>
     <div id="lista-opcoes" class="lista-opcoes"></div>
     <p class="suave pequeno">Os nomes com “?” vêm de referências públicas (R3 guia-fio, R5 cancelar malha, R6 ponto) e podem variar na sua versão do KnitPaint.</p>
+    <div class="uma-linha" id="uma-linha" hidden>
+      <h3 class="sub">Uma linha</h3>
+      <div class="linha-campos">
+        <label class="campo">Painel <select id="opcao-painel"></select></label>
+        <label class="campo">Linha <select id="opcao-linha"></select></label>
+      </div>
+      <label class="campo"><span id="rotulo-opcao-nome">Nome da linha</span> <input type="text" id="opcao-nome" maxlength="60" autocomplete="off"></label>
+      <ul class="faixas" id="opcao-faixas" aria-label="Valores da linha por carreira"></ul>
+      <form class="pintar-linha" id="form-pintar-linha">
+        <div class="linha-campos">
+          <label class="campo">Valor <input type="number" name="valor" min="0" max="255" required></label>
+          <label class="campo">Da carreira <input type="number" name="de" min="1" max="8000" required></label>
+          <label class="campo">até a <input type="number" name="ate" min="1" max="8000" required></label>
+        </div>
+        <button type="submit" class="botao">Pintar o valor na linha</button>
+      </form>
+      <p class="suave pequeno">Clique numa faixa para selecionar e editar. Valor 0 apaga. O conta-gotas (I) numa linha de opção escolhe a linha aqui.</p>
+    </div>
   </section>
 
   <section class="grupo">
@@ -310,8 +372,286 @@
 <dialog id="dlg-nome" aria-labelledby="dlg-nome-titulo">
   <form method="dialog" class="dialogo">
     <h2 id="dlg-nome-titulo">Salvar como</h2>
-    <label class="campo">Nome do arquivo <input type="text" name="nome" id="campo-nome-arquivo" required></label>
+    <label class="campo"><span id="dlg-nome-rotulo">Nome do arquivo</span> <input type="text" name="nome" id="campo-nome-arquivo" required></label>
     <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Salvar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-modelo" class="largo" aria-labelledby="dlg-modelo-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-modelo-titulo">Modelo: medidas em agulhas e carreiras</h2>
+    <div class="colunas-dialogo">
+      <div class="coluna">
+        <label class="campo">Estilo <select name="estilo"></select></label>
+        <h3 class="sub">Densidade da amostra (em 10 cm)</h3>
+        <div class="linha-campos">
+          <label class="campo">Colunas (agulhas) <input type="number" name="colunas" min="1" max="200" step="0.1" required></label>
+          <label class="campo">Carreiras <input type="number" name="carreiras" min="1" max="200" step="0.1" required></label>
+        </div>
+        <h3 class="sub">Medidas em cm</h3>
+        <div class="medidas" id="modelo-medidas"></div>
+      </div>
+      <div class="coluna">
+        <h3 class="sub">Peças</h3>
+        <div id="modelo-pecas"></div>
+        <p class="suave pequeno">Conta: cm × colunas ÷ 10 = agulhas, cm × carreiras ÷ 10 = carreiras. Lave e passe a amostra antes de medir a densidade.</p>
+      </div>
+    </div>
+    <div class="botoes-dialogo"><button class="botao" value="fechar" formnovalidate>Fechar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-forma" class="largo" aria-labelledby="dlg-forma-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-forma-titulo">Forma da peça</h2>
+    <div class="colunas-dialogo">
+      <div class="coluna">
+        <label class="campo">Peça <select name="peca"></select></label>
+        <div class="linha-campos">
+          <label class="campo">Agulhas por diminuição
+            <select name="porVez"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+          </label>
+          <label class="campo">Marca a quantas agulhas da borda <input type="number" name="marca" min="1" max="8" value="3"></label>
+        </div>
+        <ol class="passos" id="forma-passos"></ol>
+        <details>
+          <summary class="pequeno">Códigos usados no desenho</summary>
+          <div class="linha-campos codigos-forma">
+            <label class="campo">Malha <input type="number" name="malha" min="0" max="255"></label>
+            <label class="campo">Fora da peça <input type="number" name="fora" min="0" max="255"></label>
+            <label class="campo">Arremate <input type="number" name="arremate" min="0" max="255"></label>
+            <label class="campo">Malha parcial <input type="number" name="parcial" min="0" max="255"></label>
+            <label class="campo">Diminuição na borda esquerda <input type="number" name="marcaEsq" min="0" max="255"></label>
+            <label class="campo">Diminuição na borda direita <input type="number" name="marcaDir" min="0" max="255"></label>
+          </div>
+          <p class="suave pequeno">Padrão: 1 malha, 0 fora, 16 (sem seleção) no arremate e na malha parcial, 71 e 61 (malha e mover 1 agulha para dentro) nas diminuições. Os códigos de arremate mudam entre versões do KnitPaint: troque pelos da sua.</p>
+        </details>
+      </div>
+      <div class="coluna">
+        <p id="forma-resumo"></p>
+        <div class="quadro"><canvas id="forma-previa" role="img" aria-label="Forma da peça"></canvas></div>
+        <ul class="legenda" id="forma-legenda"></ul>
+      </div>
+    </div>
+    <div class="botoes-dialogo">
+      <button class="botao" value="fechar" formnovalidate>Fechar</button>
+      <button type="button" class="botao" id="forma-colar" title="Entra como colagem no desenho aberto: posicione e aperte Enter">Colar no desenho</button>
+      <button type="button" class="botao principal" id="forma-novo">Criar desenho novo</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-gerar" class="largo" aria-labelledby="dlg-gerar-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-gerar-titulo">Gerar padrão</h2>
+    <div class="colunas-dialogo">
+      <div class="coluna">
+        <label class="campo">Padrão
+          <select name="tipo">
+            <option value="listras">Listras</option>
+            <option value="losango">Losango (argyle)</option>
+            <option value="texto">Texto</option>
+          </select>
+        </label>
+        <div class="linha-campos" data-para="listras losango">
+          <label class="campo">Agulhas <input type="number" name="largura" min="1" max="8000"></label>
+          <label class="campo">Carreiras <input type="number" name="altura" min="1" max="8000"></label>
+        </div>
+        <div class="campos-gerar" data-para="listras">
+          <label class="campo">Listras de baixo para cima, como cor:carreiras <input type="text" name="listras" value="1:6, 2:2, 3:4, 2:2" autocomplete="off"></label>
+          <p class="suave pequeno">Exemplo: 1:6, 2:2 faz 6 carreiras da cor 1 e 2 da cor 2, repetindo até a altura.</p>
+        </div>
+        <div class="campos-gerar" data-para="losango">
+          <div class="linha-campos">
+            <label class="campo">Largura do losango <input type="number" name="dw" min="2" max="400" value="24"></label>
+            <label class="campo">Altura do losango <input type="number" name="dh" min="2" max="400" value="30"></label>
+          </div>
+          <div class="linha-campos">
+            <label class="campo">Cor do losango <input type="number" name="corA" min="0" max="255" value="1"></label>
+            <label class="campo">Cor de fundo <input type="number" name="corB" min="0" max="255" value="2"></label>
+            <label class="campo">Cor das linhas <input type="number" name="corC" min="0" max="255" placeholder="sem linhas"></label>
+          </div>
+        </div>
+        <div class="campos-gerar" data-para="texto">
+          <label class="campo">Texto (uma linha por linha) <textarea name="texto" rows="3">ONCA</textarea></label>
+          <div class="linha-campos">
+            <label class="campo">Cor do texto <input type="number" name="corTexto" min="0" max="255" value="1"></label>
+            <label class="campo">Cor de fundo <input type="number" name="corFundo" min="0" max="255" value="0"></label>
+            <label class="campo">Tamanho <select name="escala"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
+          </div>
+          <p class="suave pequeno">Letras de 5 × 7 pontos, sem acentos: A–Z, 0–9 e = : . , - / ( ) + % * # ? _</p>
+        </div>
+      </div>
+      <div class="coluna">
+        <div class="quadro"><canvas id="gerar-previa" role="img" aria-label="Prévia do padrão"></canvas></div>
+        <p class="suave pequeno" id="gerar-info"></p>
+      </div>
+    </div>
+    <div class="botoes-dialogo">
+      <button class="botao" value="fechar" formnovalidate>Fechar</button>
+      <button type="button" class="botao principal" id="gerar-colar">Colar no desenho</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-jacquard" class="largo" aria-labelledby="dlg-jacquard-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-jacquard-titulo">Jacquard e intarsia</h2>
+    <p class="suave pequeno" id="jacquard-area"></p>
+    <div class="colunas-dialogo">
+      <div class="coluna">
+        <h3 class="sub">Jacquard: fios soltos no avesso</h3>
+        <div class="linha-campos">
+          <label class="campo">Avesso
+            <select name="estrutura">
+              <option value="flutuacao">flutuação (não prende)</option>
+              <option value="birdseye">birdseye</option>
+              <option value="escada">escada (prende a cada N)</option>
+              <option value="tubular">tubular</option>
+            </select>
+          </label>
+          <label class="campo">N da escada <input type="number" name="escada" min="2" max="12" value="4"></label>
+          <label class="campo">Fio solto máximo <input type="number" name="maximo" min="1" max="99" value="5"></label>
+        </div>
+        <div id="jacquard-resultado"></div>
+        <h3 class="sub">Intarsia: guia-fios</h3>
+        <label class="campo">Guia-fios disponíveis na máquina <input type="number" name="guias" min="1" max="64" value="8"></label>
+        <div id="intarsia-resultado"></div>
+      </div>
+      <div class="coluna">
+        <label class="campo">Mostrar
+          <select name="vista">
+            <option value="flutuacoes">o desenho com os fios soltos longos (em amarelo)</option>
+            <option value="guias">os guia-fios da intarsia</option>
+          </select>
+        </label>
+        <div class="quadro"><canvas id="jacquard-mapa" role="img" aria-label="Mapa da área analisada"></canvas></div>
+      </div>
+    </div>
+    <div class="botoes-dialogo"><button class="botao" value="fechar" formnovalidate>Fechar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-verificar" class="largo" aria-labelledby="dlg-verificar-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-verificar-titulo">Verificar o desenho</h2>
+    <div class="colunas-dialogo colunas-agulhas">
+      <div class="coluna">
+        <label class="campo">Mais de quantas agulhas seguidas sem seleção (16) é flutuação longa <input type="number" name="maximo" min="1" max="500" value="5"></label>
+        <div class="chips" id="verificar-filtros" role="group" aria-label="Filtrar"></div>
+        <ul class="itens-verificacao" id="verificar-itens"></ul>
+        <p class="suave pequeno">As regras usam significados de referências públicas (R3 guia-fio, R5 cancelar malha, R6 ponto, 13 largura do guia, 16 sem seleção). Confira na sua versão do KnitPaint.</p>
+      </div>
+      <div class="coluna">
+        <h3 class="sub">Agulhas e carro, carreira a carreira</h3>
+        <div class="linha-campos">
+          <label class="campo">Painel <select name="painel"></select></label>
+          <label class="campo">Carreira <input type="number" name="carreira" min="1" max="8000"></label>
+          <label class="campo">Da agulha <input type="number" name="agulha" min="1" max="8000" value="1"></label>
+        </div>
+        <div class="controles">
+          <button type="button" class="botao" data-agulhas="anterior" aria-label="Carreira anterior">◀</button>
+          <button type="button" class="botao" data-agulhas="tocar">Pausar</button>
+          <button type="button" class="botao" data-agulhas="proxima" aria-label="Próxima carreira">▶</button>
+          <label class="campo-barra">Velocidade
+            <select name="velocidade"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+          </label>
+        </div>
+        <div class="quadro"><canvas id="verificar-agulhas" role="img" aria-label="Agulhas das duas fronturas e o carro passando"></canvas></div>
+        <dl class="info" id="verificar-info"></dl>
+        <p class="suave pequeno">Visão simplificada: frontura de trás em cima, da frente embaixo. O sentido do carro segue o 6/7 da R1 quando houver (suposição) e, sem ele, alterna a cada carreira.</p>
+      </div>
+    </div>
+    <div class="botoes-dialogo"><button class="botao" value="fechar" formnovalidate>Fechar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-desenvolver" class="largo" aria-labelledby="dlg-desenvolver-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-desenvolver-titulo">Altura com as repetições do economizador</h2>
+    <p class="suave pequeno">A R2 marca blocos de carreiras que a máquina repete. O desenho mostra cada bloco uma vez; diga quantas vezes ele repete (isso é definido no processamento) para ver a altura de verdade.</p>
+    <label class="campo campo-curto">Painel <select name="painel"></select></label>
+    <div id="desenvolver-tabela"></div>
+    <p id="desenvolver-total"></p>
+    <div class="botoes-dialogo">
+      <button class="botao" value="fechar" formnovalidate>Fechar</button>
+      <button type="button" class="botao principal" id="desenvolver-criar" title="Abre uma aba nova com as carreiras repetidas, para ver a peça inteira">Criar desenho desenvolvido</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-simular" class="largo" aria-labelledby="dlg-simular-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-simular-titulo">Simular a malha</h2>
+    <p class="suave pequeno" id="simular-area"></p>
+    <div class="colunas-dialogo colunas-estreita">
+      <div class="coluna">
+        <label class="campo">Lado <select name="lado"><option value="frente">Frente</option><option value="avesso">Avesso</option></select></label>
+        <label class="campo">Fio
+          <select name="fio"><option value="la">Lã</option><option value="algodao">Algodão</option><option value="acrilico">Acrílico</option><option value="viscose">Viscose</option></select>
+        </label>
+        <label class="campo">Cor do fio
+          <select name="cores"><option value="guia">pelo guia-fio (R3)</option><option value="desenho">pela cor do desenho</option></select>
+        </label>
+        <label class="campo">Pontos
+          <select name="pontos"><option value="codigo">pelo código de cada ponto</option><option value="frente">todos em malha (desenho de cores)</option></select>
+        </label>
+        <div class="fios" id="simular-fios"></div>
+        <div class="controles">
+          <button type="button" class="botao" data-zoom-malha="-1" aria-label="Pontos menores">−</button>
+          <button type="button" class="botao" data-zoom-malha="1" aria-label="Pontos maiores">+</button>
+        </div>
+      </div>
+      <div class="coluna">
+        <div class="quadro alto"><canvas id="simular-malha" role="img" aria-label="Simulação da malha"></canvas></div>
+        <p class="suave pequeno">Prévia simplificada: frente em V, avesso em bolinha, tuck, fio solto e transferência pelo código de cada ponto. Códigos sem significado conhecido ficam vazios.</p>
+      </div>
+    </div>
+    <div class="botoes-dialogo">
+      <button class="botao" value="fechar" formnovalidate>Fechar</button>
+      <button type="button" class="botao" id="simular-png">Baixar imagem</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-ficha" class="largo" aria-labelledby="dlg-ficha-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-ficha-titulo">Ficha técnica</h2>
+    <div class="colunas-dialogo">
+      <div class="coluna">
+        <div class="campos-ficha" id="ficha-campos"></div>
+        <h3 class="sub">Fio de cada guia-fio (R3)</h3>
+        <div class="campos-ficha" id="ficha-guias"></div>
+        <h3 class="sub">Tempo de tecimento</h3>
+        <div class="linha-campos">
+          <label class="campo">Carreiras <input type="number" name="t-carreiras" min="1" max="100000"></label>
+          <label class="campo">Agulhas <input type="number" name="t-agulhas" min="1" max="8000"></label>
+          <label class="campo">Peças <input type="number" name="t-pecas" min="1" max="100" value="1"></label>
+        </div>
+        <div class="linha-campos">
+          <label class="campo">Finura (agulhas por polegada) <input type="number" name="t-finura" min="1" max="30" step="0.5" value="7"></label>
+          <label class="campo">Velocidade do carro (m/s) <input type="number" name="t-velocidade" min="0.05" max="2" step="0.05" placeholder="ex.: 0,8"></label>
+          <label class="campo">Sobra em cada lado (cm) <input type="number" name="t-sobra" min="0" max="50" step="1" placeholder="opcional"></label>
+        </div>
+        <p id="ficha-tempo" class="pequeno"></p>
+        <button type="button" class="botao" id="ficha-usar-tempo">Usar no campo TEMPO TEC</button>
+      </div>
+      <div class="coluna">
+        <div class="linha-campos">
+          <label class="campo">Cor do texto <input type="number" name="corTexto" min="0" max="255"></label>
+          <label class="campo">Cor do fundo <input type="number" name="corFundo" min="0" max="255"></label>
+          <label class="campo">Tamanho <select name="escala"><option value="1">1×</option><option value="2">2×</option></select></label>
+        </div>
+        <label class="campo-check"><input type="checkbox" name="limpar" checked> Ao escrever, pintar a seleção com a cor do fundo antes</label>
+        <div class="quadro"><canvas id="ficha-previa" role="img" aria-label="Prévia da ficha escrita no desenho"></canvas></div>
+        <p class="suave pequeno" id="ficha-tamanho"></p>
+      </div>
+    </div>
+    <div class="botoes-dialogo">
+      <button class="botao" value="fechar" formnovalidate>Fechar</button>
+      <button type="button" class="botao" id="ficha-txt">Baixar .txt</button>
+      <button type="button" class="botao principal" id="ficha-escrever" title="Entra como colagem: posicione e aperte Enter">Escrever no desenho</button>
+    </div>
   </form>
 </dialog>
 
@@ -320,6 +660,8 @@
 
 <script src="shima_dat.js"></script>
 <script src="shima_arquivos.js"></script>
+<script src="recursos_malha.js"></script>
 <script src="editor.js"></script>
+<script src="editor_recursos.js"></script>
 </body>
 </html>

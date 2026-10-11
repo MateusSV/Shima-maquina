@@ -251,8 +251,16 @@ class Test_Editor_Portatil(unittest.TestCase):
         html = gerar_html()
         self.assertNotIn('<script src="', html)
         self.assertNotIn('href="editor.css"', html)
-        for trecho in ("function ler(buffer)", "function lerPrograma(buffer)", "function abrirLocais(arquivos)"):
+        for trecho in ("function ler(buffer)", "function lerPrograma(buffer)", "function abrirLocais(arquivos)",
+                       "function calcularModelo(", "function verificarDesenho(", "function abrirVerificar(", "function carimbarMotivo("):
             self.assertIn(trecho, html)
+
+    def test_recursos_carregam_depois_do_editor(self):
+        # editor_recursos.js usa as funções de editor.js; recursos_malha.js tem de vir antes dos dois.
+        html = gerar_html()
+        posicoes = [html.index(f"// ---- {nome} ----") for nome in
+                    ("shima_dat.js", "shima_arquivos.js", "recursos_malha.js", "editor.js", "editor_recursos.js")]
+        self.assertEqual(posicoes, sorted(posicoes))
 
     @unittest.skipUnless(EXEMPLO_PADRAO.exists(), "desenho de exemplo ausente")
     def test_versao_publicada_comeca_pelo_titulo_e_traz_o_exemplo(self):
