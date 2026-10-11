@@ -1204,8 +1204,8 @@ details > summary { cursor: pointer; }
           <label class="campo">Carreiras <input type="number" name="altura" min="1" max="8000"></label>
         </div>
         <div class="campos-gerar" data-para="listras">
-          <label class="campo">Listras de baixo para cima, como cor:carreiras ou cor:carreiras:guia <input type="text" name="listras" value="1:6, 2:2, 3:4, 2:2" autocomplete="off"></label>
-          <p class="suave pequeno">Exemplo: 1:6, 2:2 faz 6 carreiras da cor 1 e 2 da cor 2, repetindo até a altura. Com 1:6:3, a listra usa o guia-fio 3.</p>
+          <label class="campo">Listras de baixo para cima, como cor:carreiras ou cor:carreiras:guia <input type="text" name="listras" value="4:6, 5:2, 6:4, 5:2" autocomplete="off"></label>
+          <p class="suave pequeno">Exemplo: 4:6, 5:2 faz 6 carreiras da cor 4 e 2 da cor 5, repetindo até a altura. Com 4:6:3, a listra usa o guia-fio 3.</p>
           <label class="campo-check"><input type="checkbox" name="listrasR3"> Escrever o guia-fio de cada listra na R3</label>
           <p class="suave pequeno" id="gerar-listras-r3"></p>
         </div>
@@ -1215,8 +1215,8 @@ details > summary { cursor: pointer; }
             <label class="campo">Altura do losango <input type="number" name="dh" min="2" max="400" value="30"></label>
           </div>
           <div class="linha-campos">
-            <label class="campo">Cor do losango <input type="number" name="corA" min="0" max="255" value="1"></label>
-            <label class="campo">Cor de fundo <input type="number" name="corB" min="0" max="255" value="2"></label>
+            <label class="campo">Cor do losango <input type="number" name="corA" min="0" max="255" value="5"></label>
+            <label class="campo">Cor de fundo <input type="number" name="corB" min="0" max="255" value="4"></label>
             <label class="campo">Cor das linhas <input type="number" name="corC" min="0" max="255" placeholder="sem linhas"></label>
           </div>
         </div>
@@ -1226,9 +1226,9 @@ details > summary { cursor: pointer; }
             <label class="campo">Altura do módulo <input type="number" name="oh" min="15" max="240" value="60"></label>
           </div>
           <div class="linha-campos">
-            <label class="campo">Cor do fundo <input type="number" name="oncaA" min="0" max="255" value="1"></label>
-            <label class="campo">Cor da roseta <input type="number" name="oncaB" min="0" max="255" value="2"></label>
-            <label class="campo">Cor do centro <input type="number" name="oncaC" min="0" max="255" value="3"></label>
+            <label class="campo">Cor do fundo <input type="number" name="oncaA" min="0" max="255" value="4"></label>
+            <label class="campo">Cor da roseta <input type="number" name="oncaB" min="0" max="255" value="5"></label>
+            <label class="campo">Cor do centro <input type="number" name="oncaC" min="0" max="255" value="6"></label>
           </div>
           <button type="button" class="botao" id="gerar-sortear">Sortear outras rosetas</button>
           <p class="suave pequeno">O módulo se repete sem emenda até encher a largura e a altura.</p>
@@ -1242,10 +1242,10 @@ details > summary { cursor: pointer; }
             <label class="campo">Fios <select name="logoK"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
           </div>
           <div class="linha-campos">
-            <label class="campo" data-fio="0"><span>Fio A (fundo) <span class="amostra" data-media="0" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC0" min="0" max="255" value="0"></label>
-            <label class="campo" data-fio="1"><span>Fio B <span class="amostra" data-media="1" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC1" min="0" max="255" value="1"></label>
-            <label class="campo" data-fio="2"><span>Fio C <span class="amostra" data-media="2" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC2" min="0" max="255" value="2"></label>
-            <label class="campo" data-fio="3"><span>Fio D <span class="amostra" data-media="3" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC3" min="0" max="255" value="3"></label>
+            <label class="campo" data-fio="0"><span>Fio A (fundo) <span class="amostra" data-media="0" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC0" min="0" max="255" value="4"></label>
+            <label class="campo" data-fio="1"><span>Fio B <span class="amostra" data-media="1" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC1" min="0" max="255" value="5"></label>
+            <label class="campo" data-fio="2"><span>Fio C <span class="amostra" data-media="2" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC2" min="0" max="255" value="6"></label>
+            <label class="campo" data-fio="3"><span>Fio D <span class="amostra" data-media="3" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC3" min="0" max="255" value="7"></label>
           </div>
           <button type="button" class="botao" id="gerar-logo-cores" title="Escolhe para cada fio a cor da paleta mais parecida com a cor dele na imagem">Usar as cores da imagem</button>
           <p class="suave pequeno">A altura sai da proporção da imagem e da densidade da amostra no Modelo, para o logo não ficar achatado na malha.</p>
@@ -1253,8 +1253,8 @@ details > summary { cursor: pointer; }
         <div class="campos-gerar" data-para="texto">
           <label class="campo">Texto (uma linha por linha) <textarea name="texto" rows="3">ONCA</textarea></label>
           <div class="linha-campos">
-            <label class="campo">Cor do texto <input type="number" name="corTexto" min="0" max="255" value="1"></label>
-            <label class="campo">Cor de fundo <input type="number" name="corFundo" min="0" max="255" value="0"></label>
+            <label class="campo">Cor do texto <input type="number" name="corTexto" min="0" max="255" value="5"></label>
+            <label class="campo">Cor de fundo <input type="number" name="corFundo" min="0" max="255" value="4"></label>
             <label class="campo">Tamanho <select name="escala"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
           </div>
           <p class="suave pequeno">Letras de 5 × 7 pontos, sem acentos: A–Z, 0–9 e = : . , - / ( ) + % * # ? _</p>
@@ -1263,6 +1263,7 @@ details > summary { cursor: pointer; }
       <div class="coluna">
         <div class="quadro"><canvas id="gerar-previa" role="img" aria-label="Prévia do padrão"></canvas></div>
         <p class="suave pequeno" id="gerar-info"></p>
+        <p class="pequeno alerta" id="gerar-aviso-cores" hidden></p>
       </div>
     </div>
     <div class="botoes-dialogo">
@@ -1289,7 +1290,7 @@ details > summary { cursor: pointer; }
             </select>
           </label>
           <label class="campo">N da escada <input type="number" name="escada" min="2" max="12" value="4"></label>
-          <label class="campo">Fio solto máximo <input type="number" name="maximo" min="1" max="99" value="5"></label>
+          <label class="campo">Fio solto máximo <input type="number" name="maximo" min="1" max="500" value="5"></label>
         </div>
         <div id="jacquard-resultado"></div>
         <h3 class="sub">Intarsia: guia-fios</h3>
@@ -1896,10 +1897,10 @@ details > summary { cursor: pointer; }
   function lerCabecalhoPrograma(bytes) {
     const campos = [];
     const fimTexto = Math.min(bytes.length, 0x200);
-    const bruto = texto(bytes, 0, fimTexto);
-    const fim = bruto.indexOf("END");
-    const linhas = bruto.slice(0, fim < 0 ? 0 : fim).split("\r");
-    for (const linha of linhas) {
+    // O cabeçalho vai até a linha END (um nome como F=LEGEND.000 também tem "END"); sem ela, não há campos.
+    const linhas = texto(bytes, 0, fimTexto).split(/\r\n?|\n/);
+    const fim = linhas.findIndex((linha) => linha.trim() === "END");
+    for (const linha of linhas.slice(0, Math.max(0, fim))) {
       const igual = linha.indexOf("=");
       if (igual > 0) campos.push({ chave: linha.slice(0, igual), valor: linha.slice(igual + 1).replace(/\t/g, "") });
     }
@@ -2619,6 +2620,17 @@ details > summary { cursor: pointer; }
       conta.set(v, (conta.get(v) || 0) + 1);
     }
     return [...conta].map(([cor, n]) => ({ cor, n })).sort((a, b) => b.n - a.n || a.cor - b.cor);
+  }
+
+  // Cores que só aparecem nas duas agulhas de cada ponta da área: a ourela, não um fio do desenho.
+  function coresSoNaOurela(px, W, ret, largura = 2) {
+    if (ret.w <= largura * 2) return new Set();
+    const dentro = new Set(), borda = new Set();
+    for (let y = ret.y; y < ret.y + ret.h; y++) for (let x = ret.x; x < ret.x + ret.w; x++) {
+      const naBorda = x < ret.x + largura || x >= ret.x + ret.w - largura;
+      (naBorda ? borda : dentro).add(px[y * W + x]);
+    }
+    return new Set([...borda].filter((c) => !dentro.has(c)));
   }
 
   // Onde o fio de índice i (entre k cores) prende atrás, em cada estrutura de avesso do jacquard.
@@ -3671,12 +3683,12 @@ details > summary { cursor: pointer; }
   const api = {
     ESTILOS, calcularModelo, distribuir, distribuirReto, resumoEventos, planoForma, pixelsDaForma,
     trechosDificeis, BIBLIOTECA, repetirMotivo,
-    coresDaArea, flutuacoes, guiasIntarsia, gerarListras, gerarLosango,
+    coresDaArea, coresSoNaOurela, flutuacoes, guiasIntarsia, gerarListras, gerarLosango,
     paineis, colunaDoValor, valoresDaLinha, faixasDaLinha, pintarValorNaLinha, desenvolvimento, desenharDesenvolvido,
     trechosDoPainel, areaDeMalha, desenvolverComPacotes, resumoDoTrecho, valoresNasCarreiras, listrasPorCarreira, gerarOnca, quantizarLuminancia,
     PASSOS_PROCESSAMENTO, MAQUINAS, FINURAS, maquinaDaPasta, usoDoProcessamento, faltasDoProcessamento, linhasDoProcessamento,
     TECE, verificarDesenho, intervalos,
-    tempoTecimento, tipoDePonto, semAcento, CAMPOS_FICHA, linhasDaFicha, FONTE, textoEmPixels,
+    tempoTecimento, tipoDePonto, semAcento, listaComE, CAMPOS_FICHA, linhasDaFicha, FONTE, textoEmPixels,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.RecursosMalha = api;
@@ -3993,16 +4005,32 @@ function abaDat() {
   return a && a.tipo === "dat" ? a : null;
 }
 
+// Tamanho e CRC dos bytes: reconhece o mesmo arquivo aberto de novo.
+const impressaoDosBytes = (bytes) => `${bytes.byteLength}:${crc32(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)).toString(16)}`;
+
+// O nome da aba; com outra aberta de mesmo nome, junto com a pasta (ou um número) para distinguir as duas.
+function rotuloDaAba(a) {
+  const iguais = estado.abas.filter((x) => x.nome === a.nome);
+  if (iguais.length < 2) return a.nome;
+  const pastaUnica = a.pastaNome && iguais.filter((x) => x.pastaNome === a.pastaNome).length === 1;
+  return `${a.nome} (${pastaUnica ? a.pastaNome : iguais.indexOf(a) + 1})`;
+}
+
 // extra: { lote, pastaNome } para saber que arquivos vieram da mesma pasta.
 function abrirBuffer(nome, buffer, origem, extra = {}) {
   if (!buffer.byteLength) {
     avisar(`${nome} está vazio (0 bytes).`, true);
     return null;
   }
-  const existente = estado.abas.find((a) => a.nome === nome && a.origem === origem);
+  // O mesmo arquivo aberto de novo (mesmo nome e mesmo conteúdo) volta para a aba dele. Um de mesmo nome e
+  // outro conteúdo, como o 00_C_P.000 de outra pasta, abre numa aba própria.
+  const { lote, ...resto } = extra;
+  const impressao = impressaoDosBytes(buffer);
+  const existente = estado.abas.find((a) => a.nome === nome && a.origem === origem && a.impressao === impressao);
   if (existente) {
-    // Aberta de novo junto com a pasta: passa a ser desta pasta (para achar os .000 e .QFD dela).
-    Object.assign(existente, extra);
+    // Aberto de novo junto com uma pasta: passa a andar também com os .000 e .QFD dela.
+    if (lote != null && !existente.lotes.includes(lote)) existente.lotes.push(lote);
+    if (resto.pastaNome && !existente.pastaNome) existente.pastaNome = resto.pastaNome;
     mostrarAba(existente);
     return existente;
   }
@@ -4017,7 +4045,10 @@ function abrirBuffer(nome, buffer, origem, extra = {}) {
     avisar(`Não foi possível abrir ${nome}: ${erro.message}`, true);
     return null;
   }
-  const aba = { id: ++contadorAbas, nome, origem, tipo: aberto.tipo, aberto, modificado: false, tamanho: buffer.byteLength, ...extra };
+  const aba = {
+    id: ++contadorAbas, nome, origem, tipo: aberto.tipo, aberto, modificado: false, tamanho: buffer.byteLength,
+    impressao, lotes: lote != null ? [lote] : [], ...resto,
+  };
   if (aba.tipo === "dat") {
     Object.assign(aba, { doc: aberto.doc, hist: [], refazer: [], selecao: null, flutuante: null, zoom: null, rolagem: null });
     aba.original = retrato(aba); // para "Voltar ao original"
@@ -4054,6 +4085,11 @@ async function fecharAba(id) {
   const aba = estado.abas.find((a) => a.id === id);
   if (!aba) return;
   if (aba.modificado && !(await perguntar(`${aba.nome} tem alterações não salvas. Fechar mesmo assim?`, "Fechar sem salvar"))) return;
+  tirarAba(aba);
+}
+
+function tirarAba(aba) {
+  const id = aba.id;
   if (aba.tipo === "imagem") {
     if (estado.imagemImportar && estado.imagemImportar.url === aba.aberto.url) estado.imagemImportar = null;
     URL.revokeObjectURL(aba.aberto.url);
@@ -4075,9 +4111,9 @@ function desenharAbas() {
       (a) => `<div class="aba${a.id === estado.atual ? " ativa" : ""}">
         <button type="button" class="aba-nome" data-aba="${a.id}" aria-current="${a.id === estado.atual}">
           <span class="tipo tipo-${a.tipo}">${TIPOS[a.tipo]}</span>
-          <span class="mono">${esc(a.nome)}</span>${a.modificado ? '<span class="modificado" title="Não salvo">●</span>' : ""}
+          <span class="mono">${esc(rotuloDaAba(a))}</span>${a.modificado ? '<span class="modificado" title="Não salvo">●</span>' : ""}
         </button>
-        <button type="button" class="aba-fechar" data-fechar="${a.id}" aria-label="Fechar ${esc(a.nome)}">×</button>
+        <button type="button" class="aba-fechar" data-fechar="${a.id}" aria-label="Fechar ${esc(rotuloDaAba(a))}">×</button>
       </div>`,
     )
     .join("");
@@ -4960,7 +4996,11 @@ tela.addEventListener("pointermove", (e) => {
       renderizar();
     } else if (gesto.tipo === "selecionar") {
       const q = prender(p, d);
-      if (Math.hypot(e.clientX - gesto.telaX, e.clientY - gesto.telaY) >= 6) gesto.moveu = true;
+      // Arrastou quando saiu do ponto de partida e andou mais que um tremido de clique (o dedo e a caneta tremem
+      // mais que o mouse). Com zoom baixo, poucos pixels já são várias agulhas: o limite não pode ser maior.
+      const tremido = e.pointerType === "mouse" ? 4 : 8;
+      const saiu = q.x !== gesto.inicio.x || q.y !== gesto.inicio.y;
+      if (saiu && Math.hypot(e.clientX - gesto.telaX, e.clientY - gesto.telaY) >= tremido) gesto.moveu = true;
       a.selecao = retanguloEntre(gesto.inicio, q);
       posicionarCaixas();
     } else if (gesto.tipo === "mover" && a.flutuante) {
@@ -5503,10 +5543,14 @@ async function salvarNaPasta(a, nome) {
       dados = await resposta.json();
       if (!resposta.ok) throw new Error(dados.erro || resposta.status);
     }
+    // A aba que estava aberta com este arquivo da pasta ficou velha: sai, para não gravar por cima dele depois.
+    const velha = outraAbaDaPasta(a, nome);
+    if (velha) tirarAba(velha);
     a.nome = nome;
     a.origem = "pasta";
     a.modificado = false;
     a.tamanho = bytes.length;
+    a.impressao = impressaoDosBytes(bytes);
     desenharAbas();
     await carregarPasta();
     atualizarPainel();
@@ -5527,17 +5571,29 @@ async function baixarDat(a, nome = a.nome) {
   if (!entregue) return;
   if (a.origem !== "pasta") {
     a.modificado = false;
+    a.tamanho = bytes.length;
+    // Aberto de novo depois de baixado, o arquivo volta para esta aba.
+    if (entregue === nome) a.impressao = impressaoDosBytes(bytes);
     desenharAbas();
   }
   if (entregue === nome) avisar(`${nome} foi baixado (normalmente vai para a pasta Downloads). Copie-o para a pasta dos desenhos.`);
   else avisar(`${entregue} foi baixado. Dentro dele está ${nome}: extraia e copie para a pasta dos desenhos.`);
 }
 
+// A outra aba aberta com este arquivo da pasta (gravar com o nome dele substitui o arquivo dela).
+const outraAbaDaPasta = (a, nome) => estado.abas.find((x) => x !== a && x.origem === "pasta" && x.nome === nome) || null;
+
 // Só não pergunta quando o arquivo da pasta é o mesmo que foi aberto dela.
 async function podeGravarNaPasta(a, nome) {
+  if (a.origem === "pasta" && a.nome === nome) return true;
   const existe = estado.arquivosPasta.some((x) => x.nome === nome);
-  if (!existe || (a.origem === "pasta" && a.nome === nome)) return true;
-  return perguntar(`${nome} já existe na pasta. Substituir pelo desenho desta aba? Se ainda não houver ${nome}.bak, o arquivo atual fica guardado nele.`, "Substituir");
+  const outra = outraAbaDaPasta(a, nome);
+  if (!existe && !outra) return true;
+  const fecha = outra ? ` A aba aberta de ${nome} será fechada${outra.modificado ? ", sem salvar as alterações dela" : ""}.` : "";
+  const pergunta = existe
+    ? `${nome} já existe na pasta. Substituir pelo desenho desta aba? Se ainda não houver ${nome}.bak, o arquivo atual fica guardado nele.`
+    : `${nome} está aberto em outra aba. Gravar o desenho desta aba com esse nome?`;
+  return perguntar(pergunta + fecha, "Substituir");
 }
 
 async function salvar() {
@@ -5772,10 +5828,11 @@ function desenharOpcoes() {
     return;
   }
   $("titulo-opcoes").textContent = `carreira ${d.altura - y}`;
+  const paineis = RM.paineis(blocos); // numerados como no resto do editor (um bloco sem par também é painel)
   el.innerHTML = naFaixa
     .map((b) => {
       const valores = ShimaDat.valoresDasLinhas(d, b, y);
-      const painel = Math.floor(blocos.indexOf(b) / 2) + 1;
+      const painel = paineis.find((p) => p.L === b || p.R === b).numero;
       const linhas = valores.length
         ? valores
             .map(
@@ -6120,8 +6177,11 @@ document.addEventListener("keydown", (e) => {
   else if (ctrl && k === "a") ACOES["selecionar-tudo"](a);
   else if (ctrl) return;
   else if (k === "delete" || k === "backspace") ACOES.apagar(a);
-  else if (k === "enter") fixarFlutuante(a);
-  else if (k === "escape") {
+  else if (k === "enter") {
+    // Sem colagem para fixar, o Enter fica com o botão, o link ou o resumo que está com o foco.
+    if (!a.flutuante) return;
+    fixarFlutuante(a);
+  } else if (k === "escape") {
     if (a.flutuante) {
       desfazer();
       posicionarCaixas();
@@ -7115,7 +7175,8 @@ function textoDoArquivoAberto() {
   if (!lista.length) return `<strong>No seu arquivo:</strong> ${esc(a.nome)} não tem painéis com as linhas de opção.`;
   const col = Math.max(0.1, decimal(modelo.colunas, 30)), car = Math.max(0.1, decimal(modelo.carreiras, 40));
   const paineis = lista.map((p) => {
-    const m = RM.areaDeMalha(a.doc, p);
+    // Painel ainda sem malha (só 0 e marcas): vale a largura da área de desenho.
+    const m = RM.areaDeMalha(a.doc, p) || { x0: p.x0, x1: p.x1 };
     return { p, agulhas: m.x1 - m.x0 + 1, carreiras: p.y1 - p.y0 + 1 };
   });
   const primeiro = paineis[0];
@@ -7734,13 +7795,6 @@ function abrirGerar() {
     form.largura.value = 48;
     form.altura.value = 40;
   }
-  if (!form.dataset.pronto) {
-    form.corA.value = estado.primaria;
-    form.corB.value = estado.secundaria;
-    form.corTexto.value = estado.primaria;
-    form.corFundo.value = estado.secundaria;
-    form.dataset.pronto = "1";
-  }
   abrirJanela("dlg-gerar");
   desenharGerar();
 }
@@ -7827,9 +7881,13 @@ function imagemDoLogo(form) {
   return { w, h, px, fonte, medias: q.medias };
 }
 
-const RESERVADAS_FIO = new Set([0, 13, 16, 60, 70]); // sem malha, largura do guia, sem seleção e transferência não são cor de fio
+// Sem malha, largura do guia, sem seleção, transferência e o 99 dos arquivos (nada tece) não são cor de fio.
+const RESERVADAS_FIO = new Set([0, 13, 16, 60, 70, 99]);
+// Cor de fio para o Verificar e o Jacquard: nem marca nem código de ponto (1 frente, 2 trás...).
+const ehCorDeFio = (c) => !RESERVADAS_FIO.has(c) && !RM.tipoDePonto(c);
 
-// Para cada fio, a cor da paleta mais parecida com a cor dele na imagem (sem repetir a mesma cor).
+// Para cada fio, a cor da paleta mais parecida com a cor dele na imagem (sem repetir a mesma cor e só entre as
+// cores de fio: o preto da paleta, por exemplo, é o código 1, de ponto).
 function coresDaImagemNosFios(form) {
   const a = abaDat();
   const img = imagemDoLogo(form);
@@ -7840,7 +7898,7 @@ function coresDaImagemNosFios(form) {
     if (!m) return null;
     let melhor = -1, menor = Infinity;
     paleta.forEach((c, i) => {
-      if (usadas.has(i) || RESERVADAS_FIO.has(i)) return;
+      if (usadas.has(i) || !ehCorDeFio(i)) return;
       const dist = (c[0] - m[0]) ** 2 + (c[1] - m[1]) ** 2 + (c[2] - m[2]) ** 2;
       if (dist < menor) [melhor, menor] = [i, dist];
     });
@@ -7909,7 +7967,7 @@ function areaNoPainel(sel, p) {
 function textoListrasR3(a, form) {
   if (!form.listrasR3.checked) return "";
   const listras = lerListras(form.listras.value);
-  if (listras.length && !listras.some((l) => l.guia)) return "Escreva o guia de cada listra como cor:carreiras:guia, por exemplo 1:6:3.";
+  if (listras.length && !listras.some((l) => l.guia)) return "Escreva o guia de cada listra como cor:carreiras:guia, por exemplo 4:6:3.";
   if (!a.selecao) return "Selecione no desenho a área das listras antes de abrir: com a R3, elas entram direto na seleção.";
   const p = painelDaArea(a, a.selecao);
   if (!p || !p.R.colunas[3]) return "A seleção não está num painel com a linha R3.";
@@ -7949,6 +8007,7 @@ function desenharGerar() {
   const cv = $("gerar-previa");
   $("gerar-colar").disabled = !img;
   cv.hidden = !img;
+  $("gerar-aviso-cores").hidden = true;
   if (!img) {
     $("gerar-info").textContent =
       tipo === "listras" ? "Escreva as listras como cor:carreiras, separadas por vírgula." : tipo === "logo" ? "Escreva o texto do logo ou escolha uma imagem." : "Tamanho grande demais.";
@@ -7959,6 +8018,29 @@ function desenharGerar() {
   $("gerar-info").textContent = `${img.w} agulhas × ${img.h} carreiras · cores ${cores.join(", ")}. ${
     comR3 ? "Entra direto na seleção." : "Entra como colagem no canto da seleção (ou no canto visível)."
   }`;
+  const aviso = avisoDasCoresGeradas(cores, comR3);
+  $("gerar-aviso-cores").textContent = aviso;
+  $("gerar-aviso-cores").hidden = !aviso;
+}
+
+// O 0 não tem malha (colado por cima, abre buraco no corpo) e os códigos de ponto não contam como fio no Verificar
+// nem no Jacquard: avisa quando o padrão usa um deles.
+function avisoDasCoresGeradas(cores, direto) {
+  const avisos = [];
+  // Com "Colar sem a cor de fundo" e o fundo 0, o 0 da colagem não apaga o que está embaixo.
+  const zeroPassa = !direto && estado.colarTransparente && estado.fundo === 0;
+  if (cores.includes(0) && !zeroPassa) {
+    avisos.push(`A cor 0 não tem malha: no corpo, ela abre buracos. Troque a cor${direto ? "" : " ou marque “Colar sem a cor de fundo” (com o fundo 0) no painel"}.`);
+  }
+  const dePonto = cores.filter((c) => c !== 0 && !ehCorDeFio(c));
+  if (dePonto.length) {
+    const nome = (c) => (LEGENDA_SIMBOLOS.find(([tipo]) => tipo === RM.tipoDePonto(c)) || [])[2];
+    const nomes = dePonto.map((c) => (nome(c) ? `${c} (${nome(c)})` : String(c)));
+    avisos.push(
+      `${dePonto.length === 1 ? "A cor" : "As cores"} ${RM.listaComE(nomes)} ${dePonto.length === 1 ? "é código de ponto ou marca e não conta" : "são códigos de ponto ou marcas e não contam"} como fio no Verificar e no Jacquard. Para um padrão de cores, use cores de fio, como 4, 5, 6 e 7.`,
+    );
+  }
+  return avisos.join(" ");
 }
 
 // Listras direto na seleção, com o guia de cada listra escrito na R3 do painel, carreira a carreira.
@@ -7967,7 +8049,7 @@ function aplicarListrasComR3(a, form) {
   const sel = a.selecao;
   const listras = lerListras(form.listras.value);
   if (!listras.length) return;
-  if (!listras.some((l) => l.guia)) return avisar("Escreva o guia de cada listra como cor:carreiras:guia (por exemplo 1:6:3).", true);
+  if (!listras.some((l) => l.guia)) return avisar("Escreva o guia de cada listra como cor:carreiras:guia (por exemplo 4:6:3).", true);
   if (!sel) return avisar("Selecione no desenho a área das listras: com a R3, elas entram direto na seleção.", true);
   const p = painelDaArea(a, sel);
   if (!p || !p.R.colunas[3]) return avisar("A seleção precisa estar num painel com a linha R3.", true);
@@ -8042,13 +8124,19 @@ function aplicarListrasComR3(a, form) {
 let jacquard = null;
 const LIMITE_JACQUARD = 300000; // pontos analisados de uma vez
 
-// Cores que são fio no jacquard. Nunca contam o 0, as marcas (13 largura do guia, 16 sem seleção) e a
-// transferência (60/70). Sem seleção também ficam de fora as cores com menos de 5% dos pontos (ourela e marcas)
-// e, no corpo de um painel, os códigos de ponto (uma ribana de 1 e 2 não é jacquard), como no Verificar.
+// Cores que são fio no jacquard. Nunca contam o 0, as marcas (13 largura do guia, 16 sem seleção, 99) e a
+// transferência (60/70), nem a ourela (cores só nas duas agulhas de cada ponta). No corpo de um painel, como no
+// Verificar, também ficam de fora os códigos de ponto (uma ribana de 1 e 2 não é jacquard) e as cores com menos
+// de 1% dos pontos (códigos soltos); numa seleção conta toda cor, mesmo pouca, como os pontos de um motivo.
 const NAO_FIO = RESERVADAS_FIO;
-const REGRA_FIO_VERIFICAR = { minimo: 0.05, semCodigosDePonto: true };
-function coresDeFio(cores, r, { minimo = 0, semCodigosDePonto = false } = {}) {
-  return new Set(cores.filter((c) => !NAO_FIO.has(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor))).map((c) => c.cor));
+const REGRA_FIO_VERIFICAR = { minimo: 0.01, semCodigosDePonto: true };
+function coresDeFio(d, r, cores, { minimo = 0, semCodigosDePonto = false } = {}) {
+  const ourela = RM.coresSoNaOurela(d.pixels, d.largura, r);
+  return new Set(
+    cores
+      .filter((c) => !NAO_FIO.has(c.cor) && !ourela.has(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor)))
+      .map((c) => c.cor),
+  );
 }
 
 // regraDoVerificar: quem vem de um item do Verificar analisa com a mesma regra de fio dele.
@@ -8057,23 +8145,23 @@ function abrirJacquard(regraDoVerificar = null) {
   if (!a) return;
   fixarFlutuante(a);
   let { r, texto } = areaDeAnalise(a, "analisando");
-  // Na seleção também ficam de fora as cores com menos de 5% dos pontos (ourela, marcas), como antes.
-  let regra = regraDoVerificar || { minimo: 0.05 };
+  // Na seleção conta toda cor que não é marca nem ourela.
+  let regra = regraDoVerificar || {};
   if (!a.selecao) {
     // Sem seleção: o corpo do painel que está na tela, com a mesma regra de fio do Verificar.
     const corpo = corpoVisivel(a);
     if (corpo) {
       r = corpo.r;
-      regra = { minimo: 0.05, semCodigosDePonto: true };
-      texto = `Sem seleção: analisando o corpo do painel ${corpo.p.numero} (carreiras ${corpo.trecho.de}–${corpo.trecho.ate}, agulhas ${r.x + 1}–${r.x + r.w}). Contam como fio as cores com pelo menos 5% dos pontos que não são códigos de ponto. Para ver outra parte, selecione-a antes de abrir.`;
-    } else regra = { minimo: 0.05 };
+      regra = REGRA_FIO_VERIFICAR;
+      texto = `Sem seleção: analisando o corpo do painel ${corpo.p.numero} (carreiras ${corpo.trecho.de}–${corpo.trecho.ate}, agulhas ${r.x + 1}–${r.x + r.w}). Contam como fio as cores com pelo menos ${REGRA_FIO_VERIFICAR.minimo * 100}% dos pontos que não são códigos de ponto nem ficam só na ourela. Para ver outra parte, selecione-a antes de abrir.`;
+    }
   }
   if (r.w * r.h > LIMITE_JACQUARD) {
     return avisar(`A área tem ${(r.w * r.h).toLocaleString("pt-BR")} pontos. Selecione o motivo (até ${LIMITE_JACQUARD.toLocaleString("pt-BR")} pontos) e abra de novo.`, true);
   }
   const d = a.doc;
   const cores = RM.coresDaArea(d.pixels, d.largura, r);
-  const fios = coresDeFio(cores, r, regra);
+  const fios = coresDeFio(d, r, cores, regra);
   jacquard = { a, r, cores, fios, automatico: !a.selecao, intarsia: RM.guiasIntarsia(d.pixels, d.largura, r, fios) };
   $("jacquard-area").textContent = texto;
   abrirJanela("dlg-jacquard");
@@ -8102,7 +8190,7 @@ function analisarJacquard() {
   const form = $("dlg-jacquard").querySelector("form");
   const estrutura = form.estrutura.value;
   const escada = inteiro(form.escada.value, 4, 2, 12);
-  const maximo = inteiro(form.maximo.value, 5, 1, 99);
+  const maximo = inteiro(form.maximo.value, 5, 1, 500);
   form.escada.disabled = estrutura !== "escada";
   const fl = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada, fios);
   const longas = fl.lista.filter((f) => f.comprimento > maximo);
@@ -8366,7 +8454,7 @@ function itensDoVerificar(a, maximo) {
 }
 
 // Jacquard e intarsia no corpo de cada painel: fios soltos longos com o avesso escolhido no Jacquard e guia-fios
-// da intarsia. Só contam as cores com pelo menos 5% dos pontos (ourela e marcas ficam de fora).
+// da intarsia. Contam as cores de fio com pelo menos 1% dos pontos (ourela, marcas e códigos de ponto ficam de fora).
 function itensDeCor(a, maximo) {
   const d = a.doc;
   const itens = [];
@@ -8383,7 +8471,7 @@ function itensDeCor(a, maximo) {
     const r = { x: m.x0, y: d.altura - corpo.ate, w: m.x1 - m.x0 + 1, h: corpo.ate - corpo.de + 1 };
     if (r.w * r.h > LIMITE_JACQUARD) continue;
     // Uma ribana (1 e 2) ou a forma (0 em volta) não são jacquard: códigos de ponto e o 0 não contam como fio.
-    const principais = coresDeFio(RM.coresDaArea(d.pixels, d.largura, r), r, REGRA_FIO_VERIFICAR);
+    const principais = coresDeFio(d, r, RM.coresDaArea(d.pixels, d.largura, r), REGRA_FIO_VERIFICAR);
     if (principais.size < 2) continue;
     const nome = ` (painel ${p.numero})`;
     const longas = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada, principais).lista.filter((f) => f.comprimento > maximo);
@@ -8502,6 +8590,8 @@ function abrirFerramentaDoItem(item) {
   } else if (item.regra === "sem-ponto") abrirProcessar(RM.PASSOS_PROCESSAMENTO.findIndex((s) => s.id === "ponto"));
   else if (item.regra === "jacquard" || item.regra === "intarsia") {
     selecionarNoDesenho(a, item.area);
+    // O mesmo limite de fio solto do Verificar, para o Jacquard achar as mesmas flutuações longas.
+    $("dlg-jacquard").querySelector("form").maximo.value = inteiro($("dlg-verificar").querySelector("form").maximo.value, 5, 1, 500);
     abrirJacquard(REGRA_FIO_VERIFICAR);
     if (item.regra === "intarsia" && jacquard) {
       $("dlg-jacquard").querySelector("form").vista.value = "guias";
@@ -10015,7 +10105,7 @@ function guiasDoDesenho(a) {
 const baseDoNome = (nome) => RM.semAcento(trocarExtensao(nome, ""));
 
 // Dois arquivos da mesma pasta: os dois da pasta conectada, ou abertos juntos do computador.
-const daMesmaPasta = (a, x) => (a.origem === "pasta" && x.origem === "pasta") || (a.lote != null && a.lote === x.lote);
+const daMesmaPasta = (a, x) => (a.origem === "pasta" && x.origem === "pasta") || (a.lotes || []).some((l) => (x.lotes || []).includes(l));
 
 // Os .000 e .QFD abertos que andam com o desenho: os de mesmo nome e, se não houver, os da mesma pasta (na
 // pasta da máquina eles costumam ter outro nome, como 00_C_P.000 e 00_M_P.QFD).
@@ -10051,7 +10141,7 @@ function infoDoArquivoDoPrograma(x, lista) {
   if (par) {
     let dif = 0;
     for (let k = 0; k < ab.bytes.length; k++) if (ab.bytes[k] !== par.aberto.bytes[k]) dif++;
-    info += dif ? `; difere de ${par.nome} em ${dif.toLocaleString("pt-BR")} byte${dif === 1 ? "" : "s"}` : `; igual a ${par.nome}`;
+    info += dif ? `; difere de ${rotuloDaAba(par)} em ${dif.toLocaleString("pt-BR")} byte${dif === 1 ? "" : "s"}` : `; igual a ${rotuloDaAba(par)}`;
   }
   return info;
 }
@@ -10062,7 +10152,7 @@ function htmlArquivosDoPrograma(a) {
     return `<p class="suave pequeno">Nenhum .000 ou .QFD aberto com este desenho. Para ver aqui o que já está na pasta da máquina, abra a pasta inteira (ou os arquivos dela juntos).</p>`;
   return `<h3 class="sub">Na pasta hoje</h3><p class="suave pequeno">Arquivos abertos ${como}. O KnitPaint troca estes arquivos quando processa de novo.</p>
     <ul class="arquivos-programa">${lista
-      .map((x) => `<li><span class="etiqueta-arquivo tipo-${x.tipo}">${x.tipo === "programa" ? "PROGRAMA" : "AJUSTES"}</span><span class="mono">${esc(x.nome)}</span><span class="suave pequeno">${esc(infoDoArquivoDoPrograma(x, lista))}</span></li>`)
+      .map((x) => `<li><span class="etiqueta-arquivo tipo-${x.tipo}">${x.tipo === "programa" ? "PROGRAMA" : "AJUSTES"}</span><span class="mono">${esc(rotuloDaAba(x))}</span><span class="suave pequeno">${esc(infoDoArquivoDoPrograma(x, lista))}</span></li>`)
       .join("")}</ul>`;
 }
 
@@ -10212,10 +10302,9 @@ function desenharArquivosFicha() {
   $("ficha-arquivos").innerHTML = estado.abas
     .map((x) => {
       const marcado = x === a || juntos.has(x) || baseDoNome(x.nome) === base;
-      // O desenho vai como está agora: o tamanho é o do arquivo que seria gravado.
-      const bytes = x.tipo === "dat" ? bytesDoDesenho(x).length : x.tamanho;
-      const tamanho = `${bytes.toLocaleString("pt-BR")} bytes`;
-      return `<li><label><input type="checkbox" data-arquivo="${x.id}"${marcado ? " checked" : ""}><span class="nome-arquivo">${esc(x.nome)}${
+      const bytes = x.tipo === "dat" && x.modificado ? tamanhoAoGravar(x) : x.tamanho;
+      const tamanho = bytes === null ? "não deu para gravar" : `${bytes.toLocaleString("pt-BR")} bytes`;
+      return `<li><label><input type="checkbox" data-arquivo="${x.id}"${marcado ? " checked" : ""}><span class="nome-arquivo">${esc(rotuloDaAba(x))}${
         x.modificado ? ' <span class="suave">(alterado)</span>' : ""
       }</span><span class="suave mono">${esc(TIPOS_ARQUIVO[x.tipo] || x.tipo)} · ${tamanho}</span></label></li>`;
     })
@@ -10223,7 +10312,15 @@ function desenharArquivosFicha() {
   atualizarBotoesEnviar();
 }
 
-// Junta os arquivos escolhidos (o desenho como está agora) e, se pedido, a ficha e o resumo do processamento.
+// O desenho alterado vai como está agora: o tamanho é o do arquivo que seria gravado (o .zip confere de novo).
+function tamanhoAoGravar(x) {
+  try {
+    return ShimaDat.gravar(x.doc).length;
+  } catch (erro) {
+    return null;
+  }
+}
+
 // Os arquivos escolhidos para levar à máquina (o desenho como está agora) e, se pedido, a ficha e o resumo do
 // processamento. Devolve [{ nome, bytes }] ou null (com o aviso dado).
 async function arquivosDaFicha() {

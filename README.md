@@ -90,15 +90,18 @@ início**):
   losango (argyle), **onça** (rosetas que se repetem sem emenda; “Sortear” troca as rosetas), **logo em
   pontos** (de um texto ou de uma imagem PNG/JPG, com a largura em cm, separado em 2 a 4 fios na proporção da
   amostra; “Usar as cores da imagem” escolhe para cada fio a cor da paleta mais parecida) e texto em letras
-  de pixels.
+  de pixels. As cores já vêm como cores de fio (4, 5, 6 e 7), que o Verificar e o Jacquard contam; um aviso
+  aparece quando o padrão usa o 0 (sem malha: colado por cima, abre buraco no corpo) ou um código de ponto.
 - **Jacquard e intarsia**: fios soltos no avesso em flutuação, birdseye, escada ou tubular (com o que cada um
   tem de bom e de ruim e o que fazer quando sobra fio solto longo), com a maior flutuação marcada no desenho,
   quantas carreiras a máquina tece (uma por fio) e a **vista do avesso**
   (espelhada e conforme a estrutura: salpicada no birdseye, o negativo no tubular, as colunas da escada e os
   fios soltos na cor deles); quantos guia-fios a intarsia precisa, as áreas pequenas, o mapa e a tabela de cada
   guia (cor, carreiras e áreas). Passando o mouse no mapa: agulha, carreira, cor, área e guia. Não contam como
-  fio as marcas (0, 13, 16, 60/70) nem as cores com menos de 5% dos pontos; sem seleção (ou aberto pelo
-  Verificar), ele analisa o corpo do painel e, como o Verificar, também deixa de fora os códigos de ponto.
+  fio as marcas (0, 13, 16, 60/70, 99) nem a ourela (cores só nas duas agulhas de cada ponta); na seleção
+  conta toda outra cor, mesmo pouca. Sem seleção (ou aberto pelo Verificar, que também leva o limite de fio
+  solto dele), ele analisa o corpo do painel e, como o Verificar, deixa de fora os códigos de ponto e as cores
+  com menos de 1% dos pontos.
 - **Linhas de opção**: a grade mostra as 20 linhas de cada lado, com as que têm valores marcadas; escolha uma
   (na grade, na tabela da carreira ou com o conta-gotas) para ver as faixas de valores por carreira, o que ela
   faz (R1 a R6, ou um lembrete de que racking, velocidade e puxador também usam linhas), dar um nome a ela e
@@ -135,7 +138,8 @@ início**):
   de pixels; cada campo diz de onde vem e o que escrever. **Enviar à máquina** baixa um `.zip` com os arquivos
   abertos escolhidos (o desenho como está agora, `.000`, `.QFD`, com o tamanho de cada um) e os resumos; já vêm
   marcados os de mesmo nome e os `.000` e `.QFD` da mesma pasta (abra a pasta inteira, ou os arquivos dela
-  juntos). No Chrome e no Edge, **Gravar numa pasta…** grava os mesmos arquivos direto no pendrive (pergunta
+  juntos; um arquivo de mesmo nome e outro conteúdo, de outra pasta, abre numa aba própria, com o nome da
+  pasta na aba). No Chrome e no Edge, **Gravar numa pasta…** grava os mesmos arquivos direto no pendrive (pergunta
   antes de substituir). **Antes de tecer** lista o que ainda falta conferir (cada item pode
   ser marcado à mão, inclusive a amostra tecida e aprovada).
 
@@ -155,7 +159,8 @@ baixe o `.zip` e copie).
 | `.QFD` | ajustes automáticos | consulta: registros, comparação |
 | `.png` / `.jpg` | imagem | importação para dentro de um desenho |
 
-Ao salvar na pasta, o arquivo original é guardado como `<nome>.bak` na primeira vez.
+Ao salvar na pasta, o arquivo original é guardado como `<nome>.bak` na primeira vez. O **Salvar como** com o
+nome de outro arquivo aberto da pasta pergunta antes e fecha a aba antiga dele.
 Teste sempre um arquivo gravado pelo editor no KnitPaint antes de mandar para a máquina: os formatos
 não têm documentação oficial e foram descobertos analisando os arquivos.
 
