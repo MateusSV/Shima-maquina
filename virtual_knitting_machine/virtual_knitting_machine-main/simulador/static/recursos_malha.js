@@ -819,6 +819,27 @@
 
   const NOMES_TRECHOS = { inicio: "Início", barra: "Barra", transferencia: "Transferência", corpo: "Corpo", final: "Final" };
 
+  // Carreiras que alternam entre dois pontos da R6 (a, b, a, b...) formam um trecho só, como nas faixas da
+  // linha: senão um corpo em ponto alternado vira dezenas de trechos de uma carreira. Muda a lista no lugar.
+  function juntarAlternados(segs) {
+    const juntos = [];
+    for (let i = 0; i < segs.length; i++) {
+      const g = segs[i];
+      if (g.de === g.ate && g.tipo.startsWith("R6") && i + 1 < segs.length && segs[i + 1].tipo.startsWith("R6")) {
+        const a = g.tipo, b = segs[i + 1].tipo;
+        let j = i;
+        while (j + 1 < segs.length && segs[j + 1].de === segs[j + 1].ate && segs[j + 1].tipo === ((j - i) % 2 ? a : b)) j++;
+        if (j - i >= 3) {
+          juntos.push({ tipo: `${a}~${b}`, de: g.de, ate: segs[j].ate });
+          i = j;
+          continue;
+        }
+      }
+      juntos.push(g);
+    }
+    segs.splice(0, segs.length, ...juntos);
+  }
+
   // Divide o painel em trechos pelas linhas de opção, de baixo para cima: transferência onde há R5, corpo no
   // maior trecho com ponto (R6), barra entre o primeiro ponto e o corpo, início antes dela e final depois do
   // corpo. Devolve [{ id, nome, de, ate }] em carreiras (contadas de baixo).
@@ -835,6 +856,7 @@
       if (ult && ult.tipo === tipo) ult.ate = c;
       else segs.push({ tipo, de: c, ate: c });
     }
+    juntarAlternados(segs);
     let corpo = -1, maior = -1;
     segs.forEach((g, i) => {
       if (g.tipo.startsWith("R6") && g.ate - g.de + 1 > maior) [corpo, maior] = [i, g.ate - g.de + 1];
@@ -904,75 +926,107 @@
     const blocoEm = new Map(dev.blocos.filter((b) => b.vezes > 1).map((b) => [b.de, b]));
     const areas = (opcoes.paineis || [painel]).map((p) => areaDeMalha(doc, p)).filter(Boolean);
     const barraT = trechos.find((t) => t.id === "barra");
+    const trocaBarra = !!barraT && barra.tipo !== "arquivo";
     const transfT = barraT && trechos.find((t) => t.id === "transferencia" && t.de === barraT.ate + 1);
     const cIni = H - painel.y1, cFim = H - painel.y0;
-    const linhas = []; // de baixo para cima: { y } da carreira do arquivo ou { ref, codigo | barra, i } nova
-    const gerar = (ref, parte, n, fn) => {
-      for (let i = 0; i < n; i++) linhas.push({ ref, parte, gerada: true, codigo: fn(i) });
+    // Pedaços do desenho novo, de baixo para cima: carreiras do arquivo (de–ate, repetidas `vezes`) ou carreiras
+    // novas (n cópias da carreira ref, com o código do pacote nas agulhas que tecem). A altura sai da soma,
+    // sem montar uma lista por carreira (um bloco da R2 pode repetir milhares de vezes).
+    const segs = [];
+    const novas = (ref, parte, n, extra) => segs.push({ ref, parte, n, gerada: true, ...extra });
+    const pacoteInicio = () => {
+      if (inicio.tipo !== "desperdicio") return;
+      novas(painel.y1, "Fio de desperdício", qtd(inicio.n, 20), { codigo: cod.desperdicio });
+      novas(painel.y1, "Separação", 1, { codigo: cod.separacao });
     };
-    for (let c = 1; c < cIni; c++) linhas.push({ y: H - c, parte: "" });
-    if (inicio.tipo === "desperdicio") {
-      gerar(painel.y1, "Fio de desperdício", qtd(inicio.n, 20), () => cod.desperdicio);
-      gerar(painel.y1, "Separação", 1, () => cod.separacao);
-    }
-    let c = cIni;
-    while (c <= cFim) {
-      if (barraT && c === barraT.de && barra.tipo !== "arquivo") {
-        if (barra.tipo !== "sem") {
-          const ref = H - barraT.de;
-          const n = qtd(barra.n, 10);
-          for (let i = 0; i < n; i++) linhas.push({ ref, parte: NOMES_BARRA[barra.tipo] || "Barra", gerada: true, barra: barra.tipo, i });
-        }
+    const pacoteFinal = () => {
+      if (final.tipo === "arremate") novas(painel.y0, "Arremate", 1, { codigo: cod.arremate });
+      else if (final.tipo === "desperdicio") {
+        novas(painel.y0, "Separação", 1, { codigo: cod.separacao });
+        novas(painel.y0, "Fio de desperdício", qtd(final.n, 12), { codigo: cod.desperdicio });
+      }
+    };
+    let comecou = false, terminou = false;
+    let c = 1;
+    while (c <= H) {
+      if (!comecou && c >= cIni) {
+        comecou = true;
+        pacoteInicio();
+      }
+      if (!terminou && c > cFim) {
+        terminou = true;
+        pacoteFinal();
+      }
+      if (trocaBarra && c === barraT.de) {
+        if (barra.tipo !== "sem") novas(H - barraT.de, NOMES_BARRA[barra.tipo] || "Barra", qtd(barra.n, 10), { barra: barra.tipo });
         c = barraT.ate + 1;
         if (barra.tipo === "sem" && transfT && c === transfT.de) c = transfT.ate + 1;
         continue;
       }
       const b = blocoEm.get(c);
       if (b) {
-        for (let r = 0; r < b.vezes; r++) for (let k = b.de; k <= b.ate; k++) linhas.push({ y: H - k, parte: nomeDe(k) });
+        segs.push({ de: b.de, ate: b.ate, vezes: b.vezes, parte: nomeDe(b.de) });
         c = b.ate + 1;
         continue;
       }
-      linhas.push({ y: H - c, parte: nomeDe(c) });
-      c++;
+      // Carreiras seguidas do mesmo trecho, até um bloco, a troca da barra ou a borda do painel.
+      const nome = nomeDe(c);
+      let fim = c;
+      while (fim < H) {
+        const k = fim + 1;
+        if (k === cIni || k === cFim + 1 || blocoEm.has(k) || (trocaBarra && k === barraT.de) || nomeDe(k) !== nome) break;
+        fim = k;
+      }
+      segs.push({ de: c, ate: fim, vezes: 1, parte: nome });
+      c = fim + 1;
     }
-    if (final.tipo === "arremate") gerar(painel.y0, "Arremate", 1, () => cod.arremate);
-    else if (final.tipo === "desperdicio") {
-      gerar(painel.y0, "Separação", 1, () => cod.separacao);
-      gerar(painel.y0, "Fio de desperdício", qtd(final.n, 12), () => cod.desperdicio);
-    }
-    for (let k = cFim + 1; k <= H; k++) linhas.push({ y: H - k, parte: "" });
+    if (!comecou) pacoteInicio();
+    if (!terminou) pacoteFinal();
 
-    const h = linhas.length;
+    const tamanho = (g) => (g.gerada ? g.n : (g.ate - g.de + 1) * g.vezes);
+    const h = segs.reduce((t, g) => t + tamanho(g), 0);
     // Partes do desenho novo (carreiras contadas de baixo), para mostrar o que entrou.
     const partes = [];
-    linhas.forEach((l, i) => {
-      if (!l.parte) return;
-      const ult = partes[partes.length - 1];
-      if (ult && ult.nome === l.parte && ult.ate === i) ult.ate = i + 1;
-      else partes.push({ nome: l.parte, de: i + 1, ate: i + 1, gerada: !!l.gerada });
-    });
-    const painelDe = linhas.findIndex((l) => l.parte) + 1;
-    const painelAte = linhas.length - linhas.slice().reverse().findIndex((l) => l.parte);
+    let pos = 0, painelDe = 0, painelAte = 0;
+    for (const g of segs) {
+      const n = tamanho(g);
+      if (g.parte && n > 0) {
+        const ult = partes[partes.length - 1];
+        if (ult && ult.nome === g.parte && ult.ate === pos) ult.ate = pos + n;
+        else partes.push({ nome: g.parte, de: pos + 1, ate: pos + n, gerada: !!g.gerada });
+        if (!painelDe) painelDe = pos + 1;
+        painelAte = pos + n;
+      }
+      pos += n;
+    }
     const resumo = { w: W, h, partes, painel: { de: painelDe, ate: painelAte, carreiras: painelAte - painelDe + 1 } };
     // Só a contagem (sem a imagem) quando pedido ou quando passaria do limite de carreiras.
     if (opcoes.semPixels || (opcoes.limite && h > opcoes.limite)) return { ...resumo, px: null };
     const px = new Uint8Array(W * h);
-    linhas.forEach((l, i) => {
-      const destino = (h - 1 - i) * W;
-      const origem = (l.gerada ? l.ref : l.y) * W;
-      px.set(doc.pixels.subarray(origem, origem + W), destino);
-      if (!l.gerada) return;
-      for (const a of areas) {
-        for (let x = a.x0; x <= a.x1; x++) {
-          let v = l.codigo;
-          if (l.barra === "tubular") v = l.i % 2 ? cod.tubularB : cod.tubularA;
-          else if (l.barra === "rib11") v = (x - a.x0) % 2 ? cod.tras : cod.frente;
-          else if (l.barra === "rib22") v = (x - a.x0) % 4 < 2 ? cod.frente : cod.tras;
-          px[destino + x] = v;
+    let linha = 0; // carreira do desenho novo, de baixo para cima
+    const copiar = (y) => {
+      const destino = (h - 1 - linha++) * W;
+      px.set(doc.pixels.subarray(y * W, y * W + W), destino);
+      return destino;
+    };
+    for (const g of segs) {
+      if (!g.gerada) {
+        for (let r = 0; r < g.vezes; r++) for (let k = g.de; k <= g.ate; k++) copiar(H - k);
+        continue;
+      }
+      for (let i = 0; i < g.n; i++) {
+        const destino = copiar(g.ref);
+        for (const a of areas) {
+          for (let x = a.x0; x <= a.x1; x++) {
+            let v = g.codigo;
+            if (g.barra === "tubular") v = i % 2 ? cod.tubularB : cod.tubularA;
+            else if (g.barra === "rib11") v = (x - a.x0) % 2 ? cod.tras : cod.frente;
+            else if (g.barra === "rib22") v = (x - a.x0) % 4 < 2 ? cod.frente : cod.tras;
+            px[destino + x] = v;
+          }
         }
       }
-    });
+    }
     return { ...resumo, px };
   }
 

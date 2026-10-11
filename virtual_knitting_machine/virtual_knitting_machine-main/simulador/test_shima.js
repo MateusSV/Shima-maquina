@@ -425,3 +425,46 @@ test("gerar: listras por carreira, onça repetível e logo em níveis de clarida
   const tres = Recursos.quantizarLuminancia(rgba, 4, 2, 3);
   assert.deepEqual(Array.from(tres.px), [0, 1, 1, 0, 0, 2, 0, 0]);
 });
+
+test("trechos: corpo com o ponto da R6 alternando carreira a carreira", () => {
+  // Bloco R à mão (como no teste das linhas de opção), carreiras 2 a 39; a R6 fica na coluna 31.
+  const doc = ShimaDat.novo(70, 40, null);
+  const p = (x, y, c) => (doc.pixels[y * 70 + x] = c);
+  for (let y = 1; y <= 38; y++) {
+    for (let k = 2; k <= 20; k++) p(22 + 2 * (k - 2), y, k);
+    p(20, y, y % 2 ? 6 : 7);
+  }
+  const r6 = (c, v) => p(31, doc.altura - c, v);
+  for (let c = 6; c <= 9; c++) r6(c, 14); // barra: 4 carreiras com o mesmo ponto
+  for (let c = 10; c <= 29; c++) r6(c, c % 2 ? 21 : 20); // corpo: 20 e 21 alternando
+  for (let c = 30; c <= 33; c++) r6(c, 12);
+  const painel = Recursos.paineis(ShimaDat.linhasDeOpcao(doc))[0];
+  assert.deepEqual(Recursos.trechosDoPainel(doc, painel).map((t) => `${t.id} ${t.de}–${t.ate}`), ["inicio 2–5", "barra 6–9", "corpo 10–29", "final 30–39"]);
+});
+
+test("pacotes: bloco da R2 que passa do alto do painel não repete carreiras a mais", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const W = doc.largura;
+  // O bloco L do painel 1 fica 8 carreiras mais baixo que o R: o painel termina na carreira 357.
+  const L = ShimaDat.linhasDeOpcao(doc)[0];
+  for (let y = L.carreiraInicio; y < L.carreiraInicio + 8; y++) doc.pixels.fill(0, y * W + L.xMin, y * W + L.xMax + 1);
+  const painel = Recursos.paineis(ShimaDat.linhasDeOpcao(doc))[0];
+  assert.equal(doc.altura - painel.y0, 357);
+  // Bloco da R2 nas carreiras 350 a 362, repetido 2 vezes.
+  Recursos.pintarValorNaLinha(doc, painel.R, 2, doc.altura - 362, doc.altura - 350, 9);
+  const res = Recursos.desenvolverComPacotes(doc, painel, { repeticoes: { "350-362": 2 } });
+  assert.equal(res.h, doc.altura + 13);
+  const topo = doc.altura - 362; // carreiras 363 a 590, iguais às do arquivo
+  assert.deepEqual(res.px.subarray(0, topo * W), doc.pixels.subarray(0, topo * W));
+  assert.deepEqual(res.px.subarray((topo + 13) * W, (topo + 26) * W), doc.pixels.subarray(topo * W, (topo + 13) * W));
+  assert.deepEqual(res.px.subarray(res.px.length - 349 * W), doc.pixels.subarray(doc.pixels.length - 349 * W));
+});
+
+test("pacotes: muitas repetições só contam as carreiras, sem montar a imagem", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const painel = Recursos.paineis(ShimaDat.linhasDeOpcao(doc))[0];
+  const inicio = Date.now();
+  const res = Recursos.desenvolverComPacotes(doc, painel, { repeticoes: { "216-223": 9999 }, limite: 8000 });
+  assert.deepEqual([res.h, res.px, res.painel.carreiras], [590 + 9998 * 8, null, 179 + 9998 * 8]);
+  assert.ok(Date.now() - inicio < 1000, "contar não pode depender do número de repetições");
+});

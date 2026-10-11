@@ -1236,6 +1236,13 @@ function imagemGerada(form) {
   return { w, h, px: RM.gerarLosango(w, h, inteiro(form.dw.value, 24, 2, 400), inteiro(form.dh.value, 30, 2, 400), cores) };
 }
 
+// Parte da seleção dentro da área de desenho do painel: as linhas de opção dos lados ficam de fora.
+function areaNoPainel(sel, p) {
+  const x0 = Math.max(sel.x, p.x0), x1 = Math.min(sel.x + sel.w - 1, p.x1);
+  const y0 = Math.max(sel.y, p.y0), y1 = Math.min(sel.y + sel.h - 1, p.y1);
+  return x1 >= x0 && y1 >= y0 ? { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } : null;
+}
+
 // O que acontece com a R3 ao aplicar as listras (ou o que falta para poder escrever nela).
 function textoListrasR3(a, form) {
   if (!form.listrasR3.checked) return "";
@@ -1244,7 +1251,12 @@ function textoListrasR3(a, form) {
   if (!a.selecao) return "Selecione no desenho a área das listras antes de abrir: com a R3, elas entram direto na seleção.";
   const p = painelDaArea(a, a.selecao);
   if (!p || !p.R.colunas[3]) return "A seleção não está num painel com a linha R3.";
-  return `As listras entram direto na seleção (${a.selecao.w} × ${a.selecao.h}) e a R3 do painel ${p.numero} recebe o guia de cada listra.`;
+  const area = areaNoPainel(a.selecao, p);
+  if (!area) return "A seleção não pega a área de desenho do painel.";
+  const corta = area.w !== a.selecao.w || area.h !== a.selecao.h;
+  return `As listras entram direto ${
+    corta ? `em ${area.w} × ${area.h} pontos da seleção, só na área de desenho do painel ${p.numero} (as linhas de opção ficam como estão),` : `na seleção (${area.w} × ${area.h})`
+  } e a R3 do painel ${p.numero} recebe o guia de cada listra.`;
 }
 
 function desenharGerar() {
@@ -1288,19 +1300,21 @@ function aplicarListrasComR3(a, form) {
   if (!sel) return avisar("Selecione no desenho a área das listras: com a R3, elas entram direto na seleção.", true);
   const p = painelDaArea(a, sel);
   if (!p || !p.R.colunas[3]) return avisar("A seleção precisa estar num painel com a linha R3.", true);
+  const area = areaNoPainel(sel, p);
+  if (!area) return avisar("A seleção não pega a área de desenho do painel.", true);
   const d = a.doc;
-  const px = RM.gerarListras(sel.w, sel.h, listras);
-  const porCarreira = RM.listrasPorCarreira(sel.h, listras);
+  const px = RM.gerarListras(area.w, area.h, listras);
+  const porCarreira = RM.listrasPorCarreira(area.h, listras);
   salvarHistorico(a);
-  for (let y = 0; y < sel.h; y++) d.pixels.set(px.subarray(y * sel.w, (y + 1) * sel.w), (sel.y + y) * d.largura + sel.x);
+  for (let y = 0; y < area.h; y++) d.pixels.set(px.subarray(y * area.w, (y + 1) * area.w), (area.y + y) * d.largura + area.x);
   // Cada sequência de carreiras com o mesmo guia recebe o número dele; listras sem guia deixam a R3 como está.
   const guiaEm = (c) => (porCarreira[c] >= 0 ? listras[porCarreira[c]].guia : 0);
   let escritas = 0;
-  for (let c = 0; c < sel.h; ) {
+  for (let c = 0; c < area.h; ) {
     const guia = guiaEm(c);
     let fim = c;
-    while (fim + 1 < sel.h && guiaEm(fim + 1) === guia) fim++;
-    if (guia) escritas += RM.pintarValorNaLinha(d, p.R, 3, sel.y + sel.h - 1 - fim, sel.y + sel.h - 1 - c, guia);
+    while (fim + 1 < area.h && guiaEm(fim + 1) === guia) fim++;
+    if (guia) escritas += RM.pintarValorNaLinha(d, p.R, 3, area.y + area.h - 1 - fim, area.y + area.h - 1 - c, guia);
     c = fim + 1;
   }
   $("dlg-gerar").close();
@@ -2506,11 +2520,24 @@ function processamentoDe(a) {
     puxador: { ...(salvo.puxador || {}) },
     velocidade: { ...(salvo.velocidade || {}) },
   };
-  const fiosDaFicha = lerArmazenado(CHAVE_FICHA + a.nome, {}).fios || {};
-  for (const [g, fio] of Object.entries(fiosDaFicha)) {
-    if (fio && !(dados.guias[g] && dados.guias[g].fio)) dados.guias[g] = { ...(dados.guias[g] || {}), fio };
+  const fichaSalva = lerArmazenado(CHAVE_FICHA + a.nome, null);
+  if (fichaSalva && fichaSalva.fios) {
+    // Uma vez só: os fios saem da ficha e ficam aqui (um fio apagado no processamento não volta).
+    for (const [g, fio] of Object.entries(fichaSalva.fios)) {
+      if (fio && (dados.guias[g] || {}).fio === undefined) dados.guias[g] = { ...(dados.guias[g] || {}), fio };
+    }
+    delete fichaSalva.fios;
+    gravarArmazenado(CHAVE_FICHA + a.nome, fichaSalva);
+    gravarArmazenado(CHAVE_PROCESSAMENTO + a.nome, dados);
   }
   a.processamento = dados;
+  return dados;
+}
+
+// Cada guia usado na R3 começa com o mesmo número e uma cor própria; o fio fica para preencher. Vale em
+// todo lugar que conta o que falta, para a conta não depender de qual diálogo abriu antes.
+function completarGuias(dados, uso) {
+  for (const u of uso.guias) dados.guias[u.valor] = { guia: String(u.valor), fio: "", cor: corPadraoDoGuia(u.valor), lado: "E", ...(dados.guias[u.valor] || {}) };
   return dados;
 }
 
@@ -2531,15 +2558,15 @@ function alturaDesenvolvida(a) {
 }
 
 function tempoDoProcessamento(a, alt) {
-  if (!alt) return null;
   const d = processamentoDe(a);
+  if (!alt || String(d.finura ?? "").trim() === "") return null;
   return RM.tempoTecimento({ carreiras: alt.carreiras, agulhas: alt.agulhas, pecas: 1, finura: d.finura, velocidade: d.velocidade.corpo });
 }
 
 // Resumo em texto (para baixar ou ir no .zip da ficha).
 function resumoDoProcessamento(a) {
-  const blocos = blocosDeOpcao(a);
-  const linhas = RM.linhasDoProcessamento(a.nome, processamentoDe(a), RM.usoDoProcessamento(a.doc, blocos), repeticoesDe(a));
+  const uso = RM.usoDoProcessamento(a.doc, blocosDeOpcao(a));
+  const linhas = RM.linhasDoProcessamento(a.nome, completarGuias(processamentoDe(a), uso), uso, repeticoesDe(a));
   const alt = alturaDesenvolvida(a);
   if (alt) {
     linhas.push("", `ALTURA: painel ${alt.p.numero} desenvolvido com ${alt.carreiras} carreiras (${alt.compactadas} no desenho), ${alt.agulhas} agulhas tecendo`);
@@ -2554,9 +2581,7 @@ function abrirProcessar(passo = 0) {
   if (!a) return;
   fixarFlutuante(a);
   const uso = RM.usoDoProcessamento(a.doc, blocosDeOpcao(a));
-  const dados = processamentoDe(a);
-  // Cada guia da R3 começa com o mesmo número e uma cor própria; o fio fica para preencher.
-  for (const u of uso.guias) dados.guias[u.valor] = { guia: String(u.valor), fio: "", cor: corPadraoDoGuia(u.valor), lado: "E", ...(dados.guias[u.valor] || {}) };
+  const dados = completarGuias(processamentoDe(a), uso);
   if (proc) clearTimeout(proc.timer);
   proc = { a, uso, dados, passo: limitar(passo, 0, RM.PASSOS_PROCESSAMENTO.length - 1), log: null, rodando: false, timer: 0 };
   abrirJanela("dlg-processar");
@@ -2862,6 +2887,25 @@ function guiasDoDesenho(a) {
 // Nome sem extensão, sem acento e em maiúsculas, para achar os arquivos que andam juntos (.dat, .000, .QFD).
 const baseDoNome = (nome) => RM.semAcento(trocarExtensao(nome, ""));
 
+// O que foi escrito na ficha: { proprios: { campos, tempo }, corTexto, corFundo, escala }. Só o que a pessoa
+// escreveu fica guardado; o resto (carreiras, agulhas, máquina, velocidade...) vem do desenho e do
+// processamento cada vez que a ficha abre, para não ficar com contas velhas.
+function fichaGuardada(a) {
+  const salvo = lerArmazenado(CHAVE_FICHA + a.nome, {});
+  const { corTexto, corFundo, escala } = salvo;
+  if (salvo.proprios) return { corTexto, corFundo, escala, proprios: { campos: { ...(salvo.proprios.campos || {}) }, tempo: { ...(salvo.proprios.tempo || {}) } } };
+  // Formato antigo, que guardava tudo junto: ficam os campos escritos e os números que não são contas.
+  const t = salvo.tempo || {};
+  const escrito = (v) => String(v ?? "").trim() !== "";
+  const tempo = {};
+  if (escrito(t.pecas) && Number(t.pecas) !== 1) tempo.pecas = t.pecas;
+  if (escrito(t.sobra)) tempo.sobra = t.sobra;
+  if (escrito(t.velocidade)) tempo.velocidade = t.velocidade;
+  if (escrito(t.finura) && Number(t.finura) !== 7) tempo.finura = t.finura;
+  const campos = Object.fromEntries(Object.entries(salvo.campos || {}).filter(([, v]) => escrito(v)));
+  return { corTexto, corFundo, escala, proprios: { campos, tempo } };
+}
+
 function abrirFicha() {
   const a = abaDat();
   if (!a) return;
@@ -2893,15 +2937,20 @@ function abrirFicha() {
       sobra: "",
     },
   };
-  const salvo = lerArmazenado(CHAVE_FICHA + a.nome, {});
-  // Os fios de cada guia ficam no processamento (processamentoDe já trouxe os que estavam aqui).
-  if (salvo.fios && Object.keys(salvo.fios).length) gravarProcessamento(a);
-  delete salvo.fios;
+  const salvo = fichaGuardada(a);
+  const { proprios } = salvo;
   ficha = {
     a,
     guias: guiasDoDesenho(a),
-    erros: null,
-    dados: { ...padrao, ...salvo, campos: { ...padrao.campos, ...(salvo.campos || {}) }, tempo: { ...padrao.tempo, ...(salvo.tempo || {}) } },
+    avisos: null,
+    proprios,
+    dados: {
+      corTexto: salvo.corTexto ?? padrao.corTexto,
+      corFundo: salvo.corFundo ?? padrao.corFundo,
+      escala: salvo.escala ?? padrao.escala,
+      campos: { ...padrao.campos, ...proprios.campos },
+      tempo: { ...padrao.tempo, ...proprios.tempo },
+    },
   };
   const v = ficha.dados;
   $("ficha-campos").innerHTML = RM.CAMPOS_FICHA.map(
@@ -2962,8 +3011,8 @@ function desenharFicha() {
 }
 
 function gravarFicha() {
-  const { a, dados } = ficha;
-  gravarArmazenado(CHAVE_FICHA + a.nome, dados);
+  const { a, dados, proprios } = ficha;
+  gravarArmazenado(CHAVE_FICHA + a.nome, { corTexto: dados.corTexto, corFundo: dados.corFundo, escala: dados.escala, proprios });
 }
 
 // Arquivos abertos que podem ir no .zip; já vêm marcados o desenho e os que têm o mesmo nome (.000, .QFD...).
@@ -3022,9 +3071,13 @@ async function baixarZipDaFicha() {
 function itensAntesDeTecer() {
   const { a } = ficha;
   const blocos = blocosDeOpcao(a);
-  if (ficha.erros === null) ficha.erros = RM.verificarDesenho(a.doc, blocos, {}).filter((i) => i.nivel === "erro").length;
+  if (ficha.avisos === null) {
+    // O Verificar dá avisos (não erros): conta todos, com o mesmo limite de fio solto do diálogo dele.
+    const maximo = inteiro($("dlg-verificar").querySelector("form").maximo.value, 5, 1, 500);
+    ficha.avisos = RM.verificarDesenho(a.doc, blocos, { flutuacaoMaxima: maximo }).filter((i) => i.nivel !== "info").length;
+  }
   const uso = RM.usoDoProcessamento(a.doc, blocos);
-  const pd = processamentoDe(a);
+  const pd = completarGuias(processamentoDe(a), uso);
   const total = somaFaltas(RM.faltasDoProcessamento(pd, uso, repeticoesDe(a)));
   const preenchido = (v) => String(v ?? "").trim() !== "";
   const semFio = uso.guias.filter((u) => !preenchido((pd.guias[u.valor] || {}).fio)).map((u) => u.valor);
@@ -3033,9 +3086,15 @@ function itensAntesDeTecer() {
   const base = baseDoNome(a.nome);
   const junto = (tipo) => estado.abas.some((x) => x.tipo === tipo && baseDoNome(x.nome) === base);
   const programas = junto("programa") && junto("ajustes");
-  const erros = ficha.erros;
+  const avisos = ficha.avisos;
   return [
-    { ok: !erros, titulo: "Verificação sem erros", detalhe: erros ? `${erros} erro${erros === 1 ? "" : "s"} no Verificar` : "nenhum erro nas regras do Verificar", ir: "verificar", botao: "Verificar…" },
+    {
+      ok: !avisos,
+      titulo: "Verificar sem avisos",
+      detalhe: avisos ? `${avisos} aviso${avisos === 1 ? "" : "s"} no Verificar: confira se são esperados` : "nenhum aviso nas regras do Verificar",
+      ir: "verificar",
+      botao: "Verificar…",
+    },
     { ok: !total, titulo: "Processamento completo", detalhe: total ? `faltam ${total} valores` : "todos os passos preenchidos", ir: "processar", botao: "Processar…" },
     { ok: !semFio.length, titulo: "Fio de cada guia-fio", detalhe: semFio.length ? `sem fio: R3 ${semFio.join(", ")} (preencha nesta ficha)` : uso.guias.length ? "todos os guias com fio" : "a R3 não usa guias" },
     { ok: !vazios.length, titulo: "Ficha preenchida", detalhe: vazios.length ? `falta: ${vazios.join(", ")}` : "código, descrição, máquina e fio" },
@@ -3072,8 +3131,8 @@ function desenharChecklist() {
       pd.guias[alvo.dataset.fio] = { ...(pd.guias[alvo.dataset.fio] || {}), fio: alvo.value };
       gravarProcessamento(ficha.a);
     } else {
-      if (alvo.dataset.campo) v.campos[alvo.dataset.campo] = alvo.value;
-      else if (alvo.name && alvo.name.startsWith("t-")) v.tempo[alvo.name.slice(2)] = alvo.value;
+      if (alvo.dataset.campo) v.campos[alvo.dataset.campo] = ficha.proprios.campos[alvo.dataset.campo] = alvo.value;
+      else if (alvo.name && alvo.name.startsWith("t-")) v.tempo[alvo.name.slice(2)] = ficha.proprios.tempo[alvo.name.slice(2)] = alvo.value;
       else if (alvo.name === "corTexto" || alvo.name === "corFundo") v[alvo.name] = numeroCor(alvo.value);
       else if (alvo.name === "escala") v.escala = Number(alvo.value);
       else return;
@@ -3085,7 +3144,7 @@ function desenharChecklist() {
   $("ficha-usar-tempo").addEventListener("click", () => {
     const s = ficha && tempoDaFicha();
     if (s === null || !ficha) return;
-    ficha.dados.campos.tempo = formatarTempo(s);
+    ficha.dados.campos.tempo = ficha.proprios.campos.tempo = formatarTempo(s);
     $("ficha-campos").querySelector('[data-campo="tempo"]').value = ficha.dados.campos.tempo;
     gravarFicha();
     desenharFicha();
