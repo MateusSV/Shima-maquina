@@ -35,6 +35,9 @@ const SUGESTOES_CORES = {
   12: "tuck atrás",
   13: "largura do guia-fio",
   16: "sem seleção (não tece)",
+  51: "malha na frente sem transferir",
+  61: "frente e mover 1 agulha à esquerda",
+  71: "frente e mover 1 agulha à direita",
 };
 const NOMES_LINHAS = { R1: "economizador / repetição", R2: "economizador: repetição de fora", R3: "guia-fio", R5: "cancelar malha", R6: "ponto (densidade)" };
 const CHAVE_LEGENDA = "editor-shima-legenda";
@@ -120,6 +123,7 @@ let imagem = null;
 let lut = new Uint32Array(256);
 let gesto = null;
 let contadorAbas = 0;
+let contadorLotes = 0; // arquivos abertos juntos do computador vêm da mesma pasta
 
 // ------------------------------------------------------------------ utilidades
 
@@ -300,7 +304,8 @@ function abaDat() {
   return a && a.tipo === "dat" ? a : null;
 }
 
-function abrirBuffer(nome, buffer, origem) {
+// extra: { lote, pastaNome } para saber que arquivos vieram da mesma pasta.
+function abrirBuffer(nome, buffer, origem, extra = {}) {
   if (!buffer.byteLength) {
     avisar(`${nome} está vazio (0 bytes).`, true);
     return null;
@@ -321,7 +326,7 @@ function abrirBuffer(nome, buffer, origem) {
     avisar(`Não foi possível abrir ${nome}: ${erro.message}`, true);
     return null;
   }
-  const aba = { id: ++contadorAbas, nome, origem, tipo: aberto.tipo, aberto, modificado: false, tamanho: buffer.byteLength };
+  const aba = { id: ++contadorAbas, nome, origem, tipo: aberto.tipo, aberto, modificado: false, tamanho: buffer.byteLength, ...extra };
   if (aba.tipo === "dat") {
     Object.assign(aba, { doc: aberto.doc, hist: [], refazer: [], selecao: null, flutuante: null, zoom: null, rolagem: null });
     aba.original = retrato(aba); // para "Voltar ao original"
@@ -582,11 +587,11 @@ async function abrirDaPasta(nome) {
   try {
     if (estado.pastaLocal) {
       const arquivo = await (await estado.pastaLocal.getFileHandle(nome)).getFile();
-      return abrirBuffer(nome, await arquivo.arrayBuffer(), "pasta");
+      return abrirBuffer(nome, await arquivo.arrayBuffer(), "pasta", { pastaNome: estado.pasta });
     }
     const resposta = await fetch("/api/arquivos/" + encodeURIComponent(nome), { cache: "no-store" });
     if (!resposta.ok) throw new Error(`o servidor respondeu ${resposta.status}`);
-    return abrirBuffer(nome, await resposta.arrayBuffer(), "pasta");
+    return abrirBuffer(nome, await resposta.arrayBuffer(), "pasta", { pastaNome: estado.pasta });
   } catch (erro) {
     avisar(`Não foi possível abrir ${nome}: ${erro.message}`, true);
     return null;
@@ -608,6 +613,7 @@ async function abrirLocais(arquivos) {
   let primeiroDat = null;
   let abertos = 0;
   const falhas = [];
+  const lote = ++contadorLotes;
   for (const arquivo of arquivos) {
     // Numa pasta inteira, ignora arquivos ocultos e as cópias .bak.
     if (arquivo.name.startsWith(".") || /\.(bak|tmp)$/i.test(arquivo.name)) continue;
@@ -619,7 +625,9 @@ async function abrirLocais(arquivos) {
       falhas.push(arquivo.name);
       continue;
     }
-    const aba = abrirBuffer(arquivo.name, conteudo, "local");
+    // Abrindo a pasta inteira, o caminho diz o nome dela ("07 122 SSGsv/00_C_P.000").
+    const pastaNome = (arquivo.webkitRelativePath || "").split("/").slice(-2, -1)[0] || "";
+    const aba = abrirBuffer(arquivo.name, conteudo, "local", { lote, pastaNome });
     if (!aba) {
       falhas.push(arquivo.name);
       continue;
@@ -784,6 +792,102 @@ function posicionarCaixas() {
   const r = contornoDaLinha(a);
   contorno.hidden = !r;
   if (r) posicionar(contorno, r);
+  agendarReguas();
+}
+
+// ------------------------------------------------------------------ réguas
+// Números das carreiras (à esquerda, de baixo para cima, como a máquina conta) e das agulhas (embaixo) da parte
+// do desenho que aparece na janela, com a seleção marcada. Ficam fora da janela e seguem a rolagem e o zoom.
+
+let pedidoReguas = 0;
+
+function agendarReguas() {
+  if (!pedidoReguas) pedidoReguas = requestAnimationFrame(desenharReguas);
+}
+
+function desenharReguas() {
+  pedidoReguas = 0;
+  const a = abaDat();
+  if (!a) return;
+  const j = $("janela"), folha = $("folha"), d = a.doc, z = a.zoom;
+  const css = getComputedStyle(document.documentElement);
+  const cor = (nome, padrao) => css.getPropertyValue(nome).trim() || padrao;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const preparar = (cv) => {
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+    }
+    const g = cv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    g.font = '10px "IBM Plex Mono", monospace';
+    g.lineWidth = 1;
+    return { g, w, h };
+  };
+  // De quantos em quantos numerar para os números não se encostarem.
+  const passo = (minimo) => [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find((p) => p * z >= minimo) || 10000;
+  const r = a.flutuante || a.selecao;
+  const marca = cor("--destaque-fundo", "rgba(180, 83, 47, 0.12)");
+  const texto = cor("--suave", "#5E574B"), traco = cor("--botao-borda", "#CFC6B5");
+
+  {
+    const { g, w, h } = preparar($("regua-carreiras"));
+    const topo = folha.offsetTop - j.scrollTop; // onde começa a linha de cima do desenho
+    if (r) {
+      g.fillStyle = marca;
+      g.fillRect(0, topo + r.y * z, w, r.h * z);
+    }
+    const p = passo(14);
+    const y0 = Math.max(0, Math.floor(-topo / z)), y1 = Math.min(d.altura - 1, Math.ceil((h - topo) / z));
+    g.fillStyle = texto;
+    g.strokeStyle = traco;
+    g.textAlign = "right";
+    g.textBaseline = "middle";
+    g.beginPath();
+    for (let y = y0; y <= y1; y++) {
+      const c = d.altura - y;
+      if (c % p) continue;
+      const cy = topo + (y + 0.5) * z;
+      g.fillText(String(c), w - 7, cy);
+      g.moveTo(w - 4, Math.round(cy) + 0.5);
+      g.lineTo(w, Math.round(cy) + 0.5);
+    }
+    g.stroke();
+  }
+  {
+    const { g, w, h } = preparar($("regua-agulhas"));
+    const esq = folha.offsetLeft - j.scrollLeft;
+    if (r) {
+      g.fillStyle = marca;
+      g.fillRect(esq + r.x * z, 0, r.w * z, h);
+    }
+    const p = passo(34);
+    const x0 = Math.max(0, Math.floor(-esq / z)), x1 = Math.min(d.largura - 1, Math.ceil((w - esq) / z));
+    g.fillStyle = texto;
+    g.strokeStyle = traco;
+    g.textAlign = "center";
+    g.textBaseline = "top";
+    g.beginPath();
+    for (let x = x0; x <= x1; x++) {
+      if ((x + 1) % p) continue;
+      const cx = esq + (x + 0.5) * z;
+      g.fillText(String(x + 1), cx, 5);
+      g.moveTo(Math.round(cx) + 0.5, 0);
+      g.lineTo(Math.round(cx) + 0.5, 3);
+    }
+    g.stroke();
+  }
+}
+
+// " (agulhas 451–653, carreiras 203–359)": onde fica a seleção (ou a colagem) no desenho.
+function faixaNoDesenho(r, d) {
+  const x0 = Math.max(0, r.x), x1 = Math.min(d.largura - 1, r.x + r.w - 1);
+  const y0 = Math.max(0, r.y), y1 = Math.min(d.altura - 1, r.y + r.h - 1);
+  if (x1 < x0 || y1 < y0) return " (fora do desenho)";
+  const faixa = (p, q) => (p === q ? String(p) : `${p}–${q}`);
+  return ` (agulha${x1 > x0 ? "s" : ""} ${faixa(x0 + 1, x1 + 1)}, carreira${y1 > y0 ? "s" : ""} ${faixa(d.altura - y1, d.altura - y0)})`;
 }
 
 // ------------------------------------------------------------------ histórico
@@ -1197,6 +1301,7 @@ $("janela").addEventListener(
   },
   { passive: false },
 );
+$("janela").addEventListener("scroll", agendarReguas, { passive: true });
 
 // ------------------------------------------------------------------ operações do painel
 
@@ -1980,7 +2085,7 @@ function atualizarStatus(p) {
     $("status-posicao").textContent = "—";
   }
   const r = a.flutuante || a.selecao;
-  $("status-selecao").textContent = r ? `${a.flutuante ? "Colagem" : "Seleção"} ${r.w} × ${r.h}` : "";
+  $("status-selecao").textContent = r ? `${a.flutuante ? "Colagem" : "Seleção"} ${r.w} × ${r.h}${faixaNoDesenho(r, d)}` : "";
   const motivo = estado.ferramenta === "carimbo" ? (estado.motivo ? ` · ${estado.motivo.nome} ${estado.motivo.w}×${estado.motivo.h}` : " · escolha um motivo") : "";
   $("status-ferramenta").textContent = `${FERRAMENTAS[estado.ferramenta].nome}${["lapis", "borracha", "linha", "retangulo"].includes(estado.ferramenta) ? ` · ${estado.pincel} px` : ""}${motivo}${estado.espelhado ? " · espelhado" : ""}`;
   $("status-tamanho").textContent = `${d.largura} × ${d.altura} · ${Math.round(a.zoom * 100)}%`;

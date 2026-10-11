@@ -123,15 +123,20 @@
       <label class="campo-barra" title="Desenha o tipo de ponto de cada código (frente, atrás, tuck, sem seleção, mover) com zoom de 800% ou mais"><input type="checkbox" id="mostrar-simbolos"> Símbolos</label>
     </div>
 
-    <div class="janela" id="janela">
-      <div class="folha" id="folha">
-        <canvas id="tela"></canvas>
-        <div class="grade" id="grade" hidden></div>
-        <canvas class="simbolos" id="simbolos" hidden></canvas>
-        <div class="caixa-selecao" id="caixa-selecao" hidden></div>
-        <div class="caixa-flutuante" id="caixa-flutuante" hidden></div>
-        <div class="contorno-linha" id="contorno-linha" hidden></div>
+    <div class="area-janela">
+      <canvas class="regua regua-carreiras" id="regua-carreiras" aria-hidden="true" title="Carreiras, contadas de baixo para cima"></canvas>
+      <div class="janela" id="janela">
+        <div class="folha" id="folha">
+          <canvas id="tela"></canvas>
+          <div class="grade" id="grade" hidden></div>
+          <canvas class="simbolos" id="simbolos" hidden></canvas>
+          <div class="caixa-selecao" id="caixa-selecao" hidden></div>
+          <div class="caixa-flutuante" id="caixa-flutuante" hidden></div>
+          <div class="contorno-linha" id="contorno-linha" hidden></div>
+        </div>
       </div>
+      <span class="regua-canto" aria-hidden="true"></span>
+      <canvas class="regua regua-agulhas" id="regua-agulhas" aria-hidden="true" title="Agulhas, contadas da esquerda"></canvas>
     </div>
 
     <footer class="status mono" id="status">
@@ -177,16 +182,17 @@
 
   <section class="grupo">
     <h2 class="rotulo">Desenvolver o modelo</h2>
+    <p class="suave pequeno">Em 10 etapas: o número de cada botão é a etapa. A 3 é o desenho aqui no editor e a 5, as linhas de opção abaixo.</p>
     <div class="botoes-grade">
-      <button type="button" class="botao" data-recurso="modelo" title="Medidas em cm viram agulhas e carreiras pela densidade da amostra">Modelo…</button>
-      <button type="button" class="botao" data-recurso="forma" title="Diminuições, aumentos, arremates e malha parcial de cada peça">Forma…</button>
-      <button type="button" class="botao" data-recurso="gerar" title="Listras, losango (argyle) e texto">Gerar padrão…</button>
-      <button type="button" class="botao" data-recurso="jacquard" title="Fios soltos do jacquard e guia-fios da intarsia">Jacquard e intarsia…</button>
-      <button type="button" class="botao" data-recurso="verificar" title="Procura falhas antes de ir para a máquina e mostra as agulhas carreira a carreira">Verificar…</button>
-      <button type="button" class="botao" data-recurso="desenvolver" title="Início, barra e final da peça e os blocos do economizador (R2) repetidos">Pacotes e altura…</button>
-      <button type="button" class="botao" data-recurso="processar" title="Máquina, guia-fios, ponto, puxador e velocidade">Processar…</button>
-      <button type="button" class="botao" data-recurso="simular" title="Prévia da malha com o tipo de fio e as cores">Simular malha…</button>
-      <button type="button" class="botao" data-recurso="ficha" title="Ficha técnica, tempo de tecimento e texto escrito no desenho">Ficha técnica…</button>
+      <button type="button" class="botao" data-recurso="modelo" title="Etapa 1: medidas em cm viram agulhas e carreiras pela densidade da amostra"><span class="num-etapa" aria-hidden="true">1</span>Modelo…</button>
+      <button type="button" class="botao" data-recurso="forma" title="Etapa 2: diminuições, aumentos, arremates e malha parcial de cada peça"><span class="num-etapa" aria-hidden="true">2</span>Forma…</button>
+      <button type="button" class="botao" data-recurso="gerar" title="Etapa 4: listras, losango (argyle), onça e logo"><span class="num-etapa" aria-hidden="true">4</span>Gerar padrão…</button>
+      <button type="button" class="botao" data-recurso="jacquard" title="Etapa 4: fios soltos do jacquard e guia-fios da intarsia"><span class="num-etapa" aria-hidden="true">4</span>Jacquard e intarsia…</button>
+      <button type="button" class="botao" data-recurso="desenvolver" title="Etapa 6: início, barra e final da peça e os blocos do economizador (R2) repetidos"><span class="num-etapa" aria-hidden="true">6</span>Pacotes e altura…</button>
+      <button type="button" class="botao" data-recurso="processar" title="Etapa 7: máquina, guia-fios, ponto, puxador e velocidade"><span class="num-etapa" aria-hidden="true">7</span>Processar…</button>
+      <button type="button" class="botao" data-recurso="verificar" title="Etapa 8: procura falhas antes de ir para a máquina e mostra as agulhas carreira a carreira"><span class="num-etapa" aria-hidden="true">8</span>Verificar…</button>
+      <button type="button" class="botao" data-recurso="simular" title="Etapa 9: prévia da malha com o tipo de fio e as cores"><span class="num-etapa" aria-hidden="true">9</span>Simular malha…</button>
+      <button type="button" class="botao" data-recurso="ficha" title="Etapa 10: ficha técnica, tempo de tecimento e arquivos para a máquina"><span class="num-etapa" aria-hidden="true">10</span>Ficha técnica…</button>
     </div>
   </section>
 
@@ -228,6 +234,7 @@
         <label class="campo">Painel <select id="opcao-painel"></select></label>
         <label class="campo">Linha <select id="opcao-linha"></select></label>
       </div>
+      <p class="suave pequeno">À esquerda do painel ficam L20 a L1 e à direita R1 a R20. Cada linha ocupa 2 agulhas: a de dentro mostra o número da linha e o valor vai na de fora. Escolha a linha aqui ou clique na coluna dela com o conta-gotas.</p>
       <div class="todas-linhas" id="opcao-todas" role="group" aria-label="Todas as linhas de opção; com ponto, usada no painel"></div>
       <p class="suave pequeno" id="opcao-ajuda"></p>
       <label class="campo"><span id="rotulo-opcao-nome">Nome da linha</span> <input type="text" id="opcao-nome" maxlength="60" autocomplete="off"></label>
@@ -389,6 +396,7 @@
     <div class="colunas-dialogo">
       <div class="coluna">
         <label class="campo">Estilo <select name="estilo"></select></label>
+        <p class="dica-estilo" id="modelo-dica"></p>
         <h3 class="sub">Amostra e máquina</h3>
         <div class="linha-campos">
           <label class="campo">Colunas em 10 cm <input type="number" name="colunas" min="1" max="200" step="0.1" required></label>
@@ -398,9 +406,11 @@
           <label class="campo">Máquina <select name="maquina"></select></label>
           <label class="campo">Finura <select name="finura"></select></label>
         </div>
+        <p class="suave pequeno" id="modelo-pasta" hidden></p>
         <p class="suave pequeno" id="modelo-passo"></p>
         <p class="suave pequeno">Meça a amostra lavada e passada, na finura e no fio do modelo.</p>
         <h3 class="sub">Medidas em cm</h3>
+        <p class="suave pequeno" id="modelo-aviso-medidas"></p>
         <div class="medidas" id="modelo-medidas"></div>
       </div>
       <div class="coluna">
@@ -611,7 +621,7 @@
         <label class="campo">Mais de quantas agulhas seguidas sem seleção (16) é flutuação longa <input type="number" name="maximo" min="1" max="500" value="5"></label>
         <div class="chips" id="verificar-filtros" role="group" aria-label="Filtrar"></div>
         <ul class="itens-verificacao" id="verificar-itens"></ul>
-        <p class="suave pequeno">As regras usam significados de referências públicas (R3 guia-fio, R5 cancelar malha, R6 ponto, 13 largura do guia, 16 sem seleção). Confira na sua versão do KnitPaint.</p>
+        <p class="suave pequeno">As regras usam significados de referências públicas (R3 guia-fio, R5 cancelar malha, R6 ponto, 13 largura do guia, 16 sem seleção, 60/70 transferência). Confira na sua versão do KnitPaint. ERRO: corrija antes de tecer. AVISO: confira se é de propósito.</p>
       </div>
       <div class="coluna">
         <h3 class="sub">Agulhas e carro, carreira a carreira</h3>

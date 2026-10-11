@@ -359,8 +359,8 @@ function desenharBiblioteca() {
   } else {
     el.innerHTML = cat.motivos
       .map(
-        (m, i) => `<div class="item-motivo"><button type="button" class="motivo" data-motivo="${i}" aria-pressed="${estado.motivo === m}" title="${esc(m.nome)}: ${m.w} × ${m.h} pontos">
-          <canvas aria-hidden="true"></canvas><span class="nome-motivo">${esc(m.nome)}</span><span class="tamanho-motivo mono">${m.w} × ${m.h}</span></button>${
+        (m, i) => `<div class="item-motivo"><button type="button" class="motivo" data-motivo="${i}" aria-pressed="${estado.motivo === m}" title="${esc(m.nome)}: ${m.w} × ${m.h} pontos, códigos ${codigosDoMotivo(m)}">
+          <canvas aria-hidden="true"></canvas><span class="nome-motivo">${esc(m.nome)}</span><span class="tamanho-motivo mono">${m.w} × ${m.h} · ${codigosDoMotivo(m)}</span></button>${
           cat.meus ? `<button type="button" class="apagar-motivo" data-apagar-motivo="${i}" aria-label="Apagar ${esc(m.nome)}" title="Apagar">×</button>` : ""
         }</div>`,
       )
@@ -372,6 +372,9 @@ function desenharBiblioteca() {
     ? `Carimbo: <strong>${esc(m.nome)}</strong> <span class="mono suave">${m.w} × ${m.h}</span>`
     : `<span class="suave">Escolha um motivo para o carimbo.</span>`;
 }
+
+// Códigos que o motivo usa, em ordem: "1, 2, 61, 71".
+const codigosDoMotivo = (m) => [...new Set(m.px)].sort((x, y) => x - y).join(", ");
 
 // Prévia do motivo repetido (pelo menos 8 × 8 pontos), a partir do canto de baixo à esquerda.
 function desenharMotivo(cv, m, paleta) {
@@ -571,11 +574,15 @@ function linhasUsadas(a, p) {
 }
 
 const AJUDA_LINHAS = {
+  R1: "Num manual antigo da Shima, a R1 marca a repetição que fica dentro de outra (economizador). A coluna de dentro costuma alternar 6 e 7 a cada carreira, como a ida e a volta do carro; o valor vai na de fora.",
   R2: "Os blocos desta linha se repetem na máquina: diga quantas vezes em Pacotes e altura ou no Processar.",
   R3: "No Processar, cada número desta linha vira um guia-fio, com o fio, a cor e o lado por onde ele entra.",
-  R5: "Pacotes e altura usa esta linha para achar as carreiras de transferência.",
+  R5: "As carreiras com R5 não tricotam (cancelar malha). Pacotes e altura usa esta linha para achar as carreiras de transferência.",
   R6: "No Processar, cada número desta linha recebe o valor de ponto da frente e de trás. Pacotes e altura usa esta linha para achar a barra e o corpo.",
 };
+
+const AJUDA_OUTRA_LINHA =
+  "Função não confirmada para esta linha. Racking, velocidade do carro e puxador também são definidos em linhas de opção: confira o número de cada um no manual da sua versão e dê um nome aqui.";
 
 // Grade com as 20 linhas de cada lado: a escolhida destacada, as usadas com um ponto.
 function htmlTodasAsLinhas(p, usadas, escolhida) {
@@ -623,8 +630,10 @@ function atualizarLinhaEscolhida(a = abaDat()) {
   const usadas = linhasUsadas(a, atual.p);
   trocarHtml($("opcao-todas"), htmlTodasAsLinhas(atual.p, usadas, id));
   const nomeAtual = nomeDaLinha(id);
-  $("opcao-ajuda").textContent = `${id}${nomeAtual ? ` (${nomeAtual})` : ""}: ${usadas.has(id) ? "tem valores neste painel" : "vazia neste painel"}. ${
-    AJUDA_LINHAS[id] || "Clique num valor da lista para selecionar as carreiras dele no desenho."
+  // Sem função conhecida (e sem nome dado pela pessoa), a ajuda lembra que outras funções também usam linhas.
+  const ajuda = AJUDA_LINHAS[id] || (nomesLinhas[id] ? "" : AJUDA_OUTRA_LINHA);
+  $("opcao-ajuda").textContent = `${id}${nomeAtual ? ` (${nomeAtual})` : ""}: ${usadas.has(id) ? "tem valores neste painel" : "vazia neste painel"}.${ajuda ? ` ${ajuda}` : ""}${
+    usadas.has(id) ? " Clique num valor da lista para selecionar as carreiras dele no desenho." : ""
   }`;
   $("rotulo-opcao-nome").textContent = `Nome da linha ${id}`;
   const campoNome = $("opcao-nome");
@@ -823,6 +832,11 @@ function abrirModelo() {
 
 function desenharMedidas() {
   const r = calcularModeloAtual();
+  $("modelo-dica").textContent = r.estilo.dica || "";
+  $("modelo-aviso-medidas").textContent =
+    r.estilo.id === "painel"
+      ? "Os valores de exemplo são os do painel 1 do 00FE_BLS_ESTAMPA_ONÇA (203 × 179 pontos com a amostra de 30 × 40). Troque pelas medidas do seu painel."
+      : "Exemplo de tamanho médio. Troque pelas medidas da ficha do cliente.";
   const valores = modelo.valores[modelo.estilo] || {};
   $("modelo-medidas").innerHTML = r.medidas
     .map(
@@ -858,6 +872,17 @@ function desenharPecas(r = calcularModeloAtual()) {
 
 // A distância entre agulhas pela finura e o desenho aberto medido em cm com a amostra.
 function atualizarTextosModelo() {
+  const a = abaDat();
+  const pasta = a && a.pastaNome ? RM.maquinaDaPasta(a.pastaNome) : { maquina: "", finura: "" };
+  const elPasta = $("modelo-pasta");
+  elPasta.hidden = !(pasta.maquina || pasta.finura);
+  if (!elPasta.hidden) {
+    const texto = [pasta.maquina, pasta.finura && `${pasta.finura}G`].filter(Boolean).join(" e ");
+    const iguais = (!pasta.maquina || pasta.maquina === modelo.maquina) && (!pasta.finura || Number(pasta.finura) === Number(modelo.finura));
+    elPasta.innerHTML = iguais
+      ? `${esc(texto)}, como no nome da pasta ${esc(a.pastaNome)}.`
+      : `Pelo nome da pasta ${esc(a.pastaNome)}: ${esc(texto)}. <button type="button" class="botao pequeno" id="modelo-usar-pasta">Usar</button>`;
+  }
   const f = Number(modelo.finura) || 7;
   $("modelo-passo").textContent = `Na finura ${f}G a distância entre agulhas é de ${(25.4 / f).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mm (25,4 ÷ ${f}).`;
   const el = $("modelo-arquivo");
@@ -963,13 +988,20 @@ function contornoDaForma(ocup, X, Y) {
 function esquemaSvg(peca, f, plano, densidade) {
   const cmX = 10 / Math.max(0.1, decimal(densidade.colunas, 30)), cmY = 10 / Math.max(0.1, decimal(densidade.carreiras, 40));
   const { W, H } = plano;
-  const k = Math.min(300 / (W * cmX), 320 / (H * cmY));
+  // Na frente do cardigã aparece também a outra frente (o espelho, tracejada), com as vistas dos botões uma
+  // sobre a outra, e a abertura no meio do corpo, da barra até o começo do V.
+  const vista = f.meia ? limitar(Math.round(f.vista || 0), 0, Math.floor(W / 2)) : 0;
+  const centro = W - vista; // meio do corpo, em agulhas da frente desenhada
+  const larguraTotal = f.meia ? 2 * centro : W;
+  const k = Math.min(300 / (larguraTotal * cmX), 320 / (H * cmY));
   const mx = 74, mt = 34, mb = 48, mr = 40;
   const sx = cmX * k, sy = cmY * k;
   const X = (x) => mx + x * sx, Y = (c) => mt + (H - c) * sy;
-  const vbW = Math.round(mx + W * sx + mr), vbH = Math.round(mt + H * sy + mb);
+  const vbW = Math.round(mx + larguraTotal * sx + mr), vbH = Math.round(mt + H * sy + mb);
   const ocup = ocupacaoDaForma(plano);
-  const partes = [`<path class="contorno" d="${contornoDaForma(ocup, X, Y)}"/>`];
+  const partes = [];
+  if (f.meia) partes.push(`<path class="contorno-espelho" d="${contornoDaForma(ocup, (x) => X(2 * centro - x), Y)}"/>`);
+  partes.push(`<path class="contorno" d="${contornoDaForma(ocup, X, Y)}"/>`);
   const linha = (x1, y1, x2, y2, classe = "cota") => partes.push(`<line class="${classe}" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`);
   const texto = (x, y, t, extra = "") => partes.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}"${extra}>${esc(t)}</text>`);
   // Largura da primeira carreira, embaixo.
@@ -994,24 +1026,35 @@ function esquemaSvg(peca, f, plano, densidade) {
   // Cota à direita do trecho de cima (cava ou copa) e a largura de onde ele começa.
   const lado = (de, nome) => {
     if (!(de > 0 && de < H)) return;
-    const xr = X(W) + 14;
+    const xr = X(larguraTotal) + 14;
     linha(xr, Y(de), xr, Y(H));
     linha(xr - 5, Y(de), xr + 5, Y(de));
     linha(xr - 5, Y(H), xr + 5, Y(H));
     const meio = (Y(de) + Y(H)) / 2;
     texto(xr + 16, meio, `${nome} ${cm1((H - de) * cmY)} cm`, ` text-anchor="middle" transform="rotate(-90 ${(xr + 16).toFixed(1)} ${meio.toFixed(1)})"`);
   };
-  if (f.tipo === "corpo") {
+  if (f.tipo === "corpo" && f.meia) {
+    lado(H - Math.round(f.cava), "cava");
+    // O V começa na primeira carreira em que a borda do meio entra.
+    const v0 = ocup.findIndex((r) => r.length && r[r.length - 1][1] + 1 < W);
+    if (v0 > 0) {
+      linha(X(centro), Y(0), X(centro), Y(v0), "linha-abertura");
+      texto(X(centro) - 4, Y(v0 / 2), "abertura", ` class="pequeno" text-anchor="middle" transform="rotate(-90 ${(X(centro) - 4).toFixed(1)} ${Y(v0 / 2).toFixed(1)})"`);
+    }
+    const gola = Math.max(0, 2 * (Math.round(f.gola) - vista));
+    texto(X(centro), mt - 12, `gola V ${cm1(gola * cmX)} cm · ${gola} ag.`, ' text-anchor="middle"');
+    texto(X(2 * centro - W / 2), Y(H / 2), "outra frente", ' text-anchor="middle" class="pequeno suave"');
+  } else if (f.tipo === "corpo") {
     lado(H - Math.round(f.cava), "cava");
     const gola = Math.round(f.gola);
-    texto(X(W / 2), mt - 12, `gola ${cm1(gola * cmX)} cm · ${gola} ag.`, ' text-anchor="middle"');
+    texto(X(W / 2), mt - 12, `gola${f.decote === "v" ? " V" : ""} ${cm1(gola * cmX)} cm · ${gola} ag.`, ' text-anchor="middle"');
   } else if (f.tipo === "manga") {
     const copa0 = H - Math.round(f.copa);
     lado(copa0, "copa");
     const r = ocup[Math.max(0, copa0 - 1)];
     if (r && r.length) texto(X(W / 2), Y(copa0) + 16, `${cm1((r[r.length - 1][1] + 1 - r[0][0]) * cmX)} cm`, ' text-anchor="middle"');
   }
-  const nome = `${peca.nome}: ${cm1(W * cmX)} × ${cm1(H * cmY)} cm`;
+  const nome = `${peca.nome}: ${cm1(W * cmX)} × ${cm1(H * cmY)} cm${f.meia ? ", com a outra frente tracejada ao lado" : ""}`;
   return `<svg viewBox="0 0 ${vbW} ${vbH}" role="img" aria-label="${esc(`Esquema da peça ${nome}`)}">${partes.join("")}</svg>`;
 }
 
@@ -1060,6 +1103,15 @@ function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
   form.esquema.addEventListener("change", () => {
     esquemaPeca = Number(form.esquema.value);
     desenharEsquema();
+  });
+  $("modelo-pasta").addEventListener("click", (e) => {
+    if (!e.target.closest("#modelo-usar-pasta")) return;
+    const a = abaDat();
+    const pasta = RM.maquinaDaPasta(a && a.pastaNome);
+    if (pasta.maquina) modelo.maquina = pasta.maquina;
+    if (pasta.finura) modelo.finura = pasta.finura;
+    gravarArmazenado(CHAVE_MODELO, modelo);
+    abrirModelo();
   });
   $("modelo-medidas").addEventListener("input", (e) => {
     const id = e.target.dataset.medida;
@@ -1127,9 +1179,23 @@ const CAMPOS_AJUSTE = {
     ["H", "Altura", "carreiras"],
     ["barra", "Barra", "carreiras"],
   ],
+  // Frente do cardigã: a cava fica de um lado só e a gola em V na borda do meio.
+  frente: [
+    ["W", "Largura da frente", "agulhas (com a vista)"],
+    ["H", "Altura", "carreiras"],
+    ["barra", "Barra", "carreiras"],
+    ["cava", "Altura da cava", "carreiras"],
+    ["recuo", "Cava: tirar", "agulhas"],
+    ["arremCava", "Cava: arremate inicial", "agulhas"],
+    ["gola", "Gola V: tirar no meio", "agulhas"],
+    ["golaP", "Fundo da gola", "carreiras"],
+    ["degraus", "Ombro: degraus", "malha parcial, 1 a cada 2 carreiras"],
+  ],
 };
+const camposDeAjuste = (forma) => CAMPOS_AJUSTE[forma.meia ? "frente" : forma.tipo] || [];
 
-const chaveAjuste = (r, peca) => `${r.estilo.id}|${peca.nome}`;
+// A frente do cardigã mudou de forma (antes era a frente inteira): os ajustes velhos dela não valem mais.
+const chaveAjuste = (r, peca) => `${r.estilo.id}|${peca.nome}${peca.forma.meia ? "|meia" : ""}`;
 
 // Forma da peça com os números ajustados à mão na Forma (o resto vem das medidas do Modelo).
 function formaDaPeca(peca, r = ultimoModelo || calcularModeloAtual()) {
@@ -1163,7 +1229,7 @@ function desenharAjustesForma() {
   const ajustes = formaOpcoes.ajustes[chaveAjuste(r, peca)] || {};
   const forma = formaDaPeca(peca, r);
   $("forma-origem").textContent = `Números do Modelo (${r.estilo.nome}, amostra ${modelo.colunas} × ${modelo.carreiras} em 10 cm). Mude aqui para ajustar em agulhas e carreiras.`;
-  $("forma-ajustes").innerHTML = (CAMPOS_AJUSTE[peca.forma.tipo] || [])
+  $("forma-ajustes").innerHTML = camposDeAjuste(peca.forma)
     .map(
       ([k, nome, unidade]) => `<label class="campo${k in ajustes ? " ajustado" : ""}">${esc(nome)}
         <input type="number" min="0" max="8000" step="1" data-ajuste="${k}" value="${esc(forma[k])}" title="Do Modelo: ${esc(peca.forma[k])}">
@@ -1215,8 +1281,11 @@ function desenharGradeForma(plano, passo) {
   // Bordas arredondadas para os pixels da tela: sem isso, com zoom quebrado, aparecem frestas entre as carreiras.
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const px = (v) => Math.round(v * dpr) / dpr;
+  // Cada borda sai sempre da mesma conta (pelo número da borda), para duas carreiras vizinhas dividirem a
+  // mesma borda: somar ch a uma e multiplicar na outra às vezes arredonda para pixels diferentes.
+  const bordaY = (j) => px(M.topo + j * ch), bordaX = (x) => px(M.esq + x * cw);
   const faixa = (x0, x1, c, cor) => {
-    const xa = px(M.esq + x0 * cw), xb = px(M.esq + (x1 + 1) * cw), ya = px(yDe(c)), yb = px(yDe(c) + ch);
+    const xa = bordaX(x0), xb = bordaX(x1 + 1), ya = bordaY(plano.H - c), yb = bordaY(plano.H - c + 1);
     g.fillStyle = cor;
     g.fillRect(xa, ya, Math.max(1 / dpr, xb - xa), Math.max(1 / dpr, yb - ya));
   };
@@ -1371,7 +1440,7 @@ function lerPontoDaForma(e) {
       else delete formaOpcoes.ajustes[chave];
       const campo = alvo.closest(".campo");
       campo.classList.toggle("ajustado", k in ajustes);
-      campo.querySelector(".unidade").textContent = `${CAMPOS_AJUSTE[peca.forma.tipo].find((c) => c[0] === k)[2]}${k in ajustes ? ` · Modelo: ${peca.forma[k]}` : ""}`;
+      campo.querySelector(".unidade").textContent = `${camposDeAjuste(peca.forma).find((c) => c[0] === k)[2]}${k in ajustes ? ` · Modelo: ${peca.forma[k]}` : ""}`;
       $("forma-voltar").hidden = !Object.keys(ajustes).length;
     } else if (alvo.name === "peca") {
       formaPeca = Number(alvo.value);
@@ -1765,7 +1834,7 @@ function analisarJacquard() {
   const fl = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada);
   const longas = fl.lista.filter((f) => f.comprimento > maximo);
   const maior = fl.lista.reduce((m, f) => (!m || f.comprimento > m.comprimento ? f : m), null);
-  Object.assign(jacquard, { longas, maior, fl, maximo, estrutura });
+  Object.assign(jacquard, { longas, maior, fl, maximo, estrutura, escada });
   const mostrar = cores.slice(0, 24);
   let html = `<div class="cores-area">${mostrar.map((c) => `<span>${amostraCor(d, c.cor)} <span class="suave">× ${c.n.toLocaleString("pt-BR")}</span></span>`).join("")}${
     cores.length > mostrar.length ? `<span class="suave">+${cores.length - mostrar.length}</span>` : ""
@@ -1812,20 +1881,49 @@ function analisarJacquard() {
   desenharMapaJacquard();
 }
 
-// O avesso visto por trás (espelhado): o desenho escurecido e cada fio solto como um traço da cor dele.
+// O avesso visto por trás (espelhado), conforme a estrutura: no birdseye as cores prendem salpicadas em agulhas
+// alternadas; no tubular o avesso tece a outra cor (o negativo da frente); na escada cada cor prende numa coluna
+// a cada N agulhas; na flutuação aparece o desenho escurecido. Os fios soltos são traços da cor deles.
 function desenharAvessoJacquard(g, z) {
-  const { a, r, fl, maximo } = jacquard;
+  const { a, r, fl, maximo, estrutura, escada } = jacquard;
   const d = a.doc;
   const img = recortarArea(d, r);
-  const espelho = new Uint8Array(img.px.length);
-  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) espelho[y * r.w + x] = img.px[y * r.w + (r.w - 1 - x)];
+  const cores = fl.cores; // na ordem que a regra de prender usa
+  const k = cores.length;
+  const indice = new Map(cores.map((c, i) => [c, i]));
   const base = document.createElement("canvas");
-  pintarPixels(base, { w: r.w, h: r.h, px: espelho }, corDaPaleta(d), 1);
+  base.width = r.w;
+  base.height = r.h;
+  const bg = base.getContext("2d");
+  const dados = bg.createImageData(r.w, r.h);
+  const px32 = new Uint32Array(dados.data.buffer);
+  const rgba = (v, apagar) => {
+    const [rr, gg, bb] = d.paleta[v].map((c) => (apagar ? Math.round(c * 0.4) : c));
+    return ((255 << 24) | (bb << 16) | (gg << 8) | rr) >>> 0;
+  };
+  for (let y = 0; y < r.h; y++) {
+    for (let x = 0; x < r.w; x++) {
+      const frente = img.px[y * r.w + x];
+      let v = frente, apagar = true;
+      if (k > 1 && estrutura === "birdseye") {
+        v = cores[(k - ((x + y) % k)) % k];
+        apagar = false;
+      } else if (k > 1 && estrutura === "tubular") {
+        v = cores[(indice.get(frente) + 1) % k];
+        apagar = false;
+      } else if (k > 1 && estrutura === "escada" && x % escada < k) {
+        v = cores[x % escada];
+        apagar = false;
+      }
+      px32[y * r.w + (r.w - 1 - x)] = rgba(v, apagar);
+    }
+  }
+  bg.putImageData(dados, 0, 0);
   g.drawImage(base, 0, 0, r.w * z, r.h * z);
-  g.fillStyle = "rgba(0, 0, 0, 0.6)";
-  g.fillRect(0, 0, r.w * z, r.h * z);
+  if (estrutura === "tubular") return;
+  // No birdseye os fios soltos são curtos: só os longos aparecem.
+  const lista = (estrutura === "birdseye" ? fl.lista.filter((f) => f.comprimento > maximo) : fl.lista).slice(0, 40000);
   const espessura = Math.max(1, Math.round(z * 0.5));
-  const lista = fl.lista.slice(0, 40000);
   const x0 = (f) => (r.w - 1 - (f.x1 - r.x)) * z;
   const y0 = (f) => (f.y - r.y) * z + Math.floor((z - espessura) / 2);
   // Os longos ganham uma borda amarela por baixo do traço.
@@ -1845,9 +1943,11 @@ function desenharAvessoJacquard(g, z) {
 const LEGENDA_JACQUARD = {
   flutuacoes: (j) => `O desenho escurecido, com os fios soltos de mais de ${j.maximo} agulhas em amarelo.`,
   avesso: (j) =>
-    j.estrutura === "tubular"
-      ? "O avesso visto por trás (espelhado). No tubular o avesso tece todas as cores: não há fio solto."
-      : `O avesso visto por trás (espelhado): cada traço é um fio solto, na cor dele; os de mais de ${j.maximo} agulhas têm borda amarela.`,
+    ({
+      tubular: "O avesso visto por trás (espelhado). No tubular o avesso tece a outra cor em cada ponto (o negativo da frente): não há fio solto.",
+      birdseye: `O avesso visto por trás (espelhado). No birdseye as cores prendem salpicadas, em agulhas alternadas; só aparecem os fios soltos de mais de ${j.maximo} agulhas, com borda amarela.`,
+      escada: `O avesso visto por trás (espelhado). Na escada cada cor prende numa coluna a cada ${j.escada} agulhas e corre solta entre elas (os traços); os de mais de ${j.maximo} agulhas têm borda amarela.`,
+    })[j.estrutura] || `O avesso visto por trás (espelhado): o desenho escurecido e cada fio solto como um traço da cor dele; os de mais de ${j.maximo} agulhas têm borda amarela.`,
   guias: () => "Cada cor é um guia-fio da intarsia; com zoom, o número do guia aparece no meio da área dele.",
 };
 
@@ -1973,7 +2073,7 @@ function rodarVerificacao() {
 }
 
 // Tudo o que o Verificar mostra (as regras do desenho, as de cor e os trechos difíceis do Modelo, que são só
-// informação); a Ficha conta os avisos daqui.
+// informação); a Ficha conta os erros e os avisos daqui.
 function itensDoVerificar(a, maximo) {
   const itens = RM.verificarDesenho(a.doc, blocosDeOpcao(a), { flutuacaoMaxima: maximo });
   const cor = itensDeCor(a, maximo);
@@ -2006,7 +2106,7 @@ function itensDeCor(a, maximo) {
     if (longas.length) {
       const maior = longas.reduce((x, f) => (f.comprimento > x.comprimento ? f : x));
       itens.push({
-        nivel: "aviso",
+        nivel: "erro",
         regra: "jacquard",
         painel: p.numero,
         area: r,
@@ -2021,7 +2121,7 @@ function itensDeCor(a, maximo) {
     const guias = RM.guiasIntarsia(d.pixels, d.largura, r).guias.filter((g) => principais.has(g.cor)).length;
     if (guias > disponiveis) {
       itens.push({
-        nivel: "aviso",
+        nivel: "erro",
         regra: "intarsia",
         painel: p.numero,
         area: r,
@@ -2033,7 +2133,7 @@ function itensDeCor(a, maximo) {
   return itens;
 }
 
-const ONDE_NA_FORMA = { Cava: "na cava", Gola: "na gola", Copa: "na copa", Aumentos: "nos aumentos" };
+const ONDE_NA_FORMA = { Cava: "na cava", Gola: "na gola", "Gola V": "na gola V", Copa: "na copa", Aumentos: "nos aumentos" };
 
 // Trechos difíceis nas peças do Modelo (com os ajustes da Forma): diminuições ou aumentos fortes seguidos.
 function itensDaForma() {
@@ -2065,12 +2165,14 @@ const FERRAMENTAS_VERIF = {
   "sem-ponto": "Abrir o ponto no Processar",
   "cancela-com-guia": "Abrir a linha R5",
   "cancela-coerente": "Abrir a linha R5",
+  "transferencia-com-fio": "Abrir a linha R5",
+  "transferencia-coerente": "Abrir a linha R5",
   "paineis-diferentes": "Ver a R2",
   jacquard: "Abrir jacquard",
   intarsia: "Abrir intarsia",
   forma: "Abrir forma",
 };
-const LINHA_DO_ITEM = { "sem-guia": "R3", "cancela-com-guia": "R5", "cancela-coerente": "R5", "paineis-diferentes": "R2" };
+const LINHA_DO_ITEM = { "sem-guia": "R3", "cancela-com-guia": "R5", "cancela-coerente": "R5", "transferencia-com-fio": "R5", "transferencia-coerente": "R5", "paineis-diferentes": "R2" };
 
 function abrirFerramentaDoItem(item) {
   const a = verif.a;
@@ -3112,9 +3214,11 @@ let proc = null;
 function processamentoDe(a) {
   if (a.processamento) return a.processamento;
   const salvo = lerArmazenado(CHAVE_PROCESSAMENTO + a.nome, {});
+  // Sem nada guardado, a máquina e a finura vêm do nome da pasta ("07 122 SSGsv") e depois do Modelo.
+  const daPasta = RM.maquinaDaPasta(a.pastaNome);
   const dados = {
-    maquina: salvo.maquina ?? modelo.maquina ?? "",
-    finura: salvo.finura ?? modelo.finura ?? "",
+    maquina: salvo.maquina ?? (daPasta.maquina || modelo.maquina || ""),
+    finura: salvo.finura ?? (daPasta.finura || modelo.finura || ""),
     guias: { ...(salvo.guias || {}) },
     pontos: { ...(salvo.pontos || {}) },
     puxador: { ...(salvo.puxador || {}) },
@@ -3227,15 +3331,18 @@ function conteudoMaquina() {
   const ordem = (x) => (x[0] === "L" ? 0 : 100) + Number(x.slice(1));
   const trechos = proc.uso.trechos.map((t) => `${t.nome} ${t.de === t.ate ? t.de : `${t.de}–${t.ate}`}`).join(" · ");
   const comMalha = lista.filter((p) => p.x0 !== null).map((p) => `${p.numero} (agulhas ${p.x0 + 1}–${p.x1 + 1})`);
+  const daPasta = RM.maquinaDaPasta(a.pastaNome);
+  const pelaPasta = [daPasta.maquina, daPasta.finura && `${daPasta.finura}G`].filter(Boolean).join(" ");
   const info = [
+    ...(a.pastaNome ? [["Pasta", `${a.pastaNome}${pelaPasta ? ` (pelo nome: ${pelaPasta})` : ""}`]] : []),
     ["Desenho", `${a.doc.largura} × ${a.doc.altura} pontos`],
     ["Painéis", comMalha.length ? comMalha.join(", ") : String(lista.length)],
     ["Linhas usadas", [...usadas].sort((x, y) => ordem(x) - ordem(y)).join(", ") || "nenhuma"],
     ["Trechos", trechos || "—"],
   ];
   return `<div class="linha-campos">
-      <label class="campo">Máquina <input type="text" data-proc="maquina" list="proc-maquinas" maxlength="40" value="${esc(dados.maquina ?? "")}" autocomplete="off"></label>
-      <label class="campo">Finura <select data-proc="finura"><option value="">—</option>${RM.FINURAS.map(
+      <label class="campo">Máquina <input type="text" data-proc="maquina" data-obrigatorio list="proc-maquinas" maxlength="40" value="${esc(dados.maquina ?? "")}" autocomplete="off"></label>
+      <label class="campo">Finura <select data-proc="finura" data-obrigatorio><option value="">—</option>${RM.FINURAS.map(
         (f) => `<option value="${f}"${String(dados.finura) === String(f) ? " selected" : ""}>${f}G</option>`,
       ).join("")}</select></label>
     </div>
@@ -3251,8 +3358,8 @@ function conteudoGuias() {
       const g = dados.guias[u.valor] || {};
       const cor = corValida(g.cor) ? g.cor : corPadraoDoGuia(u.valor);
       return `<tr><td class="mono"><span class="ponto-guia" style="background:${cor}"></span>${u.valor}<br>${ondeUsado(u)}</td>
-        <td><input type="number" min="1" max="32" data-g="${u.valor}" data-campo="guia" value="${esc(g.guia ?? "")}" aria-label="Guia-fio da R3 ${u.valor}"></td>
-        <td><input type="text" maxlength="40" data-g="${u.valor}" data-campo="fio" value="${esc(g.fio ?? "")}" placeholder="ex.: algodão 2/30" autocomplete="off" aria-label="Fio da R3 ${u.valor}"></td>
+        <td><input type="number" min="1" max="32" data-g="${u.valor}" data-campo="guia" data-obrigatorio value="${esc(g.guia ?? "")}" aria-label="Guia-fio da R3 ${u.valor}"></td>
+        <td><input type="text" maxlength="40" data-g="${u.valor}" data-campo="fio" data-obrigatorio value="${esc(g.fio ?? "")}" placeholder="ex.: algodão 2/30" autocomplete="off" aria-label="Fio da R3 ${u.valor}"></td>
         <td><input type="color" data-g="${u.valor}" data-campo="cor" value="${cor}" aria-label="Cor do fio da R3 ${u.valor}"></td>
         <td><select data-g="${u.valor}" data-campo="lado" aria-label="Lado por onde entra o guia da R3 ${u.valor}"><option value="E"${g.lado !== "D" ? " selected" : ""}>esquerda</option><option value="D"${
           g.lado === "D" ? " selected" : ""
@@ -3268,7 +3375,7 @@ function conteudoEconomizador() {
   return `<div class="tabela-rolavel"><table class="tabela"><thead><tr><th>Painel</th><th>Carreiras</th><th>R1 · dentro</th><th>R2 · fora</th><th>Repete (vezes)</th></tr></thead><tbody>${uso.blocosR2
     .map(
       (b) => `<tr><td class="mono">${b.painel}</td><td class="mono">${b.de}–${b.ate}</td><td class="mono">${b.dentro.length ? b.dentro.join("/") : "—"}</td><td class="mono">${esc(b.valor)}</td>
-      <td><input type="number" min="1" max="9999" data-rep-painel="${b.painel}" data-rep-chave="${b.chave}" value="${esc((reps[b.painel] || {})[b.chave] ?? "")}" placeholder="vezes" aria-label="Vezes que as carreiras ${b.de} a ${b.ate} do painel ${b.painel} se repetem"></td></tr>`,
+      <td><input type="number" min="1" max="9999" data-obrigatorio data-rep-painel="${b.painel}" data-rep-chave="${b.chave}" value="${esc((reps[b.painel] || {})[b.chave] ?? "")}" placeholder="vezes" aria-label="Vezes que as carreiras ${b.de} a ${b.ate} do painel ${b.painel} se repetem"></td></tr>`,
     )
     .join("")}</tbody></table></div>
     <p class="pequeno" id="processar-altura">${textoAlturaProc()}</p>
@@ -3289,7 +3396,7 @@ function conteudoPorTrecho(id) {
   return `<table class="tabela"><thead><tr><th>Trecho</th><th>Carreiras</th><th>${ehPuxador ? "Puxador" : "Velocidade (m/s)"}</th></tr></thead><tbody>${uso.trechos
     .map(
       (t) => `<tr><td><span class="ponto-guia" style="background:${corDaParte(t.nome)}"></span>${esc(t.nome)}</td><td class="mono">${t.de === t.ate ? t.de : `${t.de}–${t.ate}`}</td>
-      <td><input type="number" ${limites} ${atributo}="${t.id}" value="${esc(dados[id][t.id] ?? "")}" aria-label="${ehPuxador ? "Puxador" : "Velocidade"} no trecho ${esc(t.nome)}"></td></tr>`,
+      <td><input type="number" ${limites} ${atributo}="${t.id}" data-obrigatorio value="${esc(dados[id][t.id] ?? "")}" aria-label="${ehPuxador ? "Puxador" : "Velocidade"} no trecho ${esc(t.nome)}"></td></tr>`,
     )
     .join("")}</tbody></table>
     <div class="controles"><button type="button" class="botao pequeno" data-copiar="${id}">Usar o primeiro valor nos trechos vazios</button></div>`;
@@ -3302,8 +3409,8 @@ function conteudoPonto() {
     .map((u) => {
       const p = dados.pontos[u.valor] || {};
       return `<tr><td class="mono">${u.valor}<br>${ondeUsado(u)}</td>
-        <td><input type="number" min="0" max="999" data-pt="${u.valor}" data-lado="f" value="${esc(p.f ?? "")}" placeholder="ex.: 45" aria-label="Ponto da frente da R6 ${u.valor}"></td>
-        <td><input type="number" min="0" max="999" data-pt="${u.valor}" data-lado="t" value="${esc(p.t ?? "")}" placeholder="ex.: 45" aria-label="Ponto de trás da R6 ${u.valor}"></td></tr>`;
+        <td><input type="number" min="0" max="999" data-pt="${u.valor}" data-lado="f" data-obrigatorio value="${esc(p.f ?? "")}" placeholder="ex.: 45" aria-label="Ponto da frente da R6 ${u.valor}"></td>
+        <td><input type="number" min="0" max="999" data-pt="${u.valor}" data-lado="t" data-obrigatorio value="${esc(p.t ?? "")}" placeholder="ex.: 45" aria-label="Ponto de trás da R6 ${u.valor}"></td></tr>`;
     })
     .join("")}</tbody></table></div>`;
 }
@@ -3319,7 +3426,10 @@ function conteudoGerar() {
   const log = proc.log
     ? `<ul class="log-processamento" aria-live="polite">${proc.log.map((l) => `<li class="${l.nivel === "ok" ? "ok-texto" : l.nivel === "alerta" ? "alerta" : ""}">${esc(l.texto)}</li>`).join("")}</ul>`
     : `<p class="suave pequeno">Aperte Processar para conferir tudo e montar o resumo.</p>`;
-  return situacao + log;
+  const pct = proc.rodando ? Math.round((proc.log.length / proc.total) * 100) : proc.log ? 100 : 0;
+  const barra = `<div class="barra-progresso" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Progresso do processamento"><span style="width:${pct}%"></span></div>`;
+  const verificar = `<div class="controles"><button type="button" class="botao" data-abrir="verificar">Abrir o assistente de verificação</button></div>`;
+  return situacao + barra + log + verificar + htmlArquivosDoPrograma(proc.a);
 }
 
 const CONTEUDO_PASSO = {
@@ -3338,10 +3448,16 @@ function desenharProcessar() {
   $("processar-titulo").textContent = `${proc.passo + 1}. ${s.nome}`;
   $("processar-explica").textContent = EXPLICA_PASSOS[s.id];
   $("processar-conteudo").innerHTML = CONTEUDO_PASSO[s.id]();
+  marcarVazios();
   const form = $("dlg-processar").querySelector("form");
   form.querySelector('[data-passo="-1"]').disabled = proc.passo === 0;
   form.querySelector('[data-passo="1"]').disabled = proc.passo === RM.PASSOS_PROCESSAMENTO.length - 1;
   $("processar-rodar").disabled = proc.rodando;
+}
+
+// Os campos que o processamento precisa ficam com a borda amarela enquanto estão vazios (como o passo que falta).
+function marcarVazios() {
+  $("processar-conteudo").querySelectorAll("[data-obrigatorio]").forEach((el) => el.classList.toggle("falta", String(el.value).trim() === ""));
 }
 
 // Confere passo a passo, como a máquina leria, e mostra as linhas uma a uma (de uma vez com menos movimento).
@@ -3377,6 +3493,7 @@ function rodarProcessamento() {
     return;
   }
   proc.log = [];
+  proc.total = linhas.length;
   proc.rodando = true;
   const proxima = () => {
     if (!proc) return;
@@ -3412,6 +3529,7 @@ function rodarProcessamento() {
     } else return;
     if (!t.dataset.repChave) gravarProcessamento(proc.a);
     proc.log = null; // o que foi processado antes já não vale
+    if (t.dataset.obrigatorio !== undefined) t.classList.toggle("falta", String(t.value).trim() === "");
     desenharPassosProc();
   });
   $("processar-conteudo").addEventListener("click", (e) => {
@@ -3487,6 +3605,52 @@ function guiasDoDesenho(a) {
 // Nome sem extensão, sem acento e em maiúsculas, para achar os arquivos que andam juntos (.dat, .000, .QFD).
 const baseDoNome = (nome) => RM.semAcento(trocarExtensao(nome, ""));
 
+// Dois arquivos da mesma pasta: os dois da pasta conectada, ou abertos juntos do computador.
+const daMesmaPasta = (a, x) => (a.origem === "pasta" && x.origem === "pasta") || (a.lote != null && a.lote === x.lote);
+
+// Os .000 e .QFD abertos que andam com o desenho: os de mesmo nome e, se não houver, os da mesma pasta (na
+// pasta da máquina eles costumam ter outro nome, como 00_C_P.000 e 00_M_P.QFD).
+function arquivosDoPrograma(a) {
+  const candidatos = estado.abas.filter((x) => x.tipo === "programa" || x.tipo === "ajustes");
+  const base = baseDoNome(a.nome);
+  let lista = candidatos.filter((x) => baseDoNome(x.nome) === base);
+  let como = "com o mesmo nome do desenho";
+  if (!lista.length) {
+    lista = candidatos.filter((x) => daMesmaPasta(a, x));
+    como = "da mesma pasta do desenho";
+  }
+  lista.sort((x, y) => (x.tipo === y.tipo ? x.nome.localeCompare(y.nome) : x.tipo === "programa" ? -1 : 1));
+  return { lista, programas: lista.filter((x) => x.tipo === "programa"), ajustes: lista.filter((x) => x.tipo === "ajustes"), como: lista.length ? como : "" };
+}
+
+// "7.984 bytes, 14 seções, 210 linhas de programa"; nos arquivos do mesmo tamanho, quantos bytes mudam.
+function infoDoArquivoDoPrograma(x, lista) {
+  const ab = x.aberto;
+  const bytes = `${ab.tamanho.toLocaleString("pt-BR")} bytes`;
+  let info;
+  if (x.tipo === "programa") {
+    const linhas = Math.max(0, ...ab.secoes.map((s) => (s.linhas ? s.linhas.length : 0)));
+    info = `${bytes}, ${ab.secoes.length} seções, ${linhas} linhas de programa`;
+  } else info = `${bytes}, ${ab.registros.length} registros`;
+  const par = lista.find((o) => o !== x && o.tipo === x.tipo && o.aberto.tamanho === ab.tamanho && lista.indexOf(o) < lista.indexOf(x));
+  if (par) {
+    let dif = 0;
+    for (let k = 0; k < ab.bytes.length; k++) if (ab.bytes[k] !== par.aberto.bytes[k]) dif++;
+    info += dif ? `; difere de ${par.nome} em ${dif.toLocaleString("pt-BR")} byte${dif === 1 ? "" : "s"}` : `; igual a ${par.nome}`;
+  }
+  return info;
+}
+
+function htmlArquivosDoPrograma(a) {
+  const { lista, como } = arquivosDoPrograma(a);
+  if (!lista.length)
+    return `<p class="suave pequeno">Nenhum .000 ou .QFD aberto com este desenho. Para ver aqui o que já está na pasta da máquina, abra a pasta inteira (ou os arquivos dela juntos).</p>`;
+  return `<h3 class="sub">Na pasta hoje</h3><p class="suave pequeno">Arquivos abertos ${como}. O KnitPaint troca estes arquivos quando processa de novo.</p>
+    <ul class="arquivos-programa">${lista
+      .map((x) => `<li><span class="etiqueta-arquivo tipo-${x.tipo}">${x.tipo === "programa" ? "PROGRAMA" : "AJUSTES"}</span><span class="mono">${esc(x.nome)}</span><span class="suave pequeno">${esc(infoDoArquivoDoPrograma(x, lista))}</span></li>`)
+      .join("")}</ul>`;
+}
+
 // O que foi escrito na ficha: { proprios: { campos, tempo }, corTexto, corFundo, escala }. Só o que a pessoa
 // escreveu fica guardado; o resto (carreiras, agulhas, máquina, velocidade...) vem do desenho e do
 // processamento cada vez que a ficha abre, para não ficar com contas velhas.
@@ -3515,10 +3679,13 @@ function abrirFicha() {
   const base = trocarExtensao(a.nome, "");
   const pd = processamentoDe(a);
   const alt = alturaDesenvolvida(a);
+  // "00FE_BLS_ESTAMPA_ONÇA": o primeiro pedaço com número é o código e o resto, a descrição.
+  const partes = base.split("_").filter(Boolean);
+  const comCodigo = partes.length > 1 && /\d/.test(partes[0]);
   const padrao = {
     campos: {
-      codigo: base,
-      descricao: base.replace(/_/g, " "),
+      codigo: comCodigo ? partes[0] : base,
+      descricao: comCodigo ? partes.slice(1).join(" ") : base.replace(/_/g, " "),
       maquina: pd.maquina ? `${pd.maquina}${pd.finura ? ` ${pd.finura}G` : ""}` : "",
       tempo: "",
       fio: "",
@@ -3543,7 +3710,7 @@ function abrirFicha() {
   ficha = {
     a,
     guias: guiasDoDesenho(a),
-    avisos: null,
+    verificacao: null, // { erros, avisos } do Verificar, contados quando a lista "Antes de tecer" abre
     proprios,
     conferidos: salvo.conferidos,
     dados: {
@@ -3617,13 +3784,15 @@ function gravarFicha() {
   gravarArmazenado(CHAVE_FICHA + a.nome, { corTexto: dados.corTexto, corFundo: dados.corFundo, escala: dados.escala, proprios, conferidos });
 }
 
-// Arquivos abertos que podem ir no .zip; já vêm marcados o desenho e os que têm o mesmo nome (.000, .QFD...).
+// Arquivos abertos que podem ir no .zip; já vêm marcados o desenho, os que têm o mesmo nome e os .000 e .QFD
+// da mesma pasta.
 function desenharArquivosFicha() {
   const { a } = ficha;
+  const juntos = new Set(arquivosDoPrograma(a).lista);
   const base = baseDoNome(a.nome);
   $("ficha-arquivos").innerHTML = estado.abas
     .map((x) => {
-      const marcado = x === a || baseDoNome(x.nome) === base;
+      const marcado = x === a || juntos.has(x) || baseDoNome(x.nome) === base;
       return `<li><label><input type="checkbox" data-arquivo="${x.id}"${marcado ? " checked" : ""}><span class="nome-arquivo">${esc(x.nome)}${
         x.modificado ? ' <span class="suave">(alterado)</span>' : ""
       }</span><span class="suave mono">${esc(TIPOS_ARQUIVO[x.tipo] || x.tipo)}</span></label></li>`;
@@ -3673,10 +3842,11 @@ async function baixarZipDaFicha() {
 function itensAntesDeTecer() {
   const { a } = ficha;
   const blocos = blocosDeOpcao(a);
-  if (ficha.avisos === null) {
-    // O Verificar dá avisos (não erros): conta todos, com o mesmo limite de fio solto do diálogo dele.
+  if (ficha.verificacao === null) {
+    // Conta os erros e os avisos do Verificar, com o mesmo limite de fio solto do diálogo dele.
     const maximo = inteiro($("dlg-verificar").querySelector("form").maximo.value, 5, 1, 500);
-    ficha.avisos = itensDoVerificar(a, maximo).filter((i) => i.nivel !== "info").length;
+    const lista = itensDoVerificar(a, maximo);
+    ficha.verificacao = { erros: lista.filter((i) => i.nivel === "erro").length, avisos: lista.filter((i) => i.nivel === "aviso").length };
   }
   const uso = RM.usoDoProcessamento(a.doc, blocos);
   const pd = completarGuias(processamentoDe(a), uso);
@@ -3685,16 +3855,20 @@ function itensAntesDeTecer() {
   const semFio = uso.guias.filter((u) => !preenchido((pd.guias[u.valor] || {}).fio)).map((u) => u.valor);
   const c = ficha.dados.campos;
   const vazios = ["codigo", "descricao", "maquina", "fio"].filter((k) => !preenchido(c[k])).map((k) => ROTULOS_FICHA[k].toLowerCase());
-  const base = baseDoNome(a.nome);
-  const junto = (tipo) => estado.abas.some((x) => x.tipo === tipo && baseDoNome(x.nome) === base);
-  const programas = junto("programa") && junto("ajustes");
-  const avisos = ficha.avisos;
+  const doPrograma = arquivosDoPrograma(a);
+  const programas = doPrograma.programas.length > 0 && doPrograma.ajustes.length > 0;
+  const { erros, avisos } = ficha.verificacao;
+  const plural = (n, nome) => `${n} ${nome}${n === 1 ? "" : "s"}`;
   const itens = [
     {
       id: "verificar",
-      ok: !avisos,
-      titulo: "Verificar sem avisos",
-      detalhe: avisos ? `${avisos} aviso${avisos === 1 ? "" : "s"} no Verificar: confira se são esperados` : "nenhum aviso nas regras do Verificar",
+      ok: !erros && !avisos,
+      titulo: "Verificar sem erros nem avisos",
+      detalhe: erros
+        ? `${plural(erros, "erro")}${avisos ? ` e ${plural(avisos, "aviso")}` : ""} no Verificar: corrija os erros antes de tecer`
+        : avisos
+          ? `${plural(avisos, "aviso")} no Verificar: confira se são esperados`
+          : "nenhum erro nem aviso nas regras do Verificar",
       ir: "verificar",
       botao: "Verificar…",
     },
@@ -3707,7 +3881,9 @@ function itensAntesDeTecer() {
       id: "programa",
       ok: programas,
       titulo: "Programa (.000) e ajustes (.QFD)",
-      detalhe: programas ? "abertos, com o mesmo nome do desenho" : "gere no KnitPaint com estes valores, ou abra os da pasta para irem no .zip",
+      detalhe: programas
+        ? `abertos ${doPrograma.como}: ${doPrograma.lista.map((x) => x.nome).join(", ")}`
+        : "gere no KnitPaint com estes valores, ou abra os da pasta para irem no .zip",
     },
     { id: "amostra", manual: true, ok: false, titulo: "Amostra tecida e aprovada", detalhe: "marque depois de tecer a amostra e conferir medidas, ponto e cores" },
   ];
@@ -3836,6 +4012,56 @@ const RECURSOS = {
 $("painel-dat").addEventListener("click", (e) => {
   const b = e.target.closest("[data-recurso]");
   if (b && abaDat()) RECURSOS[b.dataset.recurso]();
+});
+
+// ------------------------------------------------------------------ etapas
+// As 10 etapas de desenvolver um modelo, na ordem do protótipo. O desenho e as linhas de opção não são diálogos:
+// ficam no editor e no painel à direita. Cada diálogo diz em que etapa está e leva à próxima.
+
+const ETAPAS = [
+  { id: "modelo", nome: "Modelo", texto: "medidas em agulhas e carreiras" },
+  { id: "forma", nome: "Forma", texto: "diminuições, aumentos e arremates de cada peça" },
+  { id: "desenho", nome: "Desenho", texto: "o desenho ponto a ponto, com a biblioteca e o carimbo" },
+  { id: "jacquard", nome: "Jacquard e intarsia", texto: "padrões, fios soltos e guia-fios" },
+  { id: "linhas", nome: "Linhas de opção", texto: "guia-fio, ponto, economizador e outras funções carreira por carreira" },
+  { id: "desenvolver", nome: "Pacotes e altura", texto: "início, barra, final e repetições" },
+  { id: "processar", nome: "Processar", texto: "os números das linhas de opção ganham os valores da máquina" },
+  { id: "verificar", nome: "Verificar", texto: "achar erros e trechos difíceis antes de regular a máquina" },
+  { id: "simular", nome: "Simular", texto: "a malha com o fio e as cores" },
+  { id: "ficha", nome: "Ficha e máquina", texto: "ficha técnica e arquivos para levar à máquina" },
+];
+const ETAPA_DO_DIALOGO = {
+  "dlg-modelo": "modelo",
+  "dlg-forma": "forma",
+  "dlg-gerar": "jacquard",
+  "dlg-jacquard": "jacquard",
+  "dlg-desenvolver": "desenvolver",
+  "dlg-processar": "processar",
+  "dlg-verificar": "verificar",
+  "dlg-simular": "simular",
+  "dlg-ficha": "ficha",
+};
+
+function irParaEtapa(id) {
+  document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+  if (id === "desenho") return avisar("Etapa 3: desenhe no editor. A biblioteca de pontos e o carimbo ficam no painel à direita.");
+  if (id === "linhas") {
+    $("lista-opcoes").scrollIntoView({ block: "start" });
+    return avisar("Etapa 5: escolha uma linha de opção no painel à direita para ver e pintar os valores dela.");
+  }
+  RECURSOS[id]();
+}
+
+for (const [dialogo, id] of Object.entries(ETAPA_DO_DIALOGO)) {
+  const i = ETAPAS.findIndex((e) => e.id === id);
+  const proxima = ETAPAS[i + 1];
+  const barra = $(dialogo).querySelector(".botoes-dialogo");
+  barra.insertAdjacentHTML("afterbegin", `<span class="etapa-dialogo">Etapa ${i + 1} de ${ETAPAS.length} · ${esc(ETAPAS[i].texto)}</span>`);
+  if (proxima) barra.querySelector('[value="fechar"]').insertAdjacentHTML("afterend", `<button type="button" class="botao" data-proxima-etapa="${proxima.id}">Próximo: ${esc(proxima.nome)} →</button>`);
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-proxima-etapa]");
+  if (b && abaDat()) irParaEtapa(b.dataset.proximaEtapa);
 });
 
 // Enter num campo dos diálogos grandes confirma o campo, sem fechar o diálogo.

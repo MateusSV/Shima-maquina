@@ -264,10 +264,10 @@ test("linhas de opção do exemplo: painéis, faixas, pintar valor e verificaç�
   assert.deepEqual(itens.map((i) => [i.nivel, i.titulo, i.carreiras]), [
     ["aviso", "Carreiras com malha e sem guia-fio (R3) (painel 1)", "187–188, 365"],
     ["aviso", "Carreiras com malha e sem número de ponto (R6) (painel 1)", "187–188, 365"],
-    ["info", "Cancelar malha sem guia-fio: coerente (painel 1)", "201–202"],
+    ["info", "Transferência sem fio: coerente (painel 1)", "201–202"],
     ["aviso", "Carreiras com malha e sem guia-fio (R3) (painel 2)", "187–188, 365"],
     ["aviso", "Carreiras com malha e sem número de ponto (R6) (painel 2)", "187–188, 365"],
-    ["info", "Cancelar malha sem guia-fio: coerente (painel 2)", "201–202"],
+    ["info", "Transferência sem fio: coerente (painel 2)", "201–202"],
     ["aviso", "Os painéis são diferentes", ""],
   ]);
   assert.match(itens[6].texto, /Painel 1: 203 agulhas de malha, 179 carreiras, R2 = 55\. Painel 2: 199 agulhas de malha, 179 carreiras, R2 = 30/);
@@ -321,6 +321,84 @@ test("forma: simétrica e com os ombros do texto em várias densidades", () => {
       }
     }
   }
+});
+
+test("forma: gola em V e frente aberta do cardigã", () => {
+  const densidade = { colunas: 30, carreiras: 40 };
+  const codigos = { malha: 1, fora: 0, arremate: 3, parcial: 4, marcaEsq: 5, marcaDir: 5 };
+  // Gola V: a frente se divide no centro sem arremate e diminui em linha reta (intervalos alternados).
+  const v = Recursos.calcularModelo("v", {}, densidade);
+  assert.equal(v.pecas[0].forma.decote, "v");
+  assert.equal(v.pecas[0].forma.arremGola, 0);
+  const frente = Recursos.planoForma(v.pecas[0].forma, {});
+  const passo = (plano, nome) => plano.passos.find((s) => s.nome === nome);
+  assert.equal(passo(frente, "Gola V: divisão no centro").de, 161);
+  const dim = passo(frente, "Gola V: diminuições");
+  assert.deepEqual([dim.de, dim.ate], [165, 239]);
+  assert.equal(dim.texto, "−1 agulha de cada lado, 24×: a cada 2 carreiras 9× e a cada 4 carreiras 15×, alternando.");
+  assert.equal(passo(frente, "Gola: arremate central"), undefined);
+  // Sem arremate no centro: a carreira da divisão só tem os arremates da cava.
+  assert.equal(frente.linhas[160].arrem.length, 2);
+  // No arremate final a gola tem 2 × 24 agulhas de abertura entre os dois ombros.
+  const topo = frente.linhas[239].arrem.slice().sort((a, b) => a[0] - b[0]);
+  assert.deepEqual(topo.map(([a, b]) => b - a + 1), [33, 33]);
+  assert.equal(topo[1][0] - topo[0][1] - 1, 48);
+  // A Costas continua com a gola redonda.
+  assert.ok(passo(Recursos.planoForma(v.pecas[1].forma, {}), "Gola: arremate central"));
+
+  // Cardigã: uma frente com metade do corpo e metade da vista, aberta na borda da direita.
+  const c = Recursos.calcularModelo("cardiga", {}, densidade);
+  const meia = c.pecas[0];
+  assert.deepEqual([meia.nome, meia.qtd, meia.agulhas, meia.forma.meia, meia.forma.vista, meia.forma.gola], ["Frentes", 2, 77, true, 5, 29]);
+  const plano = Recursos.planoForma(meia.forma, {});
+  assert.equal(plano.W, 77);
+  assert.match(passo(plano, "A outra frente").texto, /espelho/);
+  assert.match(passo(plano, "Arremate final").texto, /33 agulhas do ombro/);
+  assert.equal(passo(plano, "Confira a gola"), undefined); // o V começa antes da cava, e isso é normal
+
+  for (let colunas = 10; colunas <= 60; colunas += 2) {
+    for (const carreiras of [10, 40, 90]) {
+      const onde = `${colunas} colunas e ${carreiras} carreiras`;
+      const fv = Recursos.planoForma(Recursos.calcularModelo("v", {}, { colunas, carreiras }).pecas[0].forma, {});
+      const img = Recursos.pixelsDaForma(fv, codigos);
+      for (let y = 0; y < img.h; y++) {
+        const linha = Array.from(img.px.subarray(y * img.w, (y + 1) * img.w));
+        assert.deepEqual(linha, linha.slice().reverse(), `gola V com ${onde}: carreira ${img.h - y} não é simétrica`);
+      }
+      const forma = Recursos.calcularModelo("cardiga", {}, { colunas, carreiras }).pecas[0].forma;
+      const p = Recursos.planoForma(forma, {});
+      const gola0 = p.H - Math.min(Math.round(forma.golaP), p.H - Math.round(forma.barra) - 1) + 1;
+      for (let i = 0; i < p.H - 1; i++) {
+        const row = p.linhas[i];
+        assert.ok(row.segs.length <= 1, `cardigã com ${onde}: carreira ${i + 1} em dois pedaços`);
+        // A borda do meio é reta até o V: a última agulha tecida é a da borda até lá.
+        if (i + 1 < gola0 && row.segs.length) assert.equal(row.segs[0][1], p.W - 1, `cardigã com ${onde}: abertura torta na carreira ${i + 1}`);
+      }
+      for (const s of p.passos) if (s.de !== undefined) assert.ok(s.de >= 1 && s.ate <= p.H, `cardigã com ${onde}: ${s.nome} fora da peça`);
+      const ultima = p.linhas[p.H - 1];
+      const arrematadas = ultima.arrem.reduce((t, [a, b]) => t + b - a + 1, 0);
+      const n = Number(/(\d+) agulhas/.exec(passo(p, "Arremate final").texto)[1]);
+      assert.equal(arrematadas, n, `cardigã com ${onde}`);
+    }
+  }
+});
+
+test("verificar: transferência com fio é erro", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const blocos = ShimaDat.linhasDeOpcao(doc);
+  const p = Recursos.paineis(blocos)[0];
+  const y201 = doc.altura - 201, y202 = doc.altura - 202;
+  // Guia-fio na carreira 201 (que só transfere) e a R5 tirada da 202.
+  Recursos.pintarValorNaLinha(doc, p.R, 3, y201, y201, 4);
+  Recursos.pintarValorNaLinha(doc, p.R, 5, y202, y202, 0);
+  const itens = Recursos.verificarDesenho(doc, ShimaDat.linhasDeOpcao(doc), { flutuacaoMaxima: 5 });
+  const erro = itens.find((i) => i.regra === "transferencia-com-fio");
+  assert.deepEqual([erro.nivel, erro.titulo, erro.carreiras], ["erro", "Transferência com fio (painel 1)", "201–202"]);
+  // A carreira de transferência não aparece também como "cancelar malha com guia-fio".
+  assert.ok(!itens.some((i) => i.regra === "cancela-com-guia" && i.painel === 1));
+  assert.ok(!itens.some((i) => i.regra === "nenhum"));
+  // O painel 2 continua coerente.
+  assert.equal(itens.find((i) => i.regra === "transferencia-coerente").painel, 2);
 });
 
 test("pacotes: trechos do exemplo, desperdício, ribana, arremate e sem barra", semPasta, () => {
