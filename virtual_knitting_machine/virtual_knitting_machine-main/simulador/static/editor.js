@@ -1070,7 +1070,7 @@ tela.addEventListener("pointerdown", (e) => {
   } else if (f === "carimbo") {
     if (!estado.motivo) return avisar("Escolha um motivo na Biblioteca de pontos.");
     salvarHistorico(a);
-    gesto = { tipo: "carimbo", origem: p, feitos: new Set(["0,0"]) };
+    gesto = { tipo: "carimbo", origem: p, ultimo: p, feitos: new Set(["0,0"]) };
     carimbarMotivo(d, p, estado.motivo);
     renderizar();
   } else if (f === "selecao") {
@@ -1108,14 +1108,16 @@ tela.addEventListener("pointermove", (e) => {
       desenharForma(d, gesto.forma, gesto.inicio, fim, gesto.cor, estado.pincel);
       renderizar();
     } else if (gesto.tipo === "carimbo") {
-      // Arrastando, o motivo se repete alinhado com o primeiro carimbo.
+      // Arrastando, o motivo se repete alinhado com o primeiro carimbo, em todo o caminho do ponteiro.
       const m = estado.motivo;
-      const i = Math.floor((p.x - gesto.origem.x) / m.w), j = Math.floor((gesto.origem.y - p.y) / m.h);
-      if (!gesto.feitos.has(`${i},${j}`)) {
+      pontosDaLinha(gesto.ultimo, p, (x, y) => {
+        const i = Math.floor((x - gesto.origem.x) / m.w), j = Math.floor((gesto.origem.y - y) / m.h);
+        if (gesto.feitos.has(`${i},${j}`)) return;
         gesto.feitos.add(`${i},${j}`);
         carimbarMotivo(d, { x: gesto.origem.x + i * m.w, y: gesto.origem.y - j * m.h }, m);
-        renderizar();
-      }
+      });
+      gesto.ultimo = p;
+      renderizar();
     } else if (gesto.tipo === "selecionar") {
       a.selecao = retanguloEntre(gesto.inicio, prender(p, d));
       posicionarCaixas();
@@ -1727,6 +1729,7 @@ function escolherFerramenta(f) {
 function atualizarPainel() {
   const a = abaDat();
   if (!a) return;
+  a.opcoes = null; // depois de uma edição, os blocos de linhas de opção podem ter mudado
   const d = a.doc;
   const cor = (n) => hexCor(d.paleta[n]);
   $("amostra-primaria").style.background = cor(estado.primaria);
@@ -2247,7 +2250,7 @@ document.addEventListener("keydown", (e) => {
 
 let profundidadeArrasto = 0;
 window.addEventListener("dragenter", (e) => {
-  if (![...e.dataTransfer.types].includes("Files")) return;
+  if (![...e.dataTransfer.types].includes("Files") || document.querySelector("dialog[open]")) return;
   profundidadeArrasto++;
   $("soltar").hidden = false;
 });
@@ -2260,6 +2263,8 @@ window.addEventListener("drop", (e) => {
   e.preventDefault();
   profundidadeArrasto = 0;
   $("soltar").hidden = true;
+  // Com um diálogo aberto, a aba nova ficaria por baixo e o diálogo continuaria agindo na anterior.
+  if (document.querySelector("dialog[open]")) return avisar("Feche a janela aberta antes de abrir outros arquivos.");
   abrirLocais([...e.dataTransfer.files]);
 });
 

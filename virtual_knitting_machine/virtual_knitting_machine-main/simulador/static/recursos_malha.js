@@ -185,18 +185,20 @@
   function planoCorpo(p, porVez, dist) {
     const W = Math.max(8, Math.round(p.W)), H = Math.max(8, Math.round(p.H));
     const barra = limitar(Math.round(p.barra), 0, H - 2);
-    const cava = limitar(Math.round(p.cava), 2, H - barra - 1);
+    const cava = limitar(Math.round(p.cava), 4, H - barra - 1);
     const gola = limitar(Math.round(p.gola), 2, W - 4);
     const recuo = limitar(Math.round(p.recuo), 0, Math.max(0, Math.floor((W - gola) / 2) - 1));
     const arremC = limitar(Math.round(p.arremCava), 0, recuo);
-    const golaP = limitar(Math.round(p.golaP), 2, H - barra - 1);
+    const golaP = limitar(Math.round(p.golaP), 4, H - barra - 1);
     const arremG = centroPar(W, limitar(Math.round(p.arremGola), 0, gola));
     const deg = limitar(Math.round(p.degraus), 1, 6);
     const cava0 = H - cava + 1, gola0 = H - golaP + 1, ombro0 = H - 2 * deg + 1;
     const evCava = distribuir(recuo - arremC, porVez, Math.round(cava * 0.45));
     const ladoGola = Math.floor((gola - arremG) / 2);
     const evGola = distribuir(ladoGola, porVez, Math.max(2, golaP - 4));
-    const ombro = Math.floor((W - gola) / 2) - recuo;
+    // O arremate central tem a paridade da largura: a gola abre arremG + 2 × ladoGola agulhas.
+    const abertura = arremG + 2 * ladoGola;
+    const ombro = (W - abertura) / 2 - recuo;
     const degraus = [];
     for (let i = 0; i < deg; i++) degraus.push(Math.max(0, Math.floor(ombro / deg) + (i < ombro % deg ? 1 : 0)));
 
@@ -262,17 +264,18 @@
     if (evGola.length) passos.push({ nome: "Gola: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `${resumoEventos(evGola, "−")}.` });
     passos.push({ nome: "Ombro: malha parcial", de: ombro0, ate: H, texto: `${deg} degraus de ${degraus.join(", ")} agulhas, um a cada 2 carreiras.` });
     passos.push({ nome: "Arremate final", de: H, ate: H, texto: `Arremata ${Math.max(0, ombro)} agulhas em cada ombro.` });
-    const resumo = `Começa com ${W} agulhas, fica com ${W - 2 * recuo} depois da cava e termina em 2 ombros de ${Math.max(0, ombro)} agulhas com uma gola de ${gola}. São ${recuo} agulhas tiradas de cada lado na cava e ${ladoGola} de cada lado da gola.`;
+    const resumo = `Começa com ${W} agulhas, fica com ${W - 2 * recuo} depois da cava e termina em 2 ombros de ${Math.max(0, ombro)} agulhas com uma gola de ${abertura}. São ${recuo} agulhas tiradas de cada lado na cava e ${ladoGola} de cada lado da gola.`;
     return { W, H, linhas, passos, resumo };
   }
 
   function planoManga(p, porVez, dist) {
     const W = Math.max(8, Math.round(p.W)), H = Math.max(8, Math.round(p.H));
-    const punho = limitar(Math.round(p.punho), 2, W);
+    const mesmaParidade = (v, min, max) => (v - W) % 2 === 0 ? v : v + 1 <= max ? v + 1 : Math.max(min, v - 1);
+    const punho = mesmaParidade(limitar(Math.round(p.punho), 2, W), 2, W);
     const barra = limitar(Math.round(p.barra), 0, H - 4);
     const copa = limitar(Math.round(p.copa), 4, H - barra - 2);
     const arremC = limitar(Math.round(p.arremCopa), 0, Math.floor(W / 4));
-    const topo = limitar(Math.round(p.topo), 2, W - 2 * arremC);
+    const topo = mesmaParidade(limitar(Math.round(p.topo), 2, W - 2 * arremC), 2, W - 2 * arremC);
     const copa0 = H - copa + 1;
     const aum = Math.floor((W - punho) / 2);
     const evAum = distribuir(aum, 1, Math.max(2, copa0 - 1 - barra));
@@ -595,10 +598,32 @@
     return lista;
   }
 
-  // Coluna onde vai o valor da linha (a outra coluna mostra o número da linha).
-  function colunaDoValor(bloco, k) {
-    const cols = bloco.colunas[k];
-    return cols ? (bloco.lado === "R" ? cols[1] : cols[0]) : null;
+  // Cada linha ocupa 2 colunas: a coluna-guia (com o número da linha) e a de fora. O valor costuma ir na
+  // de fora, mas pode estar no lugar do número (no exemplo, o 55 da R2).
+  const colunasDaLinha = (bloco, k) => (bloco.lado === "R" ? bloco.colunas[k] : [bloco.colunas[k][1], bloco.colunas[k][0]]);
+
+  // Coluna-guia com outro número na maior parte das carreiras (no exemplo, a linha 1 com 6 e 7 alternando):
+  // é uma marca da própria linha, que o editor não troca.
+  function guiaComMarca(doc, bloco, k) {
+    const [guia] = colunasDaLinha(bloco, k);
+    let outros = 0, total = 0;
+    for (let y = bloco.carreiraInicio; y <= bloco.carreiraFim; y++) {
+      const g = doc.pixels[y * doc.largura + guia];
+      if (!g) continue;
+      total++;
+      if (g !== k) outros++;
+    }
+    return outros * 2 > total;
+  }
+
+  // Coluna que guarda o valor da linha nesta carreira: a de fora se tiver valor; senão a guia, se ela tiver
+  // um número que não é o da linha (e não for marca); senão a de fora (carreira sem valor).
+  function colunaDoValor(doc, bloco, k, y, marca = guiaComMarca(doc, bloco, k)) {
+    if (!bloco.colunas[k]) return null;
+    const [guia, fora] = colunasDaLinha(bloco, k);
+    if (doc.pixels[y * doc.largura + fora]) return fora;
+    const g = doc.pixels[y * doc.largura + guia];
+    return !marca && g && g !== k ? guia : fora;
   }
 
   // Valores de uma linha numa carreira (linha de cima = 0), sem a cor-guia da própria linha.
@@ -645,26 +670,29 @@
       .map((f) => ({ ...f, de: H - f.yBase, ate: H - f.yTopo }));
   }
 
-  // Pinta o valor na coluna de valor da linha, das linhas de cima yTopo até yBase (inclusive).
+  // Troca o valor da linha nas carreiras das linhas yTopo até yBase (inclusive), na coluna que já guarda o
+  // valor de cada carreira. Valor 0 apaga: a coluna de fora fica vazia e a guia volta a ter o número da linha.
   function pintarValorNaLinha(doc, bloco, k, yTopo, yBase, valor) {
-    const x = colunaDoValor(bloco, k);
-    if (x === null) return 0;
+    if (!bloco.colunas[k]) return 0;
+    const [guia] = colunasDaLinha(bloco, k);
+    const marca = guiaComMarca(doc, bloco, k);
     let n = 0;
     for (let y = Math.max(bloco.carreiraInicio, yTopo); y <= Math.min(bloco.carreiraFim, yBase); y++) {
-      doc.pixels[y * doc.largura + x] = valor;
+      const x = colunaDoValor(doc, bloco, k, y, marca);
+      doc.pixels[y * doc.largura + x] = x === guia && !valor ? k : valor;
       n++;
     }
     return n;
   }
 
   // Altura do painel com as repetições do economizador (blocos marcados na R2).
-  // repeticoes: { "yBase-yTopo": vezes }; sem número, conta 1 vez (como no desenho compactado).
+  // repeticoes: { "de-ate": vezes } (carreiras contadas de baixo); sem número, conta 1 vez.
   function desenvolvimento(doc, painel, repeticoes = {}) {
     const compactadas = painel.y1 - painel.y0 + 1;
     const blocos = painel.R && painel.R.colunas[2] ? faixasDaLinha(doc, painel.R, 2).filter((f) => !f.alterna) : [];
     let desenvolvidas = compactadas;
     const lista = blocos.map((f) => {
-      const chave = `${f.yBase}-${f.yTopo}`;
+      const chave = `${f.de}-${f.ate}`;
       const vezes = Math.max(1, Math.round(numero(repeticoes[chave], 1)));
       const carreiras = f.yBase - f.yTopo + 1;
       desenvolvidas += (vezes - 1) * carreiras;
@@ -851,13 +879,13 @@
     const cor = opcoes.cor ?? 1, fundo = opcoes.fundo ?? 0;
     const k = limitar(Math.round(opcoes.escala || 1), 1, 4);
     const margem = Math.max(0, Math.round(opcoes.margem ?? 1));
-    const textos = (Array.isArray(linhas) ? linhas : [linhas]).map((l) => semAcento(l).replace(/\s+$/, ""));
+    const textos = (Array.isArray(linhas) ? linhas : [linhas]).map((l) => [...semAcento(l).replace(/\s+$/, "")]);
     const colunas = Math.max(1, ...textos.map((t) => t.length));
     const w = (2 * margem + colunas * 6 - 1) * k;
     const h = (2 * margem + textos.length * 9 - 2) * k;
     const px = new Uint8Array(w * h).fill(fundo);
     textos.forEach((t, l) => {
-      [...t].forEach((letra, i) => {
+      t.forEach((letra, i) => {
         const linhasLetra = (FONTE[letra] || FONTE["?"]).split("|");
         for (let gy = 0; gy < 7; gy++) {
           for (let gx = 0; gx < 5; gx++) {

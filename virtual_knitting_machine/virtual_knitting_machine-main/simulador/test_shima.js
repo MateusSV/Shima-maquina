@@ -236,6 +236,7 @@ test("texto em pixels e ficha técnica sem acentos", () => {
   const dobro = Recursos.textoEmPixels(["Aç"], { cor: 9, fundo: 0, margem: 1, escala: 2 });
   assert.deepEqual([dobro.w, dobro.h], [26, 18]);
   assert.equal(Recursos.textoEmPixels(["~"]).px.filter((v) => v === 1).length, Recursos.textoEmPixels(["?"]).px.filter((v) => v === 1).length);
+  assert.equal(Recursos.textoEmPixels(["A😀"]).w, 13); // um emoji conta como uma letra
   const ficha = Recursos.linhasDaFicha({ codigo: "Onça", tempo: "4 min" }, [{ guia: 4, fio: "Algodão 2/30" }, { guia: 1, fio: "" }]);
   assert.deepEqual(ficha.slice(0, 3), ["FICHA TECNICA", "", "CODIGO=ONCA"]);
   assert.equal(ficha[ficha.length - 1], "GUIA FIOS 4:ALGODAO 2/30");
@@ -272,7 +273,7 @@ test("linhas de opção do exemplo: painéis, faixas, pintar valor e verificaç�
   assert.match(itens[6].texto, /Painel 1: 203 agulhas de malha, 179 carreiras, R2 = 55\. Painel 2: 199 agulhas de malha, 179 carreiras, R2 = 30/);
 
   // Altura com o bloco da R2 (216–223) repetido 55 vezes.
-  const dev = Recursos.desenvolvimento(doc, paineis[0], { "374-367": 55 });
+  const dev = Recursos.desenvolvimento(doc, paineis[0], { "216-223": 55 }); // chave pelas carreiras, de baixo
   assert.deepEqual([dev.compactadas, dev.desenvolvidas], [179, 611]);
   const img = Recursos.desenharDesenvolvido(doc, dev.blocos);
   assert.deepEqual([img.w, img.h], [1115, 590 + 54 * 8]);
@@ -283,4 +284,41 @@ test("linhas de opção do exemplo: painéis, faixas, pintar valor e verificaç�
   // Pintar 7 na R6 das carreiras 203 a 210 (linhas 387 a 380, de cima para baixo).
   assert.equal(Recursos.pintarValorNaLinha(doc, paineis[0].R, 6, 380, 387, 7), 8);
   assert.deepEqual(faixas(6), ["191–198:14", "199–200:17", "203–210:7", "211–359:5", "360–364:12"]);
+
+  // Na R2 o 55 está no lugar do número da linha (x 660): trocar e apagar mexem nessa coluna.
+  const yR2 = [doc.altura - 223, doc.altura - 216];
+  Recursos.pintarValorNaLinha(doc, paineis[0].R, 2, yR2[0], yR2[1], 30);
+  assert.deepEqual(faixas(2), ["216–223:30"]);
+  Recursos.pintarValorNaLinha(doc, paineis[0].R, 2, yR2[0], yR2[1], 0);
+  assert.deepEqual(faixas(2), []);
+  assert.equal(doc.pixels[yR2[0] * doc.largura + 660], 2); // o número da linha voltou
+  assert.deepEqual(ShimaDat.linhasDeOpcao(doc).map((b) => [b.lado, b.xMin]), blocos.map((b) => [b.lado, b.xMin]));
+  // Na R1 a coluna-guia tem 6 e 7 alternando (marca da linha): o valor novo vai na coluna de fora.
+  const y300 = doc.altura - 300;
+  const marcaAntes = doc.pixels[y300 * doc.largura + 658];
+  Recursos.pintarValorNaLinha(doc, paineis[0].R, 1, y300, y300, 5);
+  assert.deepEqual([doc.pixels[y300 * doc.largura + 658], doc.pixels[y300 * doc.largura + 659]], [marcaAntes, 5]);
+});
+
+test("forma: simétrica e com os ombros do texto em várias densidades", () => {
+  const codigos = { malha: 1, fora: 0, arremate: 3, parcial: 4, marcaEsq: 5, marcaDir: 5 };
+  for (let colunas = 10; colunas <= 60; colunas++) {
+    for (const carreiras of [10, 40, 90]) {
+      for (const peca of Recursos.calcularModelo("careca", {}, { colunas, carreiras }).pecas) {
+        const plano = Recursos.planoForma(peca.forma, {});
+        const onde = `${peca.nome} com ${colunas} colunas e ${carreiras} carreiras`;
+        const img = Recursos.pixelsDaForma(plano, codigos);
+        for (let y = 0; y < img.h; y++) {
+          const linha = Array.from(img.px.subarray(y * img.w, (y + 1) * img.w));
+          assert.deepEqual(linha, linha.slice().reverse(), `${onde}: carreira ${img.h - y} não é simétrica`);
+        }
+        for (const s of plano.passos) if (s.de !== undefined) assert.ok(s.de >= 1 && s.ate <= plano.H, `${onde}: ${s.nome} fora da peça`);
+        const ultima = plano.linhas[plano.H - 1];
+        const arrematadas = ultima.arrem.reduce((t, [a, b]) => t + b - a + 1, 0);
+        const texto = plano.passos.find((s) => s.nome === "Arremate final").texto;
+        const n = Number(/(\d+) agulhas/.exec(texto)[1]);
+        assert.equal(arrematadas, peca.forma.tipo === "corpo" ? 2 * n : n, `${onde}: ${texto}`);
+      }
+    }
+  }
 });

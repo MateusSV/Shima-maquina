@@ -1896,18 +1896,20 @@ details > summary { cursor: pointer; }
   function planoCorpo(p, porVez, dist) {
     const W = Math.max(8, Math.round(p.W)), H = Math.max(8, Math.round(p.H));
     const barra = limitar(Math.round(p.barra), 0, H - 2);
-    const cava = limitar(Math.round(p.cava), 2, H - barra - 1);
+    const cava = limitar(Math.round(p.cava), 4, H - barra - 1);
     const gola = limitar(Math.round(p.gola), 2, W - 4);
     const recuo = limitar(Math.round(p.recuo), 0, Math.max(0, Math.floor((W - gola) / 2) - 1));
     const arremC = limitar(Math.round(p.arremCava), 0, recuo);
-    const golaP = limitar(Math.round(p.golaP), 2, H - barra - 1);
+    const golaP = limitar(Math.round(p.golaP), 4, H - barra - 1);
     const arremG = centroPar(W, limitar(Math.round(p.arremGola), 0, gola));
     const deg = limitar(Math.round(p.degraus), 1, 6);
     const cava0 = H - cava + 1, gola0 = H - golaP + 1, ombro0 = H - 2 * deg + 1;
     const evCava = distribuir(recuo - arremC, porVez, Math.round(cava * 0.45));
     const ladoGola = Math.floor((gola - arremG) / 2);
     const evGola = distribuir(ladoGola, porVez, Math.max(2, golaP - 4));
-    const ombro = Math.floor((W - gola) / 2) - recuo;
+    // O arremate central tem a paridade da largura: a gola abre arremG + 2 × ladoGola agulhas.
+    const abertura = arremG + 2 * ladoGola;
+    const ombro = (W - abertura) / 2 - recuo;
     const degraus = [];
     for (let i = 0; i < deg; i++) degraus.push(Math.max(0, Math.floor(ombro / deg) + (i < ombro % deg ? 1 : 0)));
 
@@ -1973,17 +1975,18 @@ details > summary { cursor: pointer; }
     if (evGola.length) passos.push({ nome: "Gola: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `${resumoEventos(evGola, "−")}.` });
     passos.push({ nome: "Ombro: malha parcial", de: ombro0, ate: H, texto: `${deg} degraus de ${degraus.join(", ")} agulhas, um a cada 2 carreiras.` });
     passos.push({ nome: "Arremate final", de: H, ate: H, texto: `Arremata ${Math.max(0, ombro)} agulhas em cada ombro.` });
-    const resumo = `Começa com ${W} agulhas, fica com ${W - 2 * recuo} depois da cava e termina em 2 ombros de ${Math.max(0, ombro)} agulhas com uma gola de ${gola}. São ${recuo} agulhas tiradas de cada lado na cava e ${ladoGola} de cada lado da gola.`;
+    const resumo = `Começa com ${W} agulhas, fica com ${W - 2 * recuo} depois da cava e termina em 2 ombros de ${Math.max(0, ombro)} agulhas com uma gola de ${abertura}. São ${recuo} agulhas tiradas de cada lado na cava e ${ladoGola} de cada lado da gola.`;
     return { W, H, linhas, passos, resumo };
   }
 
   function planoManga(p, porVez, dist) {
     const W = Math.max(8, Math.round(p.W)), H = Math.max(8, Math.round(p.H));
-    const punho = limitar(Math.round(p.punho), 2, W);
+    const mesmaParidade = (v, min, max) => (v - W) % 2 === 0 ? v : v + 1 <= max ? v + 1 : Math.max(min, v - 1);
+    const punho = mesmaParidade(limitar(Math.round(p.punho), 2, W), 2, W);
     const barra = limitar(Math.round(p.barra), 0, H - 4);
     const copa = limitar(Math.round(p.copa), 4, H - barra - 2);
     const arremC = limitar(Math.round(p.arremCopa), 0, Math.floor(W / 4));
-    const topo = limitar(Math.round(p.topo), 2, W - 2 * arremC);
+    const topo = mesmaParidade(limitar(Math.round(p.topo), 2, W - 2 * arremC), 2, W - 2 * arremC);
     const copa0 = H - copa + 1;
     const aum = Math.floor((W - punho) / 2);
     const evAum = distribuir(aum, 1, Math.max(2, copa0 - 1 - barra));
@@ -2306,10 +2309,32 @@ details > summary { cursor: pointer; }
     return lista;
   }
 
-  // Coluna onde vai o valor da linha (a outra coluna mostra o número da linha).
-  function colunaDoValor(bloco, k) {
-    const cols = bloco.colunas[k];
-    return cols ? (bloco.lado === "R" ? cols[1] : cols[0]) : null;
+  // Cada linha ocupa 2 colunas: a coluna-guia (com o número da linha) e a de fora. O valor costuma ir na
+  // de fora, mas pode estar no lugar do número (no exemplo, o 55 da R2).
+  const colunasDaLinha = (bloco, k) => (bloco.lado === "R" ? bloco.colunas[k] : [bloco.colunas[k][1], bloco.colunas[k][0]]);
+
+  // Coluna-guia com outro número na maior parte das carreiras (no exemplo, a linha 1 com 6 e 7 alternando):
+  // é uma marca da própria linha, que o editor não troca.
+  function guiaComMarca(doc, bloco, k) {
+    const [guia] = colunasDaLinha(bloco, k);
+    let outros = 0, total = 0;
+    for (let y = bloco.carreiraInicio; y <= bloco.carreiraFim; y++) {
+      const g = doc.pixels[y * doc.largura + guia];
+      if (!g) continue;
+      total++;
+      if (g !== k) outros++;
+    }
+    return outros * 2 > total;
+  }
+
+  // Coluna que guarda o valor da linha nesta carreira: a de fora se tiver valor; senão a guia, se ela tiver
+  // um número que não é o da linha (e não for marca); senão a de fora (carreira sem valor).
+  function colunaDoValor(doc, bloco, k, y, marca = guiaComMarca(doc, bloco, k)) {
+    if (!bloco.colunas[k]) return null;
+    const [guia, fora] = colunasDaLinha(bloco, k);
+    if (doc.pixels[y * doc.largura + fora]) return fora;
+    const g = doc.pixels[y * doc.largura + guia];
+    return !marca && g && g !== k ? guia : fora;
   }
 
   // Valores de uma linha numa carreira (linha de cima = 0), sem a cor-guia da própria linha.
@@ -2356,26 +2381,29 @@ details > summary { cursor: pointer; }
       .map((f) => ({ ...f, de: H - f.yBase, ate: H - f.yTopo }));
   }
 
-  // Pinta o valor na coluna de valor da linha, das linhas de cima yTopo até yBase (inclusive).
+  // Troca o valor da linha nas carreiras das linhas yTopo até yBase (inclusive), na coluna que já guarda o
+  // valor de cada carreira. Valor 0 apaga: a coluna de fora fica vazia e a guia volta a ter o número da linha.
   function pintarValorNaLinha(doc, bloco, k, yTopo, yBase, valor) {
-    const x = colunaDoValor(bloco, k);
-    if (x === null) return 0;
+    if (!bloco.colunas[k]) return 0;
+    const [guia] = colunasDaLinha(bloco, k);
+    const marca = guiaComMarca(doc, bloco, k);
     let n = 0;
     for (let y = Math.max(bloco.carreiraInicio, yTopo); y <= Math.min(bloco.carreiraFim, yBase); y++) {
-      doc.pixels[y * doc.largura + x] = valor;
+      const x = colunaDoValor(doc, bloco, k, y, marca);
+      doc.pixels[y * doc.largura + x] = x === guia && !valor ? k : valor;
       n++;
     }
     return n;
   }
 
   // Altura do painel com as repetições do economizador (blocos marcados na R2).
-  // repeticoes: { "yBase-yTopo": vezes }; sem número, conta 1 vez (como no desenho compactado).
+  // repeticoes: { "de-ate": vezes } (carreiras contadas de baixo); sem número, conta 1 vez.
   function desenvolvimento(doc, painel, repeticoes = {}) {
     const compactadas = painel.y1 - painel.y0 + 1;
     const blocos = painel.R && painel.R.colunas[2] ? faixasDaLinha(doc, painel.R, 2).filter((f) => !f.alterna) : [];
     let desenvolvidas = compactadas;
     const lista = blocos.map((f) => {
-      const chave = `${f.yBase}-${f.yTopo}`;
+      const chave = `${f.de}-${f.ate}`;
       const vezes = Math.max(1, Math.round(numero(repeticoes[chave], 1)));
       const carreiras = f.yBase - f.yTopo + 1;
       desenvolvidas += (vezes - 1) * carreiras;
@@ -2562,13 +2590,13 @@ details > summary { cursor: pointer; }
     const cor = opcoes.cor ?? 1, fundo = opcoes.fundo ?? 0;
     const k = limitar(Math.round(opcoes.escala || 1), 1, 4);
     const margem = Math.max(0, Math.round(opcoes.margem ?? 1));
-    const textos = (Array.isArray(linhas) ? linhas : [linhas]).map((l) => semAcento(l).replace(/\s+$/, ""));
+    const textos = (Array.isArray(linhas) ? linhas : [linhas]).map((l) => [...semAcento(l).replace(/\s+$/, "")]);
     const colunas = Math.max(1, ...textos.map((t) => t.length));
     const w = (2 * margem + colunas * 6 - 1) * k;
     const h = (2 * margem + textos.length * 9 - 2) * k;
     const px = new Uint8Array(w * h).fill(fundo);
     textos.forEach((t, l) => {
-      [...t].forEach((letra, i) => {
+      t.forEach((letra, i) => {
         const linhasLetra = (FONTE[letra] || FONTE["?"]).split("|");
         for (let gy = 0; gy < 7; gy++) {
           for (let gx = 0; gx < 5; gx++) {
@@ -3668,7 +3696,7 @@ tela.addEventListener("pointerdown", (e) => {
   } else if (f === "carimbo") {
     if (!estado.motivo) return avisar("Escolha um motivo na Biblioteca de pontos.");
     salvarHistorico(a);
-    gesto = { tipo: "carimbo", origem: p, feitos: new Set(["0,0"]) };
+    gesto = { tipo: "carimbo", origem: p, ultimo: p, feitos: new Set(["0,0"]) };
     carimbarMotivo(d, p, estado.motivo);
     renderizar();
   } else if (f === "selecao") {
@@ -3706,14 +3734,16 @@ tela.addEventListener("pointermove", (e) => {
       desenharForma(d, gesto.forma, gesto.inicio, fim, gesto.cor, estado.pincel);
       renderizar();
     } else if (gesto.tipo === "carimbo") {
-      // Arrastando, o motivo se repete alinhado com o primeiro carimbo.
+      // Arrastando, o motivo se repete alinhado com o primeiro carimbo, em todo o caminho do ponteiro.
       const m = estado.motivo;
-      const i = Math.floor((p.x - gesto.origem.x) / m.w), j = Math.floor((gesto.origem.y - p.y) / m.h);
-      if (!gesto.feitos.has(`${i},${j}`)) {
+      pontosDaLinha(gesto.ultimo, p, (x, y) => {
+        const i = Math.floor((x - gesto.origem.x) / m.w), j = Math.floor((gesto.origem.y - y) / m.h);
+        if (gesto.feitos.has(`${i},${j}`)) return;
         gesto.feitos.add(`${i},${j}`);
         carimbarMotivo(d, { x: gesto.origem.x + i * m.w, y: gesto.origem.y - j * m.h }, m);
-        renderizar();
-      }
+      });
+      gesto.ultimo = p;
+      renderizar();
     } else if (gesto.tipo === "selecionar") {
       a.selecao = retanguloEntre(gesto.inicio, prender(p, d));
       posicionarCaixas();
@@ -4325,6 +4355,7 @@ function escolherFerramenta(f) {
 function atualizarPainel() {
   const a = abaDat();
   if (!a) return;
+  a.opcoes = null; // depois de uma edição, os blocos de linhas de opção podem ter mudado
   const d = a.doc;
   const cor = (n) => hexCor(d.paleta[n]);
   $("amostra-primaria").style.background = cor(estado.primaria);
@@ -4845,7 +4876,7 @@ document.addEventListener("keydown", (e) => {
 
 let profundidadeArrasto = 0;
 window.addEventListener("dragenter", (e) => {
-  if (![...e.dataTransfer.types].includes("Files")) return;
+  if (![...e.dataTransfer.types].includes("Files") || document.querySelector("dialog[open]")) return;
   profundidadeArrasto++;
   $("soltar").hidden = false;
 });
@@ -4858,6 +4889,8 @@ window.addEventListener("drop", (e) => {
   e.preventDefault();
   profundidadeArrasto = 0;
   $("soltar").hidden = true;
+  // Com um diálogo aberto, a aba nova ficaria por baixo e o diálogo continuaria agindo na anterior.
+  if (document.querySelector("dialog[open]")) return avisar("Feche a janela aberta antes de abrir outros arquivos.");
   abrirLocais([...e.dataTransfer.files]);
 });
 
@@ -5040,9 +5073,8 @@ function selecionarNoDesenho(a, r) {
   atualizarStatus();
 }
 
-// Abre uma aba com um desenho novo, com a paleta e as configurações do desenho aberto.
-function criarDesenhoNovo(nome, img) {
-  const ref = referenciaParaNovo();
+// Abre uma aba com um desenho novo, com a paleta e as configurações do desenho de referência.
+function criarDesenhoNovo(nome, img, ref = referenciaParaNovo()) {
   const doc = ShimaDat.novo(img.w, img.h, ref ? ref.doc : null);
   doc.pixels.set(img.px);
   let final = nome;
@@ -5055,6 +5087,9 @@ function criarDesenhoNovo(nome, img) {
   mostrarAba(aba);
   return aba;
 }
+
+// Os diálogos guardam a aba em que foram abertos; só agem se ela ainda for a aba atual.
+const mesmaAba = (estadoDialogo) => !!estadoDialogo && estadoDialogo.a === abaDat();
 
 // Cola pontos no desenho aberto, no canto da seleção ou no canto visível.
 function colarNoDesenho(a, img, texto) {
@@ -5218,23 +5253,34 @@ function desenharLegendaSimbolos() {
 
 const CHAVE_MOTIVOS = "editor-shima-motivos";
 const motivoValido = (m) =>
-  m && typeof m.nome === "string" && Number.isInteger(m.w) && Number.isInteger(m.h) && m.w > 0 && m.h > 0 && Array.isArray(m.px) && m.px.length === m.w * m.h;
-const meusMotivos = lerArmazenado(CHAVE_MOTIVOS, []).filter(motivoValido);
+  !!m && typeof m.nome === "string" && Number.isInteger(m.w) && Number.isInteger(m.h) && m.w > 0 && m.h > 0 && m.w <= 64 && m.h <= 64 &&
+  Array.isArray(m.px) && m.px.length === m.w * m.h && m.px.every((v) => Number.isInteger(v) && v >= 0 && v <= 255);
+const meusMotivos = (() => {
+  const lista = lerArmazenado(CHAVE_MOTIVOS, []);
+  return Array.isArray(lista) ? lista.filter(motivoValido) : [];
+})();
 let categoriaBiblioteca = 0;
 
 function categoriasDaBiblioteca() {
   return [...RM.BIBLIOTECA, { categoria: "Meus motivos", motivos: meusMotivos, meus: true }];
 }
 
+let chaveBiblioteca = "";
+
 function desenharBiblioteca() {
   const a = abaDat();
   if (!a) return;
   const cats = categoriasDaBiblioteca();
   categoriaBiblioteca = limitar(categoriaBiblioteca, 0, cats.length - 1);
+  const cat = cats[categoriaBiblioteca];
+  // Redesenha só quando a categoria, os motivos, o escolhido ou as cores deles mudam.
+  const codigos = [...new Set(cat.motivos.flatMap((m) => Array.from(m.px)))];
+  const chave = JSON.stringify([categoriaBiblioteca, cats.map((c) => c.motivos.length), cat.motivos.map((m) => m.nome), cat.motivos.indexOf(estado.motivo), estado.motivo && estado.motivo.nome, codigos.map((c) => a.doc.paleta[c])]);
+  if (chave === chaveBiblioteca) return;
+  chaveBiblioteca = chave;
   $("categorias-biblioteca").innerHTML = cats
     .map((c, i) => `<button type="button" class="chip" data-categoria="${i}" aria-pressed="${i === categoriaBiblioteca}">${esc(c.categoria)}</button>`)
     .join("");
-  const cat = cats[categoriaBiblioteca];
   const el = $("motivos-biblioteca");
   if (!cat.motivos.length) {
     el.innerHTML = `<p class="suave pequeno">Nenhum ainda. Copie uma área do desenho (Ctrl+C), clique em “Usar a cópia” e depois em “Guardar motivo”.</p>`;
@@ -5395,7 +5441,7 @@ function atualizarLinhaEscolhida(a = abaDat()) {
     faixas.length
       ? faixas
           .map((f, i) => {
-            const escolhida = e && e.id === id && e.yBase === f.yBase && e.yTopo === f.yTopo;
+            const escolhida = e && e.painel === a.linhaOpcao.painel && e.id === id && e.yBase === f.yBase && e.yTopo === f.yTopo;
             return `<li><button type="button" class="faixa${escolhida ? " escolhida" : ""}" data-faixa="${i}"><span>${f.de === f.ate ? `carreira ${f.de}` : `carreiras ${f.de}–${f.ate}`}</span><span class="valor-faixa">${esc(f.valor)}</span></button></li>`;
           })
           .join("")
@@ -5450,8 +5496,9 @@ $("opcao-faixas").addEventListener("click", (e) => {
   form.valor.value = parseInt(f.valor, 10) || 0;
   form.de.value = f.de;
   form.ate.value = f.ate;
-  a.faixaEscolhida = { id: atual.id, yBase: f.yBase, yTopo: f.yTopo };
-  selecionarNoDesenho(a, { x: RM.colunaDoValor(atual.bloco, atual.k), y: f.yTopo, w: 1, h: f.yBase - f.yTopo + 1 });
+  a.faixaEscolhida = { painel: a.linhaOpcao.painel, id: atual.id, yBase: f.yBase, yTopo: f.yTopo };
+  // As duas colunas da linha: o valor pode estar em qualquer uma delas.
+  selecionarNoDesenho(a, { x: Math.min(...atual.bloco.colunas[atual.k]), y: f.yTopo, w: 2, h: f.yBase - f.yTopo + 1 });
   atualizarLinhaEscolhida(a);
 });
 
@@ -5645,11 +5692,19 @@ function abrirForma(indice = formaPeca) {
 function planoAtual() {
   const r = ultimoModelo || calcularModeloAtual();
   const peca = r.pecas[limitar(formaPeca, 0, r.pecas.length - 1)];
+  if (peca.forma.W > 8000 || peca.forma.H > 8000) return { peca, plano: null };
   return { peca, plano: RM.planoForma(peca.forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca }) };
 }
 
 function desenharFormaDialogo() {
-  const { plano } = planoAtual();
+  const { peca, plano } = planoAtual();
+  $("forma-novo").disabled = $("forma-colar").disabled = !plano;
+  $("forma-previa").hidden = !plano;
+  if (!plano) {
+    $("forma-resumo").textContent = `${peca.nome} ficaria com ${peca.forma.W} agulhas × ${peca.forma.H} carreiras; o limite do editor é 8.000. Confira as medidas e a densidade no Modelo.`;
+    $("forma-passos").innerHTML = "";
+    return;
+  }
   const img = RM.pixelsDaForma(plano, { malha: 1, fora: 0, barra: 2, arremate: 3, parcial: 4, marcaEsq: 5, marcaDir: 5, aumento: 6 });
   const cores = [[43, 40, 36], ...CORES_FORMA.map(([cor]) => rgbDeHex(cor))];
   const cv = $("forma-previa");
@@ -5668,7 +5723,7 @@ function desenharFormaDialogo() {
 // Pontos da forma com os códigos escolhidos (barra e aumento usam o código da malha).
 function imagemDaForma() {
   const { peca, plano } = planoAtual();
-  return { peca, img: RM.pixelsDaForma(plano, { ...formaOpcoes.codigos }) };
+  return { peca, img: plano ? RM.pixelsDaForma(plano, { ...formaOpcoes.codigos }) : null };
 }
 
 {
@@ -5685,14 +5740,15 @@ function imagemDaForma() {
   });
   $("forma-novo").addEventListener("click", () => {
     const { peca, img } = imagemDaForma();
+    if (!img) return;
     $("dlg-forma").close();
     criarDesenhoNovo(`${RM.semAcento(peca.nome).replace(/\s+/g, "_")}.dat`, img);
     avisar(`${peca.nome}: ${img.w} agulhas × ${img.h} carreiras num desenho novo. Faltam as linhas de opção.`);
   });
   $("forma-colar").addEventListener("click", () => {
     const a = abaDat();
-    if (!a) return;
     const { img } = imagemDaForma();
+    if (!a || !img) return;
     $("dlg-forma").close();
     colarNoDesenho(a, img, "Forma como colagem: arraste para posicionar e aperte Enter para fixar.");
   });
@@ -5851,7 +5907,7 @@ function analisarJacquard() {
   $("intarsia-resultado").innerHTML = `<div class="resultado">
     <p class="${n > disponiveis ? "alerta" : "ok-texto"}">Precisa de ${n} guia-fio${n === 1 ? "" : "s"}${n > disponiveis ? `, mais que os ${disponiveis} da máquina` : ""}.</p>
     <div class="cores-area">${[...porCor].slice(0, 24).map(([cor, k]) => `<span>${amostraCor(d, cor)} <span class="suave">${k} guia${k === 1 ? "" : "s"}</span></span>`).join("")}</div>
-    <p class="suave pequeno">Cada trecho seguido de uma cor numa carreira precisa do seu guia; um guia volta a servir quando a área dele acaba. São ${intarsia.areas.length.toLocaleString("pt-BR")} áreas de cor.</p></div>`;
+    <p class="suave pequeno">Cada trecho seguido de uma cor numa carreira precisa do seu guia; um guia volta a servir quando a área dele acaba. ${intarsia.areas.length === 1 ? "É 1 área de cor" : `São ${intarsia.areas.length.toLocaleString("pt-BR")} áreas de cor`}.</p></div>`;
   desenharMapaJacquard();
 }
 
@@ -5909,7 +5965,7 @@ function desenharMapaJacquard() {
 
 $("dlg-jacquard").querySelector("form").addEventListener("input", () => jacquard && analisarJacquard());
 $("jacquard-resultado").addEventListener("click", (e) => {
-  if (!e.target.closest('[data-jacquard="maior"]') || !jacquard || !jacquard.maior) return;
+  if (!e.target.closest('[data-jacquard="maior"]') || !mesmaAba(jacquard) || !jacquard.maior) return;
   const { a, maior } = jacquard;
   $("dlg-jacquard").close();
   selecionarNoDesenho(a, { x: maior.x0, y: maior.y, w: maior.comprimento, h: 1 });
@@ -6263,11 +6319,12 @@ function desenharAgulhas() {
     const item = verif.itens[Number((noDesenho || nasAgulhas).dataset[noDesenho ? "verDesenho" : "verAgulhas"])];
     const faixa = primeiraFaixa(item && item.carreiras);
     if (!faixa) return;
-    const d = verif.a.doc;
+    const a = verif.a, d = a.doc;
     if (noDesenho) {
+      if (!mesmaAba(verif)) return;
       const x0 = item.x0 ?? 0, x1 = item.x1 ?? d.largura - 1;
       $("dlg-verificar").close();
-      selecionarNoDesenho(verif.a, { x: x0, y: d.altura - faixa.ate, w: x1 - x0 + 1, h: faixa.ate - faixa.de + 1 });
+      selecionarNoDesenho(a, { x: x0, y: d.altura - faixa.ate, w: x1 - x0 + 1, h: faixa.ate - faixa.de + 1 });
       return;
     }
     const i = verif.lista.findIndex((p) => p.numero === item.painel);
@@ -6275,7 +6332,10 @@ function desenharAgulhas() {
     form.querySelector('[data-agulhas="tocar"]').textContent = "Tocar";
     escolherPainelVerif(i < 0 ? verif.painel : i, faixa.de);
   });
-  $("dlg-verificar").addEventListener("close", () => verif && cancelAnimationFrame(verif.raf));
+  $("dlg-verificar").addEventListener("close", () => {
+    if (verif) cancelAnimationFrame(verif.raf);
+    verif = null; // não segura a aba (e o histórico dela) depois de fechar
+  });
 }
 
 // ------------------------------------------------------------------ altura com repetições (R2)
@@ -6347,14 +6407,14 @@ function atualizarTotalDesenvolver() {
     atualizarTotalDesenvolver();
   });
   $("desenvolver-criar").addEventListener("click", () => {
-    if (!desenv) return;
+    if (!mesmaAba(desenv)) return;
     const { a, dev } = desenv;
     if (!dev.blocos.some((b) => b.vezes > 1)) return avisar("Diga quantas vezes algum bloco se repete (mais de 1) para desenvolver.");
     const altura = a.doc.altura + dev.desenvolvidas - dev.compactadas;
     if (altura > 8000) return avisar(`O desenho ficaria com ${altura.toLocaleString("pt-BR")} carreiras; o limite do editor é 8.000.`, true);
     const img = RM.desenharDesenvolvido(a.doc, dev.blocos);
     $("dlg-desenvolver").close();
-    criarDesenhoNovo(trocarExtensao(a.nome, "_DESENVOLVIDO.dat"), img);
+    criarDesenhoNovo(trocarExtensao(a.nome, "_DESENVOLVIDO.dat"), img, a);
     avisar(`Desenho desenvolvido com ${img.h} carreiras. As carreiras inteiras se repetem, com todos os painéis.`);
   });
 }
@@ -6686,7 +6746,7 @@ function gravarFicha() {
     baixar(new Blob([linhas.join("\r\n") + "\r\n"], { type: "text/plain" }), trocarExtensao(ficha.a.nome, "_FICHA.txt"));
   });
   $("ficha-escrever").addEventListener("click", () => {
-    if (!ficha) return;
+    if (!mesmaAba(ficha)) return;
     const { a, dados } = ficha;
     const { img } = imagemDaFicha();
     $("dlg-ficha").close();
@@ -6718,12 +6778,20 @@ $("painel-dat").addEventListener("click", (e) => {
   if (b && abaDat()) RECURSOS[b.dataset.recurso]();
 });
 
-// Enter num campo dos diálogos grandes não fecha o diálogo.
+// Enter num campo dos diálogos grandes confirma o campo, sem fechar o diálogo.
 document.querySelectorAll("dialog.largo").forEach((dlg) =>
   dlg.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && e.target.matches("input")) e.preventDefault();
+    if (e.key !== "Enter" || !e.target.matches("input")) return;
+    e.preventDefault();
+    e.target.dispatchEvent(new Event("change", { bubbles: true }));
   }),
 );
+
+// Ao fechar, os diálogos soltam a aba em que estavam (senão ela e o histórico dela ficam na memória).
+$("dlg-jacquard").addEventListener("close", () => (jacquard = null));
+$("dlg-desenvolver").addEventListener("close", () => (desenv = null));
+$("dlg-simular").addEventListener("close", () => (simul = null));
+$("dlg-ficha").addEventListener("close", () => (ficha = null));
 
 desenharLegendaSimbolos();
 </script>
