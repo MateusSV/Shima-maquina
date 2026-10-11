@@ -2401,6 +2401,8 @@ document.addEventListener("keydown", (e) => {
     if (a.flutuante) desfazer();
     else a.selecao = null;
     posicionarCaixas();
+    atualizarStatus();
+    atualizarBotoes();
   } else if (k === "x") trocarCores();
   else if (k === "+" || k === "=") passoZoom(1);
   else if (k === "-") passoZoom(-1);
