@@ -36,7 +36,10 @@ const SUGESTOES_CORES = {
   13: "largura do guia-fio",
   16: "sem seleção (não tece)",
   51: "malha na frente sem transferir",
+  52: "malha atrás sem transferir",
+  60: "transferência entre as fronturas",
   61: "frente e mover 1 agulha à esquerda",
+  70: "transferência entre as fronturas (outro sentido)",
   71: "frente e mover 1 agulha à direita",
 };
 const NOMES_LINHAS = { R1: "economizador / repetição", R2: "economizador: repetição de fora", R3: "guia-fio", R5: "cancelar malha", R6: "ponto (densidade)" };
@@ -1269,7 +1272,9 @@ tela.addEventListener("pointermove", (e) => {
       gesto.ultimo = p;
       renderizar();
     } else if (gesto.tipo === "selecionar") {
-      a.selecao = retanguloEntre(gesto.inicio, prender(p, d));
+      const q = prender(p, d);
+      if (q.x !== gesto.inicio.x || q.y !== gesto.inicio.y) gesto.moveu = true;
+      a.selecao = retanguloEntre(gesto.inicio, q);
       posicionarCaixas();
     } else if (gesto.tipo === "mover" && a.flutuante) {
       a.flutuante.x = p.x - gesto.dx;
@@ -1284,6 +1289,12 @@ function terminarGesto() {
   eixoEspelho = null;
   const a = abaDat();
   if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma" || gesto.tipo === "carimbo")) atualizarPainel();
+  // Um clique sem arrastar com a Seleção tira a seleção (em vez de deixar uma de 1 ponto).
+  if (gesto && a && gesto.tipo === "selecionar" && !gesto.moveu) {
+    a.selecao = null;
+    posicionarCaixas();
+    atualizarStatus();
+  }
   gesto = null;
   atualizarBotoes();
 }
@@ -1340,6 +1351,12 @@ const ACOES = {
     a.selecao = { x: 0, y: 0, w: a.doc.largura, h: a.doc.altura };
     escolherFerramenta("selecao");
     posicionarCaixas();
+  },
+  // Sem teclado (no celular) é o jeito de voltar a "sem seleção", que vale para repetir no corpo e para as análises.
+  "tirar-selecao"(a) {
+    a.selecao = null;
+    posicionarCaixas();
+    atualizarStatus();
   },
   copiar(a) {
     if (a.flutuante) estado.area = { w: a.flutuante.w, h: a.flutuante.h, px: a.flutuante.px.slice() };
@@ -1916,6 +1933,18 @@ function atualizarPainel() {
       </button></li>`,
     )
     .join("");
+  // Os códigos com nome (sugestões e nomes da legenda), para escolher mesmo os que ainda não estão no desenho.
+  const comNome = [...new Set([...Object.keys(SUGESTOES_CORES), ...Object.keys(legenda).filter((k) => legenda[k])].map(Number))].sort((x, y) => x - y);
+  $("codigos-nome").innerHTML = comNome
+    .map(
+      (c) => `<li><button type="button" class="cor-uso${c === estado.primaria ? " primaria" : ""}${c === estado.secundaria ? " secundaria" : ""}" data-cor="${c}" title="Cor ${c} — ${cor(c)}">
+        <span class="amostra" style="background:${cor(c)}"></span>
+        <span class="mono numero">${c}</span>
+        <span class="nome-cor${legenda[c] ? "" : " sugestao"}">${esc(nomeDaCor(c))}</span>
+        <span class="mono contagem">${contagem[c] ? contagem[c].toLocaleString("pt-BR") : "—"}</span>
+      </button></li>`,
+    )
+    .join("");
   $("grade-paleta").innerHTML = Array.from(
     { length: 256 },
     (_, c) => `<button type="button" class="celula-paleta${c === estado.primaria ? " primaria" : ""}${contagem[c] ? " usada" : ""}" data-cor="${c}" style="background:${cor(c)}" aria-label="Cor ${c}" title="Cor ${c}${contagem[c] ? ` · ${contagem[c]} pixels` : ""}"></button>`,
@@ -1942,7 +1971,7 @@ function escolherCor(n, secundaria) {
   if (estado.destacar && !secundaria) renderizar();
 }
 
-for (const id of ["cores-uso", "grade-paleta"]) {
+for (const id of ["cores-uso", "codigos-nome", "grade-paleta"]) {
   $(id).addEventListener("click", (e) => {
     const b = e.target.closest("[data-cor]");
     if (b) escolherCor(Number(b.dataset.cor), false);
@@ -2019,6 +2048,7 @@ function atualizarBotoes() {
   tem("girar", sel);
   tem("repetir", !!estado.area && !!a.selecao);
   tem("fixar", !!a.flutuante);
+  tem("tirar-selecao", !!a.selecao && !a.flutuante);
   tem("cortar-desenho", !!a.selecao);
   for (const acao of ["duplicar-carreiras", "excluir-carreiras", "duplicar-agulhas", "excluir-agulhas"]) tem(acao, !!a.selecao);
   tem("mudar-tamanho", sel);
@@ -2400,10 +2430,10 @@ document.addEventListener("keydown", (e) => {
   else if (k === "delete" || k === "backspace") ACOES.apagar(a);
   else if (k === "enter") fixarFlutuante(a);
   else if (k === "escape") {
-    if (a.flutuante) desfazer();
-    else a.selecao = null;
-    posicionarCaixas();
-    atualizarStatus();
+    if (a.flutuante) {
+      desfazer();
+      posicionarCaixas();
+    } else ACOES["tirar-selecao"](a);
     atualizarBotoes();
   } else if (k === "x") trocarCores();
   else if (k === "+" || k === "=") passoZoom(1);

@@ -176,6 +176,11 @@
     <p class="suave pequeno">Clique: primária · botão direito: secundária</p>
     <ul class="cores-uso" id="cores-uso"></ul>
     <details class="paleta-completa">
+      <summary>Códigos com nome</summary>
+      <p class="suave pequeno">Os códigos de ponto conhecidos, mesmo os que ainda não estão no desenho (— = não usado).</p>
+      <ul class="cores-uso" id="codigos-nome"></ul>
+    </details>
+    <details class="paleta-completa">
       <summary>Paleta completa (256 cores)</summary>
       <div class="grade-paleta" id="grade-paleta"></div>
     </details>
@@ -256,6 +261,7 @@
     <h2 class="rotulo">Seleção</h2>
     <div class="botoes-grade">
       <button type="button" class="botao" data-acao="selecionar-tudo">Selecionar tudo</button>
+      <button type="button" class="botao" data-acao="tirar-selecao" title="Tira a seleção (Esc); um clique sem arrastar com a Seleção também tira">Tirar seleção</button>
       <button type="button" class="botao" data-acao="copiar">Copiar</button>
       <button type="button" class="botao" data-acao="recortar">Recortar</button>
       <button type="button" class="botao" data-acao="colar">Colar</button>
@@ -803,8 +809,11 @@
         <h3 class="sub">Enviar à máquina</h3>
         <ul class="lista-arquivos" id="ficha-arquivos" aria-label="Arquivos abertos"></ul>
         <label class="campo-check"><input type="checkbox" name="zipResumo" checked> Incluir a ficha técnica e o resumo do processamento (.txt)</label>
-        <button type="button" class="botao" id="ficha-zip">Baixar .zip</button>
-        <p class="suave pequeno">O navegador não grava direto no pendrive da máquina nem na rede dela: baixe o .zip e copie os arquivos. Abra antes os arquivos que vão junto (por exemplo, com “Abrir todos”).</p>
+        <div class="controles">
+          <button type="button" class="botao" id="ficha-zip">Baixar .zip</button>
+          <button type="button" class="botao" id="ficha-pasta" title="Grava os arquivos marcados direto numa pasta, como a do pendrive da máquina (Chrome e Edge)" hidden>Gravar numa pasta…</button>
+        </div>
+        <p class="suave pequeno">No Chrome e no Edge, “Gravar numa pasta…” grava direto no pendrive: escolha a pasta dele. Nos outros navegadores (e na página publicada), baixe o .zip e copie os arquivos. A rede da máquina não dá para alcançar pelo navegador. Abra antes os arquivos que vão junto (por exemplo, com “Abrir uma pasta inteira…”).</p>
         <h3 class="sub">Antes de tecer <span class="suave" id="ficha-check-total"></span></h3>
         <ul class="checklist" id="ficha-checklist"></ul>
       </div>

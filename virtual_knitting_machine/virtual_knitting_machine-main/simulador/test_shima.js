@@ -265,12 +265,17 @@ test("linhas de opção do exemplo: painéis, faixas, pintar valor e verificaç�
     ["aviso", "Carreiras com malha e sem guia-fio (R3) (painel 1)", "187–188, 365"],
     ["aviso", "Carreiras com malha e sem número de ponto (R6) (painel 1)", "187–188, 365"],
     ["info", "Transferência sem fio: coerente (painel 1)", "201–202"],
+    ["info", "Guia-fio 1 sem malha (entrada do fio?) (painel 1)", "189–190"],
+    ["info", "Ourela alternada (painel 1)", "203–359"],
     ["aviso", "Carreiras com malha e sem guia-fio (R3) (painel 2)", "187–188, 365"],
     ["aviso", "Carreiras com malha e sem número de ponto (R6) (painel 2)", "187–188, 365"],
     ["info", "Transferência sem fio: coerente (painel 2)", "201–202"],
+    ["info", "Guia-fio 1 sem malha (entrada do fio?) (painel 2)", "189–190"],
+    ["info", "Ourela alternada (painel 2)", "203–359"],
     ["aviso", "Os painéis são diferentes", ""],
   ]);
-  assert.match(itens[6].texto, /Painel 1: 203 agulhas de malha, 179 carreiras, R2 = 55\. Painel 2: 199 agulhas de malha, 179 carreiras, R2 = 30/);
+  assert.match(itens[4].texto, /as agulhas 452, 454, 652 e 654 da borda da malha alternam os códigos 2 e 16/);
+  assert.match(itens[10].texto, /Painel 1: 203 agulhas de malha, 179 carreiras, R2 = 55\. Painel 2: 199 agulhas de malha, 179 carreiras, R2 = 30/);
 
   // Altura com o bloco da R2 (216–223) repetido 55 vezes.
   const dev = Recursos.desenvolvimento(doc, paineis[0], { "216-223": 55 }); // chave pelas carreiras, de baixo
