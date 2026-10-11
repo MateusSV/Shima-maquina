@@ -110,6 +110,7 @@ const estado = {
   carreiraFoco: null, // carreira sob o cursor, para o painel de linhas de opção
   imagemImportar: null, // { nome, url } escolhida numa aba de imagem
   simbolos: false, // desenhar o tipo de ponto de cada código por cima do desenho
+  escurecer: false, // escurecer o desenho para as linhas de opção aparecerem
   motivo: null, // motivo do carimbo: { nome, w, h, px } (linha de cima primeiro)
 };
 
@@ -204,35 +205,43 @@ function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-// ZIP sem compressão com um único arquivo (nome em UTF-8, para manter o Ç).
-function zipComUmArquivo(nome, bytes) {
-  const nomeBytes = new TextEncoder().encode(nome);
-  const crc = crc32(bytes);
-  const local = new DataView(new ArrayBuffer(30));
-  local.setUint32(0, 0x04034b50, true);
-  local.setUint16(4, 20, true);
-  local.setUint16(6, 0x0800, true); // nome em UTF-8
-  local.setUint32(14, crc, true);
-  local.setUint32(18, bytes.length, true);
-  local.setUint32(22, bytes.length, true);
-  local.setUint16(26, nomeBytes.length, true);
-  const central = new DataView(new ArrayBuffer(46));
-  central.setUint32(0, 0x02014b50, true);
-  central.setUint16(4, 20, true);
-  central.setUint16(6, 20, true);
-  central.setUint16(8, 0x0800, true);
-  central.setUint32(16, crc, true);
-  central.setUint32(20, bytes.length, true);
-  central.setUint32(24, bytes.length, true);
-  central.setUint16(28, nomeBytes.length, true);
-  const inicioCentral = 30 + nomeBytes.length + bytes.length;
+// ZIP sem compressão (nomes em UTF-8, para manter o Ç). arquivos: [{ nome, bytes }]
+function zipComArquivos(arquivos) {
+  const locais = [], centrais = [];
+  let posicao = 0;
+  for (const { nome, bytes } of arquivos) {
+    const nomeBytes = new TextEncoder().encode(nome);
+    const crc = crc32(bytes);
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);
+    local.setUint16(6, 0x0800, true); // nome em UTF-8
+    local.setUint32(14, crc, true);
+    local.setUint32(18, bytes.length, true);
+    local.setUint32(22, bytes.length, true);
+    local.setUint16(26, nomeBytes.length, true);
+    const central = new DataView(new ArrayBuffer(46));
+    central.setUint32(0, 0x02014b50, true);
+    central.setUint16(4, 20, true);
+    central.setUint16(6, 20, true);
+    central.setUint16(8, 0x0800, true);
+    central.setUint32(16, crc, true);
+    central.setUint32(20, bytes.length, true);
+    central.setUint32(24, bytes.length, true);
+    central.setUint16(28, nomeBytes.length, true);
+    central.setUint32(42, posicao, true); // onde começa o registro local deste arquivo
+    locais.push(new Uint8Array(local.buffer), nomeBytes, bytes);
+    centrais.push(new Uint8Array(central.buffer), nomeBytes);
+    posicao += 30 + nomeBytes.length + bytes.length;
+  }
+  const tamanhoCentral = centrais.reduce((t, p) => t + p.length, 0);
   const fim = new DataView(new ArrayBuffer(22));
   fim.setUint32(0, 0x06054b50, true);
-  fim.setUint16(8, 1, true);
-  fim.setUint16(10, 1, true);
-  fim.setUint32(12, 46 + nomeBytes.length, true);
-  fim.setUint32(16, inicioCentral, true);
-  const partes = [new Uint8Array(local.buffer), nomeBytes, bytes, new Uint8Array(central.buffer), nomeBytes, new Uint8Array(fim.buffer)];
+  fim.setUint16(8, arquivos.length, true);
+  fim.setUint16(10, arquivos.length, true);
+  fim.setUint32(12, tamanhoCentral, true);
+  fim.setUint32(16, posicao, true);
+  const partes = [...locais, ...centrais, new Uint8Array(fim.buffer)];
   const zip = new Uint8Array(partes.reduce((t, p) => t + p.length, 0));
   let pos = 0;
   for (const p of partes) {
@@ -240,6 +249,10 @@ function zipComUmArquivo(nome, bytes) {
     pos += p.length;
   }
   return zip;
+}
+
+function zipComUmArquivo(nome, bytes) {
+  return zipComArquivos([{ nome, bytes }]);
 }
 
 // Substitutos das janelas confirm e prompt do navegador, que não funcionam na página publicada no Claude.
@@ -676,9 +689,22 @@ function renderizar() {
       }
     }
   }
+  if (estado.escurecer) escurecerForaDasLinhas(a, px32);
   ctx.putImageData(imagem, 0, 0);
   posicionarCaixas();
   agendarSimbolos();
+}
+
+// Escurece o desenho e deixa as linhas de opção como estão, para elas aparecerem.
+function escurecerForaDasLinhas(a, px32) {
+  const W = a.doc.largura;
+  const guardados = blocosDeOpcao(a).map((b) => {
+    const linhas = [];
+    for (let y = b.carreiraInicio; y <= b.carreiraFim; y++) linhas.push(px32.slice(y * W + b.xMin, y * W + b.xMax + 1));
+    return { b, linhas };
+  });
+  for (let i = 0; i < px32.length; i++) px32[i] = ((px32[i] >>> 2) & 0x3f3f3f) | 0xff000000;
+  for (const { b, linhas } of guardados) linhas.forEach((l, k) => px32.set(l, (b.carreiraInicio + k) * W + b.xMin));
 }
 
 function zoomQueCabe(d) {

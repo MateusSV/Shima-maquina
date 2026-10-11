@@ -55,37 +55,55 @@ Depois abra http://localhost:8000/editor.html no navegador. Para usar outra past
 No painel à direita, em **Desenvolver o modelo**, **Biblioteca de pontos** e **Linhas de opção**:
 
 - **Modelo**: escolha o estilo (painel reto, gola careca, gola V, cardigã, regata, gola polo), a densidade
-  da amostra (colunas e carreiras em 10 cm) e as medidas em cm; o editor calcula as agulhas e carreiras de
-  cada peça.
+  da amostra (colunas e carreiras em 10 cm), a máquina, a finura e as medidas em cm; o editor calcula as
+  agulhas e carreiras de cada peça e desenha o **esquema** dela em cm, com as cotas.
 - **Forma**: para cada peça, as diminuições e aumentos espalhados pelas carreiras, arremates, malha parcial
-  dos ombros e marcas de diminuição, passo a passo. Cria um desenho novo com a forma ou cola no desenho
-  aberto. Os códigos usados (malha, fora, arremate, malha parcial, diminuições) podem ser trocados.
+  dos ombros e marcas de diminuição, passo a passo. Clique num passo para ver as carreiras dele na prévia.
+  Cria um desenho novo com a forma ou cola no desenho aberto. Os códigos usados (malha, fora, arremate,
+  malha parcial, diminuições) podem ser trocados.
 - **Biblioteca de pontos e carimbo (K)**: trança, barra, links, rendado, flutuação, transferência e tuck.
   O carimbo põe o motivo com o canto de baixo à esquerda no clique e, arrastando, repete alinhado.
   **Repetir o motivo na seleção** em repetição normal ou em degraus. **Usar a cópia** e **Guardar motivo**
   criam os seus próprios motivos (ficam no navegador).
 - **Símbolos**: com zoom de 800% ou mais, mostra o tipo de ponto de cada código (frente, atrás, tuck, sem
   seleção, mover).
-- **Gerar padrão**: listras, losango (argyle) e texto em letras de pixels, como colagem.
+- **Gerar padrão**: listras (com `cor:carreiras:guia`, o guia-fio de cada listra vai para a R3 da seleção),
+  losango (argyle), **onça** (rosetas que se repetem sem emenda; “Sortear” troca as rosetas), **logo em
+  pontos** (de um texto ou de uma imagem PNG/JPG, separado em 2 a 4 fios, na proporção da amostra) e texto em
+  letras de pixels.
 - **Jacquard e intarsia**: fios soltos no avesso em flutuação, birdseye, escada ou tubular, com a maior
-  flutuação marcada no desenho; quantos guia-fios a intarsia precisa e o mapa de cada um.
-- **Uma linha de opção**: escolha o painel e a linha (L1–L20, R1–R20) para ver as faixas de valores por
-  carreira, dar um nome à linha e **pintar um valor** de uma carreira até outra. O conta-gotas numa linha
-  de opção a escolhe.
+  flutuação marcada no desenho e a **vista do avesso** (espelhada, com cada fio solto na cor dele); quantos
+  guia-fios a intarsia precisa, o mapa e a tabela de cada guia (cor, carreiras e áreas).
+- **Linhas de opção**: a grade mostra as 20 linhas de cada lado, com as que têm valores marcadas; escolha uma
+  para ver as faixas de valores por carreira, dar um nome a ela e **pintar um valor** de uma carreira até
+  outra. O conta-gotas numa linha de opção a escolhe. **Escurecer o desenho** deixa só as linhas de opção
+  em destaque.
 - **Verificar**: procura carreiras com malha sem guia-fio (R3) ou sem ponto (R6), cancelar malha (R5) com
   guia-fio, falta da largura do guia (13), flutuações longas (16) e painéis diferentes. Mostra as agulhas
   das duas fronturas com o carro passando, carreira a carreira.
-- **Altura com repetições**: os blocos do economizador (R2) com quantas vezes cada um repete, a altura real
-  e um desenho desenvolvido com as carreiras repetidas.
-- **Simular malha**: prévia da malha (frente ou avesso, tipo de fio, cor pelo guia-fio ou pelo desenho).
-- **Ficha técnica**: código, descrição, máquina, tempo, fio, pesos, data e fio de cada guia; estimativa do
-  tempo de tecimento; baixa em `.txt` ou escreve a ficha no desenho em letras de pixels.
+- **Pacotes e altura**: o painel dividido em trechos (início, barra, transferência, corpo, final) pelas linhas
+  R5 e R6; troque o início (com fio de desperdício e separação), a barra (tubular, ribana 1×1 ou 2×2, ou
+  sem barra) e o final (com arremate ou fio de desperdício para remalhar), diga quantas vezes cada bloco do
+  economizador (R2) repete e veja a altura real. **Criar desenho desenvolvido** abre a peça inteira numa aba
+  nova. Os códigos dos pacotes podem ser trocados.
+- **Processar**: em 7 passos, a máquina e a finura, cada número da R3 como guia-fio (guia, fio, cor e lado de
+  entrada), as repetições da R2, o puxador e a velocidade de cada trecho e o ponto da frente e de trás de cada
+  número da R6. **Processar** confere tudo, desenvolve a peça e estima o tempo; o resumo baixa em `.txt`.
+- **Simular malha**: prévia da malha (frente ou avesso, tipo de fio, cor pelo guia-fio ou pelo desenho), com
+  **variantes de cor** prontas ou guardadas por você e a **peça inteira** do Modelo em 2D, com o desenho
+  repetido.
+- **Ficha técnica**: código, descrição, máquina, tempo, fio, pesos, data e fio de cada guia (os mesmos do
+  Processar); estimativa do tempo de tecimento; baixa em `.txt` ou escreve a ficha no desenho em letras de
+  pixels. **Enviar à máquina** baixa um `.zip` com os arquivos abertos escolhidos (o desenho como está agora,
+  `.000`, `.QFD`) e os resumos; **Antes de tecer** lista o que ainda falta conferir.
 
 Os significados de códigos e linhas de opção vêm de referências públicas do KnitPaint e mudam entre
-versões: os nomes aparecem com “?” e os códigos usados pelos recursos podem ser trocados.
+versões: os nomes aparecem com “?” e os códigos usados pelos recursos podem ser trocados. Os valores do
+Processar, dos Pacotes e da Ficha ficam guardados no navegador, por nome de arquivo.
 
-O que o editor **não** faz: gerar o programa da máquina (`.000`) a partir do `.dat`. Isso é o
-processamento do KnitPaint. Para isso use o KnitPaint ou o SDS KnitPaint-Online da Shima Seiki.
+O que o editor **não** faz: gerar o programa da máquina (`.000`) e os ajustes (`.QFD`) a partir do `.dat`.
+Isso é o processamento do KnitPaint; use os valores do Processar no KnitPaint ou no SDS KnitPaint-Online da
+Shima Seiki. O navegador também não grava direto no pendrive nem na rede da máquina: baixe o `.zip` e copie.
 
 | Arquivo | O que é | No editor |
 | --- | --- | --- |

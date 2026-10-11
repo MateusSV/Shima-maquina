@@ -2,9 +2,9 @@
 
 // Recursos para desenvolver o modelo dentro do editor, como no KnitPaint:
 //   barra e painel  carimbo de ponto (K), símbolos dos pontos, biblioteca de pontos e repetição,
-//                   uma linha de opção por vez (faixas de valores, nome, pintar valor)
-//   diálogos        modelo, forma, gerar padrão, jacquard e intarsia, verificar (com as agulhas),
-//                   altura com repetições, simular malha e ficha técnica
+//                   uma linha de opção por vez (todas as linhas, faixas de valores, nome, pintar valor)
+//   diálogos        modelo (com o esquema da peça), forma, gerar padrão, jacquard e intarsia, verificar
+//                   (com as agulhas), pacotes e altura, processamento, simular malha e ficha técnica
 // A lógica fica em recursos_malha.js (RecursosMalha); aqui ficam a tela e os diálogos. Usa o estado e as
 // funções de editor.js, que carrega antes deste arquivo.
 
@@ -478,6 +478,44 @@ function trocarHtml(el, html) {
   el.htmlAtual = html;
 }
 
+// Linhas de opção do painel que têm algum valor ("L3", "R6"...).
+function linhasUsadas(a, p) {
+  const usadas = new Set();
+  for (const [lado, b] of [["L", p.L], ["R", p.R]]) {
+    if (!b) continue;
+    for (let k = 1; k <= b.ultima; k++) if (b.colunas[k] && RM.faixasDaLinha(a.doc, b, k).length) usadas.add(`${lado}${k}`);
+  }
+  return usadas;
+}
+
+const AJUDA_LINHAS = {
+  R2: "Os blocos desta linha se repetem na máquina: diga quantas vezes em Pacotes e altura ou no Processar.",
+  R3: "No Processar, cada número desta linha vira um guia-fio, com o fio, a cor e o lado por onde ele entra.",
+  R5: "Pacotes e altura usa esta linha para achar as carreiras de transferência.",
+  R6: "No Processar, cada número desta linha recebe o valor de ponto da frente e de trás. Pacotes e altura usa esta linha para achar a barra e o corpo.",
+};
+
+// Grade com as 20 linhas de cada lado: a escolhida destacada, as usadas com um ponto.
+function htmlTodasAsLinhas(p, usadas, escolhida) {
+  return ["L", "R"]
+    .map((lado) => {
+      const b = lado === "L" ? p.L : p.R;
+      const botoes = [];
+      for (let k = 1; k <= 20; k++) {
+        const id = `${lado}${k}`;
+        const existe = !!b && k <= b.ultima;
+        const nome = nomeDaLinha(id);
+        const situacao = !existe ? "não existe neste painel" : usadas.has(id) ? "com valores" : "vazia";
+        const titulo = `${id}${nome ? ` · ${nome}` : ""} · ${situacao}`;
+        botoes.push(
+          `<button type="button" class="linha-op${usadas.has(id) ? " usada" : ""}" data-linha-op="${id}" aria-pressed="${id === escolhida}" title="${esc(titulo)}" aria-label="${esc(titulo)}"${existe ? "" : " disabled"}>${k}</button>`,
+        );
+      }
+      return `<div class="grupo-linhas"><span class="lado" aria-hidden="true">${lado}</span>${botoes.slice(0, 10).join("")}<span class="lado"></span>${botoes.slice(10).join("")}</div>`;
+    })
+    .join("");
+}
+
 function atualizarLinhaEscolhida(a = abaDat()) {
   if (!a) return;
   const atual = linhaAtual(a);
@@ -500,6 +538,12 @@ function atualizarLinhaEscolhida(a = abaDat()) {
       })
       .join(""),
   );
+  const usadas = linhasUsadas(a, atual.p);
+  trocarHtml($("opcao-todas"), htmlTodasAsLinhas(atual.p, usadas, id));
+  const nomeAtual = nomeDaLinha(id);
+  $("opcao-ajuda").textContent = `${id}${nomeAtual ? ` (${nomeAtual})` : ""}: ${usadas.has(id) ? "tem valores neste painel" : "vazia neste painel"}. ${
+    AJUDA_LINHAS[id] || "Clique num valor da lista para selecionar as carreiras dele no desenho."
+  }`;
   $("rotulo-opcao-nome").textContent = `Nome da linha ${id}`;
   const campoNome = $("opcao-nome");
   if (document.activeElement !== campoNome) campoNome.value = nomesLinhas[id] || "";
@@ -545,6 +589,19 @@ $("opcao-linha").addEventListener("change", (e) => {
   if (!a) return;
   a.linhaOpcao = { ...(a.linhaOpcao || { painel: 0 }), linha: e.target.value };
   atualizarLinhaEscolhida(a);
+});
+
+$("opcao-todas").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-linha-op]");
+  const a = abaDat();
+  if (!b || b.disabled || !a) return;
+  a.linhaOpcao = { ...(a.linhaOpcao || { painel: 0 }), linha: b.dataset.linhaOp };
+  atualizarLinhaEscolhida(a);
+});
+
+$("escurecer-desenho").addEventListener("change", (e) => {
+  estado.escurecer = e.target.checked;
+  renderizar();
 });
 
 $("opcao-nome").addEventListener("change", (e) => {
@@ -646,8 +703,9 @@ window.addEventListener("resize", agendarSimbolos);
 // ------------------------------------------------------------------ modelo
 
 const CHAVE_MODELO = "editor-shima-modelo";
-const modelo = Object.assign({ estilo: "careca", colunas: 30, carreiras: 40, valores: {} }, lerArmazenado(CHAVE_MODELO, {}));
+const modelo = Object.assign({ estilo: "careca", colunas: 30, carreiras: 40, maquina: "SSG122SV", finura: 7, valores: {} }, lerArmazenado(CHAVE_MODELO, {}));
 let ultimoModelo = null;
+let esquemaPeca = 0;
 
 function calcularModeloAtual() {
   ultimoModelo = RM.calcularModelo(modelo.estilo, modelo.valores[modelo.estilo] || {}, { colunas: modelo.colunas, carreiras: modelo.carreiras });
@@ -662,8 +720,13 @@ function abrirModelo() {
   form.estilo.value = modelo.estilo;
   form.colunas.value = modelo.colunas;
   form.carreiras.value = modelo.carreiras;
-  desenharMedidas();
+  const maquinas = RM.MAQUINAS.includes(modelo.maquina) || !modelo.maquina ? RM.MAQUINAS : [modelo.maquina, ...RM.MAQUINAS];
+  form.maquina.innerHTML = maquinas.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+  form.maquina.value = modelo.maquina;
+  form.finura.innerHTML = RM.FINURAS.map((f) => `<option value="${f}">${f}G · ${f} agulhas por polegada</option>`).join("");
+  form.finura.value = String(modelo.finura);
   abrirJanela("dlg-modelo");
+  desenharMedidas();
 }
 
 function desenharMedidas() {
@@ -693,6 +756,152 @@ function desenharPecas(r = calcularModeloAtual()) {
         <td><button type="button" class="botao pequeno" data-forma="${i}">Forma…</button></td></tr>`,
       )
       .join("")}</tbody></table></div>`;
+  const escolha = $("dlg-modelo").querySelector("form").esquema;
+  esquemaPeca = limitar(esquemaPeca, 0, r.pecas.length - 1);
+  trocarHtml(escolha, r.pecas.map((p, i) => `<option value="${i}">${esc(p.nome)}</option>`).join(""));
+  escolha.value = String(esquemaPeca);
+  desenharEsquema(r);
+}
+
+// ------------------------------------------------------------------ esquema da peça
+
+const cm1 = (v) => (Math.round(v * 10) / 10).toLocaleString("pt-BR");
+
+// Trechos ocupados de cada carreira do plano (malha tecida e arremates, sem a malha parcial), já juntos.
+function ocupacaoDaForma(plano) {
+  const ocup = plano.linhas.map((row) => {
+    const lista = [...row.segs, ...row.arrem].map(([p, q]) => [Math.min(p, q), Math.max(p, q)]).sort((p, q) => p[0] - q[0]);
+    const juntos = [];
+    for (const [p, q] of lista) {
+      const ult = juntos[juntos.length - 1];
+      if (ult && p <= ult[1] + 1) ult[1] = Math.max(ult[1], q);
+      else juntos.push([p, q]);
+    }
+    return juntos;
+  });
+  // Na última carreira o arremate inclui os pontos guardados da malha parcial, que ficaram mais embaixo.
+  const H = ocup.length;
+  if (H > 1 && plano.linhas.some((l) => l.parcial.length)) ocup[H - 1] = ocup[H - 2];
+  return ocup;
+}
+
+// Contorno da peça em degraus (ponto a ponto): sobe pela borda de fora, contorna a gola quando a carreira
+// tem dois trechos e desce pela outra borda. X(agulha) e Y(carreira) dão as coordenadas do desenho.
+function contornoDaForma(ocup, X, Y) {
+  let topo = ocup.length - 1;
+  while (topo > 0 && !ocup[topo].length) topo--;
+  if (!ocup[topo] || !ocup[topo].length) return "";
+  const pts = [];
+  const add = (x, y) => {
+    const u = pts[pts.length - 1];
+    if (u && u[0] === x && u[1] === y) return;
+    pts.push([x, y]);
+  };
+  const esq = (c) => ocup[c][0][0];
+  const dir = (c) => ocup[c][ocup[c].length - 1][1] + 1;
+  for (let c = 0; c <= topo; c++) {
+    if (!ocup[c].length) continue;
+    add(esq(c), c);
+    add(esq(c), c + 1);
+  }
+  let abre = topo + 1;
+  while (abre > 0 && ocup[abre - 1].length > 1) abre--;
+  if (abre <= topo) {
+    // A gola: desce pela borda de dentro do lado esquerdo e sobe pela do lado direito.
+    const fimEsq = (c) => (ocup[c].length > 1 ? ocup[c][0][1] + 1 : esq(c));
+    const iniDir = (c) => (ocup[c].length > 1 ? ocup[c][1][0] : fimEsq(c));
+    for (let c = topo; c >= abre; c--) {
+      add(fimEsq(c), c + 1);
+      add(fimEsq(c), c);
+    }
+    for (let c = abre; c <= topo; c++) {
+      add(iniDir(c), c);
+      add(iniDir(c), c + 1);
+    }
+  }
+  for (let c = topo; c >= 0; c--) {
+    if (!ocup[c].length) continue;
+    add(dir(c), c + 1);
+    add(dir(c), c);
+  }
+  // Tira os pontos do meio de trechos retos.
+  const limpos = pts.filter((p, i) => {
+    const a = pts[i - 1], b = pts[i + 1];
+    return !a || !b || !((a[0] === p[0] && p[0] === b[0]) || (a[1] === p[1] && p[1] === b[1]));
+  });
+  return `M${limpos.map(([x, y]) => `${X(x).toFixed(1)} ${Y(y).toFixed(1)}`).join("L")}Z`;
+}
+
+// Esquema da peça em cm, com a proporção certa dos pontos (largura pelas colunas, altura pelas carreiras).
+function esquemaSvg(peca, plano, densidade) {
+  const cmX = 10 / Math.max(0.1, decimal(densidade.colunas, 30)), cmY = 10 / Math.max(0.1, decimal(densidade.carreiras, 40));
+  const { W, H } = plano;
+  const k = Math.min(300 / (W * cmX), 320 / (H * cmY));
+  const mx = 74, mt = 34, mb = 48, mr = 40;
+  const sx = cmX * k, sy = cmY * k;
+  const X = (x) => mx + x * sx, Y = (c) => mt + (H - c) * sy;
+  const vbW = Math.round(mx + W * sx + mr), vbH = Math.round(mt + H * sy + mb);
+  const ocup = ocupacaoDaForma(plano);
+  const f = peca.forma;
+  const partes = [`<path class="contorno" d="${contornoDaForma(ocup, X, Y)}"/>`];
+  const linha = (x1, y1, x2, y2, classe = "cota") => partes.push(`<line class="${classe}" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`);
+  const texto = (x, y, t, extra = "") => partes.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}"${extra}>${esc(t)}</text>`);
+  // Largura da primeira carreira, embaixo.
+  const base = ocup[0] && ocup[0].length ? [ocup[0][0][0], ocup[0][ocup[0].length - 1][1] + 1] : [0, W];
+  const yb = Y(0) + 16;
+  linha(X(base[0]), yb, X(base[1]), yb);
+  linha(X(base[0]), yb - 5, X(base[0]), yb + 5);
+  linha(X(base[1]), yb - 5, X(base[1]), yb + 5);
+  texto((X(base[0]) + X(base[1])) / 2, yb + 20, `${cm1((base[1] - base[0]) * cmX)} cm · ${base[1] - base[0]} ag.`, ' text-anchor="middle" class="destaque"');
+  // Altura total, à esquerda.
+  const xa = mx - 18;
+  linha(xa, Y(0), xa, Y(H));
+  linha(xa - 5, Y(0), xa + 5, Y(0));
+  linha(xa - 5, Y(H), xa + 5, Y(H));
+  texto(xa - 8, (Y(0) + Y(H)) / 2, `${cm1(H * cmY)} cm · ${H} car.`, ` text-anchor="middle" class="destaque" transform="rotate(-90 ${(xa - 8).toFixed(1)} ${((Y(0) + Y(H)) / 2).toFixed(1)})"`);
+  // Barra tracejada.
+  const barra = Math.round(f.barra || 0);
+  if (barra > 0 && barra < H) {
+    linha(X(base[0]), Y(barra), X(base[1]), Y(barra), "linha-barra");
+    texto((X(base[0]) + X(base[1])) / 2, Y(barra) - 6, `barra ${cm1(barra * cmY)} cm`, ' text-anchor="middle"');
+  }
+  // Cota à direita do trecho de cima (cava ou copa) e a largura de onde ele começa.
+  const lado = (de, nome) => {
+    if (!(de > 0 && de < H)) return;
+    const xr = X(W) + 14;
+    linha(xr, Y(de), xr, Y(H));
+    linha(xr - 5, Y(de), xr + 5, Y(de));
+    linha(xr - 5, Y(H), xr + 5, Y(H));
+    const meio = (Y(de) + Y(H)) / 2;
+    texto(xr + 16, meio, `${nome} ${cm1((H - de) * cmY)} cm`, ` text-anchor="middle" transform="rotate(-90 ${(xr + 16).toFixed(1)} ${meio.toFixed(1)})"`);
+  };
+  if (f.tipo === "corpo") {
+    lado(H - Math.round(f.cava), "cava");
+    const gola = Math.round(f.gola);
+    texto(X(W / 2), mt - 12, `gola ${cm1(gola * cmX)} cm · ${gola} ag.`, ' text-anchor="middle"');
+  } else if (f.tipo === "manga") {
+    const copa0 = H - Math.round(f.copa);
+    lado(copa0, "copa");
+    const r = ocup[Math.max(0, copa0 - 1)];
+    if (r && r.length) texto(X(W / 2), Y(copa0) + 16, `${cm1((r[r.length - 1][1] + 1 - r[0][0]) * cmX)} cm`, ' text-anchor="middle"');
+  }
+  const nome = `${peca.nome}: ${cm1(W * cmX)} × ${cm1(H * cmY)} cm`;
+  return `<svg viewBox="0 0 ${vbW} ${vbH}" role="img" aria-label="${esc(`Esquema da peça ${nome}`)}">${partes.join("")}</svg>`;
+}
+
+function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
+  const peca = r.pecas[limitar(esquemaPeca, 0, r.pecas.length - 1)];
+  const el = $("modelo-esquema");
+  const legenda = $("modelo-esquema-legenda");
+  if (!(peca.forma.W > 0 && peca.forma.H > 0) || peca.forma.W > 8000 || peca.forma.H > 8000) {
+    el.innerHTML = "";
+    legenda.textContent = `${peca.nome} ficaria com ${peca.forma.W} agulhas × ${peca.forma.H} carreiras: confira as medidas e a densidade.`;
+    return;
+  }
+  const plano = RM.planoForma(peca.forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca });
+  el.innerHTML = esquemaSvg(peca, plano, modelo);
+  const qtd = peca.qtd > 1 ? ` (${peca.qtd} peças)` : "";
+  legenda.textContent = `${peca.nome}${qtd}: ${plano.W} agulhas × ${plano.H} carreiras, desenhada ponto a ponto pela forma e pela densidade da amostra.`;
 }
 
 {
@@ -711,6 +920,18 @@ function desenharPecas(r = calcularModeloAtual()) {
       desenharPecas();
     });
   }
+  form.maquina.addEventListener("change", () => {
+    modelo.maquina = form.maquina.value;
+    gravarArmazenado(CHAVE_MODELO, modelo);
+  });
+  form.finura.addEventListener("change", () => {
+    modelo.finura = Number(form.finura.value);
+    gravarArmazenado(CHAVE_MODELO, modelo);
+  });
+  form.esquema.addEventListener("change", () => {
+    esquemaPeca = Number(form.esquema.value);
+    desenharEsquema();
+  });
   $("modelo-medidas").addEventListener("input", (e) => {
     const id = e.target.dataset.medida;
     if (!id) return;
@@ -734,6 +955,7 @@ const CODIGOS_FORMA = { malha: 1, fora: 0, arremate: 16, parcial: 16, marcaEsq: 
 const formaOpcoes = Object.assign({ porVez: 1, marca: 3 }, lerArmazenado(CHAVE_FORMA, {}));
 formaOpcoes.codigos = { ...CODIGOS_FORMA, ...(formaOpcoes.codigos || {}) };
 let formaPeca = 0;
+let formaDestaque = null; // passo da forma destacado na prévia
 // Cores só da prévia (no desenho entram os códigos acima): 0 fora, 1 malha, 2 barra, 3 arremate,
 // 4 malha parcial, 5 diminuição, 6 aumento.
 const CORES_FORMA = [
@@ -747,6 +969,7 @@ const CORES_FORMA = [
 
 function abrirForma(indice = formaPeca) {
   const r = ultimoModelo || calcularModeloAtual();
+  if (limitar(indice, 0, r.pecas.length - 1) !== formaPeca) formaDestaque = null;
   formaPeca = limitar(indice, 0, r.pecas.length - 1);
   const form = $("dlg-forma").querySelector("form");
   form.peca.innerHTML = r.pecas.map((p, i) => `<option value="${i}">${esc(p.nome)} · ${p.agulhas} × ${p.carreiras}</option>`).join("");
@@ -778,17 +1001,37 @@ function desenharFormaDialogo() {
   }
   const img = RM.pixelsDaForma(plano, { malha: 1, fora: 0, barra: 2, arremate: 3, parcial: 4, marcaEsq: 5, marcaDir: 5, aumento: 6 });
   const cores = [[43, 40, 36], ...CORES_FORMA.map(([cor]) => rgbDeHex(cor))];
+  // Com um passo escolhido, as outras carreiras ficam apagadas (cores 7 a 13, misturadas com o fundo).
+  if (formaDestaque !== null && !(plano.passos[formaDestaque] && plano.passos[formaDestaque].de !== undefined)) formaDestaque = null;
+  const passo = formaDestaque !== null ? plano.passos[formaDestaque] : null;
+  if (passo) {
+    for (let y = 0; y < img.h; y++) {
+      const c = img.h - y;
+      if (c >= passo.de && c <= passo.ate) continue;
+      for (let x = 0; x < img.w; x++) img.px[y * img.w + x] += cores.length;
+    }
+  }
+  const apagadas = cores.map((rgb) => rgb.map((v, i) => Math.round(v * 0.3 + cores[0][i] * 0.7)));
+  const todas = [...cores, ...apagadas];
   const cv = $("forma-previa");
-  pintarPixels(cv, img, (v) => cores[v], zoomQueCabeEm(img.w, img.h, larguraUtil(cv, 440), 460, 6));
-  cv.setAttribute("aria-label", `Forma: ${plano.resumo}`);
+  const z = zoomQueCabeEm(img.w, img.h, larguraUtil(cv, 440), 460, 6);
+  pintarPixels(cv, img, (v) => todas[v], z);
+  cv.setAttribute("aria-label", `Forma: ${plano.resumo}${passo ? ` Destaque: ${passo.nome}.` : ""}`);
   $("forma-resumo").textContent = plano.resumo;
   $("forma-passos").innerHTML = plano.passos
-    .map(
-      (s) => `<li${s.aviso ? ' class="passo-aviso"' : ""}><strong>${esc(s.nome)}</strong>${
-        s.de !== undefined ? ` <span class="onde">${s.de === s.ate ? `carreira ${s.de}` : `carreiras ${s.de}–${s.ate}`}</span>` : ""
-      }<br>${esc(s.texto)}</li>`,
-    )
+    .map((s, i) => {
+      const onde = s.de !== undefined ? ` <span class="onde">${s.de === s.ate ? `carreira ${s.de}` : `carreiras ${s.de}–${s.ate}`}</span>` : "";
+      const corpo = `<strong>${esc(s.nome)}</strong>${onde}<br>${esc(s.texto)}`;
+      if (s.aviso || s.de === undefined) return `<li${s.aviso ? ' class="passo-aviso"' : ""}>${corpo}</li>`;
+      return `<li><button type="button" class="passo-forma" data-passo-forma="${i}" aria-pressed="${i === formaDestaque}">${corpo}</button></li>`;
+    })
     .join("");
+  if (passo) {
+    // Rola a prévia até as carreiras do passo.
+    const quadro = cv.parentElement;
+    const meio = (img.h - (passo.de + passo.ate) / 2) * z;
+    quadro.scrollTop = Math.max(0, meio + 10 - quadro.clientHeight / 2);
+  }
 }
 
 // Pontos da forma com os códigos escolhidos (barra e aumento usam o código da malha).
@@ -799,10 +1042,21 @@ function imagemDaForma() {
 
 {
   const form = $("dlg-forma").querySelector("form");
+  $("forma-passos").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-passo-forma]");
+    if (!b) return;
+    const i = Number(b.dataset.passoForma);
+    formaDestaque = formaDestaque === i ? null : i;
+    desenharFormaDialogo();
+    const novo = $("forma-passos").querySelector(`[data-passo-forma="${i}"]`);
+    if (novo) novo.focus();
+  });
   form.addEventListener("input", (e) => {
     const alvo = e.target;
-    if (alvo.name === "peca") formaPeca = Number(alvo.value);
-    else if (alvo.name === "porVez") formaOpcoes.porVez = Number(alvo.value);
+    if (alvo.name === "peca") {
+      formaPeca = Number(alvo.value);
+      formaDestaque = null;
+    } else if (alvo.name === "porVez") formaOpcoes.porVez = Number(alvo.value);
     else if (alvo.name === "marca") formaOpcoes.marca = inteiro(alvo.value, 3, 1, 8);
     else if (alvo.name in CODIGOS_FORMA) formaOpcoes.codigos[alvo.name] = inteiro(alvo.value, CODIGOS_FORMA[alvo.name], 0, 255);
     else return;
@@ -827,6 +1081,13 @@ function imagemDaForma() {
 
 // ------------------------------------------------------------------ gerar padrão
 
+let sementeOnca = 7;
+let cacheOnca = { chave: "", px: null };
+let logoImagem = null; // imagem escolhida para o logo: { id, imagem, w, h, nome }; sem ela, o logo sai do texto
+let cacheTextoLogo = { texto: null, fonte: null };
+let cacheLogo = { chave: "", q: null };
+let contadorLogo = 0;
+
 function abrirGerar() {
   const a = abaDat();
   if (!a) return;
@@ -850,6 +1111,104 @@ function abrirGerar() {
   desenharGerar();
 }
 
+// Listras como cor:carreiras ou cor:carreiras:guia, separadas por vírgula (guia 0 = sem guia).
+function lerListras(texto) {
+  return String(texto || "")
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const [cor, n, guia] = s.split(/\s*[:x×]\s*/);
+      return { cor: numeroCor(cor), carreiras: inteiro(n, 1, 1, 8000), guia: inteiro(guia, 0, 0, 255) };
+    });
+}
+
+// Módulo de rosetas repetido a partir do canto de baixo à esquerda; o sorteio só muda com "Sortear".
+function imagemOnca(form, w, h) {
+  const ow = inteiro(form.ow.value, 72, 18, 240), oh = inteiro(form.oh.value, 60, 15, 240);
+  const cores = [numeroCor(form.oncaA.value), numeroCor(form.oncaB.value), numeroCor(form.oncaC.value)];
+  const chave = [ow, oh, sementeOnca, ...cores].join(",");
+  if (cacheOnca.chave !== chave) cacheOnca = { chave, px: RM.gerarOnca(ow, oh, sementeOnca, cores) };
+  const modulo = cacheOnca.px;
+  const px = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const my = oh - 1 - ((h - 1 - y) % oh);
+    for (let x = 0; x < w; x++) px[y * w + x] = modulo[my * ow + (x % ow)];
+  }
+  return { w, h, px };
+}
+
+// Texto do logo desenhado em letras grossas, recortado bem rente (vira a imagem de origem).
+function textoDoLogo(texto) {
+  const t = String(texto || "").trim();
+  if (!t) return null;
+  if (cacheTextoLogo.texto === t) return cacheTextoLogo.fonte;
+  const cv = document.createElement("canvas");
+  const g = cv.getContext("2d");
+  const letra = '700 120px "IBM Plex Sans", Arial, sans-serif';
+  g.font = letra;
+  const m = g.measureText(t);
+  const esquerda = Math.ceil(m.actualBoundingBoxLeft || 0), direita = Math.ceil(m.actualBoundingBoxRight || m.width);
+  const sobe = Math.ceil(m.actualBoundingBoxAscent || 90), desce = Math.ceil(m.actualBoundingBoxDescent || 0);
+  cv.width = Math.max(1, esquerda + direita + 16);
+  cv.height = Math.max(1, sobe + desce + 16);
+  g.fillStyle = "#FFFFFF";
+  g.fillRect(0, 0, cv.width, cv.height);
+  g.font = letra; // mudar o tamanho do canvas volta a fonte ao padrão
+  g.fillStyle = "#000000";
+  g.textBaseline = "alphabetic";
+  g.fillText(t, 8 + esquerda, 8 + sobe);
+  const fonte = { id: `texto:${t}`, imagem: cv, w: cv.width, h: cv.height, nome: `texto “${t}”` };
+  cacheTextoLogo = { texto: t, fonte };
+  return fonte;
+}
+
+// Logo em pontos: a imagem (ou o texto) reduzida à largura pedida e separada em 2 a 4 fios pela claridade.
+function imagemDoLogo(form) {
+  const k = limitar(Number(form.logoK.value) || 2, 2, 4);
+  const w = inteiro(form.logoW.value, 60, 8, 2000);
+  const fonte = logoImagem || textoDoLogo(form.logoTexto.value);
+  if (!fonte) return null;
+  // Um ponto tem 10/colunas cm de largura e 10/carreiras cm de altura: sem isso o logo sai achatado na malha.
+  const h = limitar(Math.round((w * fonte.h * decimal(modelo.carreiras, 40)) / (fonte.w * decimal(modelo.colunas, 30))), 1, 8000);
+  if (w * h > 4000000) return null;
+  const chave = [fonte.id, w, h, k].join(",");
+  if (cacheLogo.chave !== chave) {
+    const cv = document.createElement("canvas");
+    cv.width = w;
+    cv.height = h;
+    const g = cv.getContext("2d");
+    g.fillStyle = "#FFFFFF";
+    g.fillRect(0, 0, w, h);
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = "high";
+    g.drawImage(fonte.imagem, 0, 0, w, h);
+    cacheLogo = { chave, q: RM.quantizarLuminancia(g.getImageData(0, 0, w, h).data, w, h, k) };
+  }
+  const cores = [0, 1, 2, 3].map((i) => numeroCor(form[`logoC${i}`].value));
+  const q = cacheLogo.q;
+  const px = new Uint8Array(w * h);
+  for (let i = 0; i < px.length; i++) px[i] = cores[q.px[i]];
+  return { w, h, px, fonte };
+}
+
+function carregarImagem(arquivo) {
+  if (window.createImageBitmap) return createImageBitmap(arquivo);
+  return new Promise((pronto, falhou) => {
+    const url = URL.createObjectURL(arquivo);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      pronto(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      falhou(new Error("imagem inválida"));
+    };
+    img.src = url;
+  });
+}
+
 function imagemGerada(form) {
   const tipo = form.tipo.value;
   if (tipo === "texto") {
@@ -864,22 +1223,28 @@ function imagemGerada(form) {
       margem: 1,
     });
   }
+  if (tipo === "logo") return imagemDoLogo(form);
   const w = inteiro(form.largura.value, 48, 1, 8000), h = inteiro(form.altura.value, 40, 1, 8000);
   if (w * h > 4000000) return null;
   if (tipo === "listras") {
-    const listras = form.listras.value
-      .split(/[,;]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((s) => {
-        const [cor, n] = s.split(/\s*[:x×]\s*/);
-        return { cor: numeroCor(cor), carreiras: inteiro(n, 1, 1, 8000) };
-      });
+    const listras = lerListras(form.listras.value);
     return listras.length ? { w, h, px: RM.gerarListras(w, h, listras) } : null;
   }
+  if (tipo === "onca") return imagemOnca(form, w, h);
   const corC = String(form.corC.value).trim() === "" ? null : numeroCor(form.corC.value);
   const cores = [numeroCor(form.corA.value), numeroCor(form.corB.value), corC];
   return { w, h, px: RM.gerarLosango(w, h, inteiro(form.dw.value, 24, 2, 400), inteiro(form.dh.value, 30, 2, 400), cores) };
+}
+
+// O que acontece com a R3 ao aplicar as listras (ou o que falta para poder escrever nela).
+function textoListrasR3(a, form) {
+  if (!form.listrasR3.checked) return "";
+  const listras = lerListras(form.listras.value);
+  if (listras.length && !listras.some((l) => l.guia)) return "Escreva o guia de cada listra como cor:carreiras:guia, por exemplo 1:6:3.";
+  if (!a.selecao) return "Selecione no desenho a área das listras antes de abrir: com a R3, elas entram direto na seleção.";
+  const p = painelDaArea(a, a.selecao);
+  if (!p || !p.R.colunas[3]) return "A seleção não está num painel com a linha R3.";
+  return `As listras entram direto na seleção (${a.selecao.w} × ${a.selecao.h}) e a R3 do painel ${p.numero} recebe o guia de cada listra.`;
 }
 
 function desenharGerar() {
@@ -888,28 +1253,101 @@ function desenharGerar() {
   const form = $("dlg-gerar").querySelector("form");
   const tipo = form.tipo.value;
   form.querySelectorAll("[data-para]").forEach((el) => (el.hidden = !el.dataset.para.split(" ").includes(tipo)));
+  const k = limitar(Number(form.logoK.value) || 2, 2, 4);
+  form.querySelectorAll("[data-fio]").forEach((el) => (el.hidden = Number(el.dataset.fio) >= k));
+  const comR3 = tipo === "listras" && form.listrasR3.checked;
+  $("gerar-colar").textContent = comR3 ? "Aplicar na seleção" : "Colar no desenho";
+  $("gerar-listras-r3").textContent = tipo === "listras" ? textoListrasR3(a, form) : "";
   const img = imagemGerada(form);
+  if (tipo === "logo") {
+    const fonte = img ? img.fonte : logoImagem || textoDoLogo(form.logoTexto.value);
+    $("gerar-logo-origem").textContent = fonte ? `Origem: ${fonte.nome}${logoImagem ? ` (${fonte.w} × ${fonte.h} pixels)` : ""}` : "Escreva o texto ou escolha uma imagem.";
+  }
   const cv = $("gerar-previa");
   $("gerar-colar").disabled = !img;
   cv.hidden = !img;
   if (!img) {
-    $("gerar-info").textContent = tipo === "listras" ? "Escreva as listras como cor:carreiras, separadas por vírgula." : "Tamanho grande demais.";
+    $("gerar-info").textContent =
+      tipo === "listras" ? "Escreva as listras como cor:carreiras, separadas por vírgula." : tipo === "logo" ? "Escreva o texto do logo ou escolha uma imagem." : "Tamanho grande demais.";
     return;
   }
   pintarPixels(cv, img, corDaPaleta(a.doc), zoomQueCabeEm(img.w, img.h, larguraUtil(cv, 440), 400, 8));
   const cores = RM.coresDaArea(img.px, img.w, { x: 0, y: 0, w: img.w, h: img.h }).map((c) => c.cor);
-  $("gerar-info").textContent = `${img.w} agulhas × ${img.h} carreiras · cores ${cores.join(", ")}. Entra como colagem no canto da seleção (ou no canto visível).`;
+  $("gerar-info").textContent = `${img.w} agulhas × ${img.h} carreiras · cores ${cores.join(", ")}. ${
+    comR3 ? "Entra direto na seleção." : "Entra como colagem no canto da seleção (ou no canto visível)."
+  }`;
+}
+
+// Listras direto na seleção, com o guia de cada listra escrito na R3 do painel, carreira a carreira.
+function aplicarListrasComR3(a, form) {
+  fixarFlutuante(a);
+  const sel = a.selecao;
+  const listras = lerListras(form.listras.value);
+  if (!listras.length) return;
+  if (!listras.some((l) => l.guia)) return avisar("Escreva o guia de cada listra como cor:carreiras:guia (por exemplo 1:6:3).", true);
+  if (!sel) return avisar("Selecione no desenho a área das listras: com a R3, elas entram direto na seleção.", true);
+  const p = painelDaArea(a, sel);
+  if (!p || !p.R.colunas[3]) return avisar("A seleção precisa estar num painel com a linha R3.", true);
+  const d = a.doc;
+  const px = RM.gerarListras(sel.w, sel.h, listras);
+  const porCarreira = RM.listrasPorCarreira(sel.h, listras);
+  salvarHistorico(a);
+  for (let y = 0; y < sel.h; y++) d.pixels.set(px.subarray(y * sel.w, (y + 1) * sel.w), (sel.y + y) * d.largura + sel.x);
+  // Cada sequência de carreiras com o mesmo guia recebe o número dele; listras sem guia deixam a R3 como está.
+  const guiaEm = (c) => (porCarreira[c] >= 0 ? listras[porCarreira[c]].guia : 0);
+  let escritas = 0;
+  for (let c = 0; c < sel.h; ) {
+    const guia = guiaEm(c);
+    let fim = c;
+    while (fim + 1 < sel.h && guiaEm(fim + 1) === guia) fim++;
+    if (guia) escritas += RM.pintarValorNaLinha(d, p.R, 3, sel.y + sel.h - 1 - fim, sel.y + sel.h - 1 - c, guia);
+    c = fim + 1;
+  }
+  $("dlg-gerar").close();
+  renderizar();
+  atualizarPainel();
+  desenharOpcoes();
+  avisar(`Listras aplicadas na seleção${escritas ? `; a R3 do painel ${p.numero} recebeu o guia em ${escritas} carreira${escritas === 1 ? "" : "s"}` : ""}.`);
 }
 
 {
   const form = $("dlg-gerar").querySelector("form");
-  form.addEventListener("input", desenharGerar);
+  form.addEventListener("input", (e) => {
+    if (e.target.name === "logoTexto" && logoImagem) {
+      // Escrever no texto volta a usar o texto no lugar da imagem.
+      logoImagem = null;
+      form.logoImagem.value = "";
+    }
+    desenharGerar();
+  });
+  form.logoImagem.addEventListener("change", async () => {
+    const arquivo = form.logoImagem.files && form.logoImagem.files[0];
+    if (!arquivo) {
+      logoImagem = null;
+    } else {
+      try {
+        const imagem = await carregarImagem(arquivo);
+        logoImagem = { id: `imagem:${++contadorLogo}`, imagem, w: imagem.width, h: imagem.height, nome: `imagem ${arquivo.name}` };
+      } catch (erro) {
+        logoImagem = null;
+        form.logoImagem.value = "";
+        avisar(`Não foi possível abrir ${arquivo.name} como imagem.`, true);
+      }
+    }
+    if ($("dlg-gerar").open) desenharGerar();
+  });
+  $("gerar-sortear").addEventListener("click", () => {
+    sementeOnca = (Math.random() * 4294967296) >>> 0 || 1;
+    desenharGerar();
+  });
   $("gerar-colar").addEventListener("click", () => {
     const a = abaDat();
+    if (!a) return;
+    if (form.tipo.value === "listras" && form.listrasR3.checked) return aplicarListrasComR3(a, form);
     const img = imagemGerada(form);
-    if (!a || !img) return;
+    if (!img) return;
     $("dlg-gerar").close();
-    colarNoDesenho(a, img);
+    colarNoDesenho(a, { w: img.w, h: img.h, px: img.px });
   });
 }
 
@@ -954,7 +1392,7 @@ function analisarJacquard() {
   const fl = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada);
   const longas = fl.lista.filter((f) => f.comprimento > maximo);
   const maior = fl.lista.reduce((m, f) => (!m || f.comprimento > m.comprimento ? f : m), null);
-  Object.assign(jacquard, { longas, maior });
+  Object.assign(jacquard, { longas, maior, fl, maximo, estrutura });
   const mostrar = cores.slice(0, 24);
   let html = `<div class="cores-area">${mostrar.map((c) => `<span>${amostraCor(d, c.cor)} <span class="suave">× ${c.n.toLocaleString("pt-BR")}</span></span>`).join("")}${
     cores.length > mostrar.length ? `<span class="suave">+${cores.length - mostrar.length}</span>` : ""
@@ -979,20 +1417,77 @@ function analisarJacquard() {
     <p class="${n > disponiveis ? "alerta" : "ok-texto"}">Precisa de ${n} guia-fio${n === 1 ? "" : "s"}${n > disponiveis ? `, mais que os ${disponiveis} da máquina` : ""}.</p>
     <div class="cores-area">${[...porCor].slice(0, 24).map(([cor, k]) => `<span>${amostraCor(d, cor)} <span class="suave">${k} guia${k === 1 ? "" : "s"}</span></span>`).join("")}</div>
     <p class="suave pequeno">Cada trecho seguido de uma cor numa carreira precisa do seu guia; um guia volta a servir quando a área dele acaba. ${intarsia.areas.length === 1 ? "É 1 área de cor" : `São ${intarsia.areas.length.toLocaleString("pt-BR")} áreas de cor`}.</p></div>`;
+  // Tabela dos guias: carreiras contadas de baixo, a partir da primeira carreira da área.
+  const base = H - (r.y + r.h - 1);
+  const mostrados = intarsia.guias.slice(0, 200);
+  $("intarsia-tabela").innerHTML = n
+    ? `<table class="tabela"><thead><tr><th>Guia</th><th>Cor</th><th>Carreiras</th><th>Áreas</th></tr></thead><tbody>${mostrados
+        .map(
+          (g) => `<tr><td class="mono"><span class="ponto-guia" style="background:${corDoGuia(g.id)}"></span>${g.id}</td><td><span class="celula-cor">${amostraCor(d, g.cor)}</span></td>
+          <td class="mono">${base + g.ini}–${base + g.fim}</td><td class="mono">${g.areas}</td></tr>`,
+        )
+        .join("")}</tbody></table>${n > mostrados.length ? `<p class="suave pequeno">e mais ${n - mostrados.length} guias.</p>` : ""}`
+    : "";
   desenharMapaJacquard();
 }
+
+// O avesso visto por trás (espelhado): o desenho escurecido e cada fio solto como um traço da cor dele.
+function desenharAvessoJacquard(g, z) {
+  const { a, r, fl, maximo } = jacquard;
+  const d = a.doc;
+  const img = recortarArea(d, r);
+  const espelho = new Uint8Array(img.px.length);
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) espelho[y * r.w + x] = img.px[y * r.w + (r.w - 1 - x)];
+  const base = document.createElement("canvas");
+  pintarPixels(base, { w: r.w, h: r.h, px: espelho }, corDaPaleta(d), 1);
+  g.drawImage(base, 0, 0, r.w * z, r.h * z);
+  g.fillStyle = "rgba(0, 0, 0, 0.6)";
+  g.fillRect(0, 0, r.w * z, r.h * z);
+  const espessura = Math.max(1, Math.round(z * 0.5));
+  const lista = fl.lista.slice(0, 40000);
+  const x0 = (f) => (r.w - 1 - (f.x1 - r.x)) * z;
+  const y0 = (f) => (f.y - r.y) * z + Math.floor((z - espessura) / 2);
+  // Os longos ganham uma borda amarela por baixo do traço.
+  g.fillStyle = "rgba(255, 225, 77, 0.95)";
+  for (const f of lista) if (f.comprimento > maximo) g.fillRect(x0(f) - 1, y0(f) - 1, f.comprimento * z + 2, espessura + 2);
+  const porCor = new Map();
+  for (const f of lista) {
+    if (!porCor.has(f.cor)) porCor.set(f.cor, []);
+    porCor.get(f.cor).push(f);
+  }
+  for (const [cor, fios] of porCor) {
+    g.fillStyle = hexCor(d.paleta[cor]);
+    for (const f of fios) g.fillRect(x0(f), y0(f), f.comprimento * z, espessura);
+  }
+}
+
+const LEGENDA_JACQUARD = {
+  flutuacoes: (j) => `O desenho escurecido, com os fios soltos de mais de ${j.maximo} agulhas em amarelo.`,
+  avesso: (j) =>
+    j.estrutura === "tubular"
+      ? "O avesso visto por trás (espelhado). No tubular o avesso tece todas as cores: não há fio solto."
+      : `O avesso visto por trás (espelhado): cada traço é um fio solto, na cor dele; os de mais de ${j.maximo} agulhas têm borda amarela.`,
+  guias: () => "Cada cor é um guia-fio da intarsia; com zoom, o número do guia aparece no meio da área dele.",
+};
 
 function desenharMapaJacquard() {
   const { a, r, longas, intarsia } = jacquard;
   const d = a.doc;
-  const guias = $("dlg-jacquard").querySelector("form").vista.value === "guias";
+  const vista = $("dlg-jacquard").querySelector("form").vista.value;
+  const guias = vista === "guias";
   const cv = $("jacquard-mapa");
   const z = limitar(Math.floor(Math.min(larguraUtil(cv, 480) / r.w, 460 / r.h)), 1, 12);
+  $("jacquard-legenda").textContent = (LEGENDA_JACQUARD[vista] || LEGENDA_JACQUARD.flutuacoes)(jacquard);
+  const g = ajustarTela(cv, r.w * z, r.h * z);
+  g.imageSmoothingEnabled = false;
+  if (vista === "avesso") {
+    desenharAvessoJacquard(g, z);
+    cv.setAttribute("aria-label", `Avesso da área, espelhado, com ${jacquard.fl.lista.length} fios soltos`);
+    return;
+  }
   const base = document.createElement("canvas");
   if (guias) pintarPixels(base, { w: r.w, h: r.h, px: intarsia.guiaDe }, (v) => (v > 0 ? rgbDoGuia(v) : [0, 0, 0]), 1);
   else pintarPixels(base, recortarArea(d, r), corDaPaleta(d), 1);
-  const g = ajustarTela(cv, r.w * z, r.h * z);
-  g.imageSmoothingEnabled = false;
   g.drawImage(base, 0, 0, r.w * z, r.h * z);
   if (!guias) {
     // Escurece o desenho e marca cada fio solto longo como um traço amarelo na carreira dele.
@@ -1409,9 +1904,14 @@ function desenharAgulhas() {
   });
 }
 
-// ------------------------------------------------------------------ altura com repetições (R2)
+// ------------------------------------------------------------------ pacotes e altura com repetições (R2)
 
 const CHAVE_REPETICOES = "editor-shima-repeticoes:";
+const CHAVE_PACOTES = "editor-shima-pacotes:";
+const PACOTES_PADRAO = { inicio: "arquivo", inicioN: 20, barra: "arquivo", barraN: 10, final: "arquivo", finalN: 12 };
+const CODIGOS_PACOTE = { desperdicio: 1, separacao: 3, arremate: 16, frente: 1, tras: 2, tubularA: 51, tubularB: 52 };
+const CAMPOS_CODIGO_PACOTE = { cDesperdicio: "desperdicio", cSeparacao: "separacao", cArremate: "arremate", cFrente: "frente", cTras: "tras", cTubularA: "tubularA", cTubularB: "tubularB" };
+const LIMITE_CARREIRAS = 8000;
 let desenv = null;
 
 function repeticoesDe(a) {
@@ -1419,23 +1919,81 @@ function repeticoesDe(a) {
   return a.repeticoes;
 }
 
+function pacotesDe(a) {
+  if (!a.pacotes) {
+    const salvo = lerArmazenado(CHAVE_PACOTES + a.nome, {});
+    a.pacotes = { ...PACOTES_PADRAO, ...salvo, codigos: { ...CODIGOS_PACOTE, ...(salvo.codigos || {}) } };
+  }
+  return a.pacotes;
+}
+
+// Cor de cada trecho do painel e de cada parte do desenho desenvolvido, pelo nome.
+function corDaParte(nome) {
+  const n = RM.semAcento(nome);
+  if (n.startsWith("FIO DE DESPERDICIO")) return "#7C8494";
+  if (n.startsWith("SEPARACAO")) return "#D8B04A";
+  if (n.startsWith("ARREMATE")) return "#E8615F";
+  if (n.startsWith("BARRA")) return "#8C7B55";
+  if (n.startsWith("TRANSFERENCIA")) return "#6CB2F0";
+  if (n.startsWith("CORPO")) return "#CDBB9A";
+  if (n.startsWith("FINAL")) return "#B8646E";
+  return "#9AA1AE";
+}
+
+// Desenho desenvolvido do painel p com os pacotes e as repetições guardados para a aba. Os pacotes entram em
+// todos os painéis (as carreiras são inteiras).
+function desenvolvidoDe(a, p, todos, semPixels = false) {
+  const pk = pacotesDe(a);
+  return RM.desenvolverComPacotes(a.doc, p, {
+    repeticoes: repeticoesDe(a)[p.numero] || {},
+    inicio: { tipo: pk.inicio, n: pk.inicioN },
+    barra: { tipo: pk.barra, n: pk.barraN },
+    final: { tipo: pk.final, n: pk.finalN },
+    codigos: pk.codigos,
+    paineis: todos,
+    semPixels,
+    limite: LIMITE_CARREIRAS,
+  });
+}
+
 function abrirDesenvolver() {
   const a = abaDat();
   if (!a) return;
   fixarFlutuante(a);
-  const lista = RM.paineis(blocosDeOpcao(a)).filter((p) => p.R && p.R.colunas[2]);
-  if (!lista.length) return avisar("Este desenho não tem as linhas de opção R1–R20: não há blocos de repetição (R2).", true);
-  desenv = { a, lista, painel: 0, dev: null };
-  $("dlg-desenvolver").querySelector("form").painel.innerHTML = lista
+  const todos = RM.paineis(blocosDeOpcao(a));
+  const lista = todos.filter((p) => p.R);
+  if (!lista.length) return avisar("Este desenho não tem as linhas de opção R1–R20: não dá para achar os trechos nem os blocos de repetição (R2).", true);
+  desenv = { a, lista, todos, painel: 0, dev: null, res: null };
+  const form = $("dlg-desenvolver").querySelector("form");
+  form.painel.innerHTML = lista
     .map((p, i) => `<option value="${i}">Painel ${p.numero}${p.x0 !== null ? ` · agulhas ${p.x0 + 1}–${p.x1 + 1}` : ""}</option>`)
     .join("");
-  desenharDesenvolver();
+  const pk = pacotesDe(a);
+  for (const k of Object.keys(PACOTES_PADRAO)) form[k].value = pk[k];
+  for (const [campo, id] of Object.entries(CAMPOS_CODIGO_PACOTE)) form[campo].value = pk.codigos[id];
   abrirJanela("dlg-desenvolver");
+  desenharDesenvolver();
+}
+
+// Campos de quantidade só valem para os pacotes que acrescentam carreiras.
+function estadoCamposPacotes(form, temBarra) {
+  form.inicioN.disabled = form.inicio.value !== "desperdicio";
+  form.barra.disabled = !temBarra;
+  form.barraN.disabled = !temBarra || !["tubular", "rib11", "rib22"].includes(form.barra.value);
+  form.finalN.disabled = form.final.value !== "desperdicio";
+  form.barra.title = temBarra ? "" : "Este painel não tem um trecho de barra (ponto na R6 antes do corpo).";
 }
 
 function desenharDesenvolver() {
   const { a, lista } = desenv;
   const p = lista[desenv.painel];
+  const form = $("dlg-desenvolver").querySelector("form");
+  const trechos = RM.trechosDoPainel(a.doc, p);
+  $("desenvolver-trechos").innerHTML = trechos
+    .map((t) => `<li><span class="amostra" style="background:${corDaParte(t.nome)}"></span>${esc(t.nome)} <span class="mono">${t.de === t.ate ? t.de : `${t.de}–${t.ate}`}</span></li>`)
+    .join("");
+  desenv.temBarra = trechos.some((t) => t.id === "barra");
+  estadoCamposPacotes(form, desenv.temBarra);
   const dev = RM.desenvolvimento(a.doc, p, repeticoesDe(a)[p.numero] || {});
   desenv.dev = dev;
   $("desenvolver-tabela").innerHTML = dev.blocos.length
@@ -1446,47 +2004,105 @@ function desenharDesenvolver() {
           <td class="mono" data-total="${b.chave}"></td></tr>`,
         )
         .join("")}</tbody></table></div>`
-    : `<p class="suave">Sem blocos marcados na R2 deste painel: a altura é a do desenho.</p>`;
+    : `<p class="suave">Sem blocos marcados na R2 deste painel: o corpo fica com a altura do desenho.</p>`;
   atualizarTotalDesenvolver();
 }
 
 function atualizarTotalDesenvolver() {
-  const { dev } = desenv;
+  const { a, lista, dev, todos } = desenv;
+  const p = lista[desenv.painel];
   for (const b of dev.blocos) {
     const el = $("desenvolver-tabela").querySelector(`[data-total="${b.chave}"]`);
     if (el) el.textContent = b.carreiras * b.vezes;
   }
-  $("desenvolver-total").innerHTML = `<strong>${dev.desenvolvidas.toLocaleString("pt-BR")}</strong> carreiras com as repetições; o desenho tem ${dev.compactadas.toLocaleString("pt-BR")}.`;
+  const res = desenvolvidoDe(a, p, todos);
+  desenv.res = res;
+  const n = (v) => v.toLocaleString("pt-BR");
+  $("desenvolver-total").innerHTML = `<strong>${n(res.painel.carreiras)}</strong> carreiras no painel ${p.numero} desenvolvido; no desenho são ${n(p.y1 - p.y0 + 1)}. O desenho novo fica com ${n(res.h)} carreiras${
+    res.px ? "." : `, mais que o limite de ${n(LIMITE_CARREIRAS)} do editor.`
+  }`;
+  $("desenvolver-partes").innerHTML = res.partes
+    .map(
+      (t) => `<li><span class="amostra" style="background:${corDaParte(t.nome)}"></span>${esc(t.nome)}${t.gerada ? " (novo)" : ""} <span class="mono">${t.de === t.ate ? t.de : `${t.de}–${t.ate}`}</span></li>`,
+    )
+    .join("");
+  $("desenvolver-criar").disabled = !res.px;
+  desenharPreviaDesenvolvida(p, res);
+}
+
+// Prévia do painel desenvolvido, com uma faixa à esquerda na cor de cada parte (os valores 256 em diante).
+function desenharPreviaDesenvolvida(p, res) {
+  const cv = $("desenvolver-previa");
+  cv.hidden = !res.px;
+  if (!res.px) return;
+  const d = desenv.a.doc;
+  const m = RM.areaDeMalha(d, p) || { x0: 0, x1: d.largura - 1 };
+  const x0 = m.x0, x1 = m.x1;
+  const h = res.painel.carreiras;
+  const faixa = Math.max(4, Math.ceil(8 / zoomQueCabeEm(x1 - x0 + 9, h, larguraUtil(cv, 360), 460, 4)));
+  const w = faixa + 1 + (x1 - x0 + 1);
+  const px = new Uint16Array(w * h).fill(256);
+  const cores = [];
+  res.partes.forEach((t) => {
+    const v = 257 + cores.length;
+    cores.push(rgbDeHex(corDaParte(t.nome)));
+    for (let c = Math.max(t.de, res.painel.de); c <= Math.min(t.ate, res.painel.ate); c++) {
+      const y = res.painel.ate - c;
+      px.fill(v, y * w, y * w + faixa);
+    }
+  });
+  for (let c = res.painel.de; c <= res.painel.ate; c++) {
+    const y = res.painel.ate - c, origem = (res.h - c) * res.w;
+    px.set(res.px.subarray(origem + x0, origem + x1 + 1), y * w + faixa + 1);
+  }
+  const fundo = [43, 40, 36];
+  const cor = (v) => (v < 256 ? d.paleta[v] : v === 256 ? fundo : cores[v - 257]);
+  pintarPixels(cv, { w, h, px }, cor, zoomQueCabeEm(w, h, larguraUtil(cv, 360), 460, 4));
+  cv.setAttribute("aria-label", `Painel ${p.numero} desenvolvido: ${h} carreiras, com as partes marcadas à esquerda`);
 }
 
 {
   const form = $("dlg-desenvolver").querySelector("form");
-  form.painel.addEventListener("change", () => {
+  form.addEventListener("input", (e) => {
     if (!desenv) return;
-    desenv.painel = Number(form.painel.value);
-    desenharDesenvolver();
-  });
-  $("desenvolver-tabela").addEventListener("input", (e) => {
-    const chave = e.target.dataset.chave;
-    if (!chave || !desenv) return;
+    const alvo = e.target;
     const { a, lista } = desenv;
     const p = lista[desenv.painel];
-    const todas = repeticoesDe(a);
-    todas[p.numero] = { ...(todas[p.numero] || {}), [chave]: inteiro(e.target.value, 1, 1, 9999) };
-    gravarArmazenado(CHAVE_REPETICOES + a.nome, todas);
-    desenv.dev = RM.desenvolvimento(a.doc, p, todas[p.numero]);
+    if (alvo.name === "painel") {
+      desenv.painel = Number(alvo.value);
+      desenharDesenvolver();
+      return;
+    }
+    if (alvo.dataset.chave) {
+      const todas = repeticoesDe(a);
+      todas[p.numero] = { ...(todas[p.numero] || {}), [alvo.dataset.chave]: inteiro(alvo.value, 1, 1, 9999) };
+      gravarArmazenado(CHAVE_REPETICOES + a.nome, todas);
+      desenv.dev = RM.desenvolvimento(a.doc, p, todas[p.numero]);
+      atualizarTotalDesenvolver();
+      return;
+    }
+    const pk = pacotesDe(a);
+    if (["inicio", "barra", "final"].includes(alvo.name)) pk[alvo.name] = alvo.value;
+    else if (["inicioN", "barraN", "finalN"].includes(alvo.name)) pk[alvo.name] = inteiro(alvo.value, PACOTES_PADRAO[alvo.name], 1, 2000);
+    else if (alvo.name in CAMPOS_CODIGO_PACOTE) {
+      const id = CAMPOS_CODIGO_PACOTE[alvo.name];
+      pk.codigos[id] = inteiro(alvo.value, CODIGOS_PACOTE[id], 0, 255);
+    } else return;
+    gravarArmazenado(CHAVE_PACOTES + a.nome, pk);
+    estadoCamposPacotes(form, desenv.temBarra);
     atualizarTotalDesenvolver();
   });
   $("desenvolver-criar").addEventListener("click", () => {
     if (!mesmaAba(desenv)) return;
-    const { a, dev } = desenv;
-    if (!dev.blocos.some((b) => b.vezes > 1)) return avisar("Diga quantas vezes algum bloco se repete (mais de 1) para desenvolver.");
-    const altura = a.doc.altura + dev.desenvolvidas - dev.compactadas;
-    if (altura > 8000) return avisar(`O desenho ficaria com ${altura.toLocaleString("pt-BR")} carreiras; o limite do editor é 8.000.`, true);
-    const img = RM.desenharDesenvolvido(a.doc, dev.blocos);
+    const { a, res } = desenv;
+    if (!res || !res.px) return avisar(`O desenho ficaria com mais de ${LIMITE_CARREIRAS.toLocaleString("pt-BR")} carreiras, o limite do editor.`, true);
+    if (!res.partes.some((t) => t.gerada) && res.h === a.doc.altura) {
+      return avisar("Nada muda: escolha um pacote ou diga quantas vezes algum bloco da R2 se repete (mais de 1).");
+    }
     $("dlg-desenvolver").close();
-    criarDesenhoNovo(trocarExtensao(a.nome, "_DESENVOLVIDO.dat"), img, a);
-    avisar(`Desenho desenvolvido com ${img.h} carreiras. As carreiras inteiras se repetem, com todos os painéis.`);
+    criarDesenhoNovo(trocarExtensao(a.nome, "_DESENVOLVIDO.dat"), res, a);
+    const novos = res.partes.filter((t) => t.gerada).map((t) => t.nome.toLowerCase());
+    avisar(`Desenho desenvolvido com ${res.h} carreiras${novos.length ? `, com ${[...new Set(novos)].join(", ")}` : ""}. As carreiras inteiras se repetem, com todos os painéis.`);
   });
 }
 
@@ -1502,8 +2118,38 @@ const CORES_FIO = ["#E9E4D8", "#2B2A33", "#C8955A", "#5C8FB8", "#B8646E", "#7FA3
 const TAMANHOS_PONTO = [6, 8, 12, 16, 24];
 const LIMITE_SIMULACAO = { w: 160, h: 140 };
 const TROCA_AVESSO = { frente: "tras", tras: "frente", "tuck-frente": "tuck-tras", "tuck-tras": "tuck-frente", "mover-esq": "tras", "mover-dir": "tras" };
-const coresDosGuias = {};
+const CHAVE_VARIANTES = "editor-shima-variantes";
+// "Original" volta às cores do começo: as do processamento (por guia) ou as da paleta (pelo desenho).
+const VARIANTES_PRONTAS = [
+  { nome: "Original", cores: null },
+  { nome: "Onça", cores: ["#E3B76B", "#2B1D14", "#9C6B3A", "#F4E6C8", "#5A3B28", "#C8955A"] },
+  { nome: "Neve", cores: ["#F2F0EA", "#1F2A44", "#9FB3C8", "#C9D6DF", "#5C6F86", "#E9E4D8"] },
+  { nome: "Terra", cores: ["#C8955A", "#5A3B28", "#E9DCC3", "#8E6E4E", "#B8646E", "#7FA36B"] },
+  { nome: "Contraste", cores: ["#111111", "#F5F5F5", "#D33F2F", "#F2C94C", "#2F6FD3", "#3F9D5A"] },
+];
+const varianteValida = (v) =>
+  !!v && typeof v.nome === "string" && Array.isArray(v.cores) && v.cores.length > 0 && v.cores.length <= 16 && v.cores.every((c) => /^#[0-9a-f]{6}$/i.test(c));
+const minhasVariantes = (() => {
+  const lista = lerArmazenado(CHAVE_VARIANTES, []);
+  return Array.isArray(lista) ? lista.filter(varianteValida) : [];
+})();
+const MAX_FIOS_DESENHO = 8; // cores do desenho que dá para trocar na simulação
 let simul = null;
+let pedidoSimular = 0;
+
+const corPadraoDoGuia = (v) => CORES_FIO[Math.abs(Math.round(v) - 1) % CORES_FIO.length];
+const corValida = (c) => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
+
+// Sem seleção, a peça repete o corpo do painel (só as agulhas que tecem); com seleção, a própria seleção.
+function motivoDaPeca(a, r) {
+  if (a.selecao) return { ...r, texto: "da seleção" };
+  const p = painelDaArea(a, r);
+  const corpo = p && RM.trechosDoPainel(a.doc, p).find((t) => t.id === "corpo");
+  if (!corpo) return { ...r, texto: "da área analisada" };
+  const m = RM.areaDeMalha(a.doc, p) || { x0: r.x, x1: r.x + r.w - 1 };
+  const H = a.doc.altura;
+  return { x: m.x0, y: H - corpo.ate, w: m.x1 - m.x0 + 1, h: corpo.ate - corpo.de + 1, texto: `do corpo do painel ${p.numero}` };
+}
 
 function abrirSimular() {
   const a = abaDat();
@@ -1513,22 +2159,24 @@ function abrirSimular() {
   const { r, texto } = areaDeAnalise(a, "simulando");
   const w = Math.min(r.w, LIMITE_SIMULACAO.w), h = Math.min(r.h, LIMITE_SIMULACAO.h);
   const area = { x: r.x, y: r.y + r.h - h, w, h };
-  // Guia-fio de cada carreira pela R3; sem valor, continua o da carreira de baixo.
+  // Guia-fio de cada carreira pela R3 (na área toda, para a peça); sem valor, continua o da carreira de baixo.
   const p = painelDaArea(a, r);
   const guiaDaLinha = new Map();
   let ultimo = null;
   if (p) {
-    for (let y = r.y + r.h - 1; y >= area.y; y--) {
+    for (let y = r.y + r.h - 1; y >= r.y; y--) {
       const v = RM.valoresDaLinha(d, p.R, 3, y)[0];
       if (v) ultimo = v;
       guiaDaLinha.set(y, ultimo);
     }
   }
   const guias = [...new Set([...guiaDaLinha.values()].filter((v) => v !== null))].sort((x, y) => x - y);
-  guias.forEach((g) => {
-    if (!coresDosGuias[g]) coresDosGuias[g] = CORES_FIO[(g - 1) % CORES_FIO.length];
-  });
-  simul = { a, area, guiaDaLinha, guias, zoom: 1 };
+  // As cores dos fios começam pelas do processamento; as mudanças aqui valem só para a simulação.
+  const pd = processamentoDe(a);
+  const coresGuia = {};
+  guias.forEach((g) => (coresGuia[g] = pd.guias[g] && corValida(pd.guias[g].cor) ? pd.guias[g].cor : corPadraoDoGuia(g)));
+  const motivo = motivoDaPeca(a, r);
+  simul = { a, area, guiaDaLinha, guias, zoom: 1, coresGuia, original: { ...coresGuia }, trocas: {}, coresArea: RM.coresDaArea(d.pixels, d.largura, area), motivo };
   const parte = w < r.w || h < r.h ? ` Mostrando ${w} × ${h} pontos a partir do canto de baixo à esquerda.` : "";
   $("simular-area").textContent = texto + parte;
   // Desenho de cores (a maioria dos números não é código de ponto): tudo em malha, na cor do desenho.
@@ -1541,17 +2189,135 @@ function abrirSimular() {
   form.pontos.value = deCores ? "frente" : "codigo";
   form.cores.querySelector('[value="guia"]').disabled = !guias.length;
   form.cores.value = deCores || !guias.length ? "desenho" : "guia";
+  const pecas = (ultimoModelo || calcularModeloAtual()).pecas;
+  const pecaAntes = Number(form.peca.value) || 0;
+  form.peca.innerHTML = pecas.map((q, i) => `<option value="${i}">${esc(q.nome)} · ${q.agulhas} × ${q.carreiras}</option>`).join("");
+  form.peca.value = String(limitar(pecaAntes, 0, pecas.length - 1));
   desenharFiosSimular();
+  desenharVariantes();
   abrirJanela("dlg-simular");
   desenharSimulacao();
+  desenharPecaSimular();
+}
+
+const porGuiaNaSimulacao = () => $("dlg-simular").querySelector("form").cores.value === "guia" && simul.guias.length > 0;
+
+// Fios que dá para trocar de cor: os guias (pela R3) ou as cores mais usadas da área (pelo desenho).
+function fiosDaSimulacao() {
+  const d = simul.a.doc;
+  if (porGuiaNaSimulacao()) return simul.guias.map((g) => ({ chave: `g${g}`, nome: `Fio do guia ${g}`, cor: simul.coresGuia[g] }));
+  return simul.coresArea.slice(0, MAX_FIOS_DESENHO).map((c) => ({ chave: `c${c.cor}`, nome: `Cor ${c.cor}`, cor: simul.trocas[c.cor] || hexCor(d.paleta[c.cor]) }));
 }
 
 function desenharFiosSimular() {
-  const form = $("dlg-simular").querySelector("form");
+  const fios = fiosDaSimulacao();
+  const resto = porGuiaNaSimulacao() ? 0 : simul.coresArea.length - fios.length;
   $("simular-fios").innerHTML =
-    form.cores.value === "guia"
-      ? simul.guias.map((g) => `<label class="fio"><input type="color" data-guia="${g}" value="${coresDosGuias[g]}"><span>Fio do guia ${g}</span></label>`).join("")
-      : `<p class="suave pequeno">Cada ponto usa a cor dele na paleta do desenho.</p>`;
+    fios.map((f) => `<label class="fio"><input type="color" data-fio-sim="${f.chave}" value="${f.cor}"><span>${esc(f.nome)}</span></label>`).join("") +
+    (resto > 0 ? `<p class="suave pequeno">As outras ${resto} cores ficam como na paleta.</p>` : "");
+}
+
+function coresOriginais() {
+  const d = simul.a.doc;
+  if (porGuiaNaSimulacao()) return simul.guias.map((g) => simul.original[g]);
+  return simul.coresArea.slice(0, MAX_FIOS_DESENHO).map((c) => hexCor(d.paleta[c.cor]));
+}
+
+function desenharVariantes() {
+  const n = Math.max(1, Math.min(6, fiosDaSimulacao().length));
+  $("simular-variantes").innerHTML = [...VARIANTES_PRONTAS, ...minhasVariantes]
+    .map((v, i) => {
+      const cores = (v.cores || coresOriginais()).slice(0, n);
+      const minha = i >= VARIANTES_PRONTAS.length;
+      return `<div class="item-variante"><button type="button" class="variante" data-variante="${i}" title="Usar as cores ${esc(v.nome)}"><span>${esc(v.nome)}</span><span class="amostras" aria-hidden="true">${cores
+        .map((c) => `<span style="background:${c}"></span>`)
+        .join("")}</span></button>${minha ? `<button type="button" class="apagar-motivo" data-apagar-variante="${i - VARIANTES_PRONTAS.length}" aria-label="Apagar ${esc(v.nome)}" title="Apagar">×</button>` : ""}</div>`;
+    })
+    .join("");
+}
+
+// As cores da variante vão para os fios na ordem (e voltam ao começo se houver mais fios que cores).
+function aplicarVariante(v) {
+  const porGuia = porGuiaNaSimulacao();
+  if (!v.cores) {
+    if (porGuia) simul.coresGuia = { ...simul.original };
+    else simul.trocas = {};
+  } else if (porGuia) simul.guias.forEach((g, i) => (simul.coresGuia[g] = v.cores[i % v.cores.length]));
+  else simul.coresArea.slice(0, MAX_FIOS_DESENHO).forEach((c, i) => (simul.trocas[c.cor] = v.cores[i % v.cores.length]));
+  desenharFiosSimular();
+  agendarSimulacao();
+}
+
+function agendarSimulacao() {
+  if (pedidoSimular) return;
+  pedidoSimular = requestAnimationFrame(() => {
+    pedidoSimular = 0;
+    desenharSimulacao();
+    desenharPecaSimular();
+  });
+}
+
+// A peça do Modelo inteira, ponto a ponto, com o motivo repetido a partir do canto de baixo à esquerda e a
+// proporção dos pontos da amostra (um ponto é mais largo do que alto quando há mais carreiras que colunas).
+function desenharPecaSimular() {
+  if (!simul) return;
+  const form = $("dlg-simular").querySelector("form");
+  const r = ultimoModelo || calcularModeloAtual();
+  const peca = r.pecas[limitar(Number(form.peca.value) || 0, 0, r.pecas.length - 1)];
+  const cv = $("simular-peca");
+  const info = $("simular-peca-info");
+  if (!(peca.forma.W > 0 && peca.forma.H > 0) || peca.forma.W > 2000 || peca.forma.H > 4000) {
+    cv.hidden = true;
+    info.textContent = `${peca.nome} ficaria com ${peca.forma.W} × ${peca.forma.H} pontos: confira as medidas no Modelo.`;
+    return;
+  }
+  const plano = RM.planoForma(peca.forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca });
+  const forma = RM.pixelsDaForma(plano, { malha: 1, fora: 0, arremate: 1, parcial: 1, marcaEsq: 1, marcaDir: 1 });
+  const { W, H } = plano;
+  const m = simul.motivo, d = simul.a.doc;
+  const porGuia = porGuiaNaSimulacao();
+  const base = document.createElement("canvas");
+  base.width = W;
+  base.height = H;
+  const bg = base.getContext("2d");
+  const dados = bg.createImageData(W, H);
+  const px32 = new Uint32Array(dados.data.buffer);
+  const abgr = (hex) => {
+    const [rr, gg, bb] = rgbDeHex(hex);
+    return ((255 << 24) | (bb << 16) | (gg << 8) | rr) >>> 0;
+  };
+  const doCodigo = new Map();
+  const corDoCodigo = (v) => {
+    let c = doCodigo.get(v);
+    if (c === undefined) doCodigo.set(v, (c = abgr(simul.trocas[v] || hexCor(d.paleta[v]))));
+    return c;
+  };
+  const doGuia = new Map();
+  const corDoGuiaSim = (guia) => {
+    let c = doGuia.get(guia);
+    if (c === undefined) doGuia.set(guia, (c = abgr(guia ? simul.coresGuia[guia] : "#9AA1AE")));
+    return c;
+  };
+  const fundo = abgr("#16181C");
+  for (let y = 0; y < H; y++) {
+    const my = m.y + m.h - 1 - ((H - 1 - y) % m.h);
+    const corLinha = porGuia ? corDoGuiaSim(simul.guiaDaLinha.get(my) || null) : 0;
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      if (!forma.px[i]) px32[i] = fundo;
+      else px32[i] = porGuia ? corLinha : corDoCodigo(d.pixels[my * d.largura + m.x + (x % m.w)]);
+    }
+  }
+  bg.putImageData(dados, 0, 0);
+  const col = Math.max(0.1, decimal(modelo.colunas, 30)), car = Math.max(0.1, decimal(modelo.carreiras, 40));
+  const razao = col / car; // altura de uma carreira ÷ largura de uma agulha
+  const z = Math.min(larguraUtil(cv, 240) / W, 300 / (H * razao));
+  const g = ajustarTela(cv, W * z, H * z * razao);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(base, 0, 0, W * z, H * z * razao);
+  cv.hidden = false;
+  cv.setAttribute("aria-label", `${peca.nome} inteira com o desenho repetido`);
+  info.textContent = `${peca.nome}: ${W} agulhas × ${H} carreiras ≈ ${cm1((W * 10) / col)} × ${cm1((H * 10) / car)} cm, com os ${m.w} × ${m.h} pontos ${m.texto} repetidos.`;
 }
 
 function desenharPonto(g, tipo, cor, x0, y0, cw, ch, fio) {
@@ -1630,14 +2396,14 @@ function desenharSimulacao() {
   for (let yy = 0; yy < area.h; yy++) {
     const y = area.y + yy;
     const guia = porGuia ? simul.guiaDaLinha.get(y) : null;
-    const corDaLinha = guia ? coresDosGuias[guia] : "#9AA1AE";
+    const corDaLinha = guia ? simul.coresGuia[guia] : "#9AA1AE";
     for (let xx = 0; xx < area.w; xx++) {
       // O avesso é visto por trás: espelhado, com frente e atrás trocados.
       const v = d.pixels[y * d.largura + area.x + (avesso ? area.w - 1 - xx : xx)];
       let tipo = todosEmMalha ? "frente" : RM.tipoDePonto(v);
       if (!tipo || tipo === "guia") continue;
       if (avesso) tipo = TROCA_AVESSO[tipo] || tipo;
-      const cor = porGuia ? corDaLinha : hexCor(d.paleta[v]);
+      const cor = porGuia ? corDaLinha : simul.trocas[v] || hexCor(d.paleta[v]);
       const x0 = xx * cw, y0 = yy * ch;
       desenharPonto(g, tipo, cor, x0, y0, cw, ch, fio);
       if (fio.pelo > 0) {
@@ -1662,9 +2428,42 @@ function desenharSimulacao() {
   const form = $("dlg-simular").querySelector("form");
   form.addEventListener("input", (e) => {
     if (!simul) return;
-    if (e.target.dataset.guia) coresDosGuias[e.target.dataset.guia] = e.target.value;
-    if (e.target.name === "cores") desenharFiosSimular();
-    desenharSimulacao();
+    const alvo = e.target;
+    const chave = alvo.dataset.fioSim;
+    if (chave && chave[0] === "g") simul.coresGuia[chave.slice(1)] = alvo.value;
+    else if (chave) simul.trocas[chave.slice(1)] = alvo.value;
+    if (alvo.name === "cores") {
+      desenharFiosSimular();
+      desenharVariantes();
+    }
+    if (alvo.name === "peca") desenharPecaSimular();
+    else agendarSimulacao();
+  });
+  $("simular-variantes").addEventListener("click", async (e) => {
+    if (!simul) return;
+    const apagar = e.target.closest("[data-apagar-variante]");
+    if (apagar) {
+      const v = minhasVariantes[Number(apagar.dataset.apagarVariante)];
+      if (!v || !(await perguntar(`Apagar a variante ${v.nome}?`, "Apagar"))) return;
+      minhasVariantes.splice(minhasVariantes.indexOf(v), 1);
+      gravarArmazenado(CHAVE_VARIANTES, minhasVariantes);
+      if (simul) desenharVariantes();
+      return;
+    }
+    const b = e.target.closest("[data-variante]");
+    const v = b && [...VARIANTES_PRONTAS, ...minhasVariantes][Number(b.dataset.variante)];
+    if (v) aplicarVariante(v);
+  });
+  $("simular-guardar").addEventListener("click", async () => {
+    if (!simul) return;
+    const cores = fiosDaSimulacao().map((f) => f.cor);
+    if (!cores.length) return;
+    const nome = await pedirNome("Guardar variante de cor", `Variante ${minhasVariantes.length + 1}`, "Nome da variante");
+    if (!nome) return;
+    minhasVariantes.push({ nome, cores });
+    gravarArmazenado(CHAVE_VARIANTES, minhasVariantes);
+    if (simul) desenharVariantes();
+    avisar(`${nome} guardada nas variantes de cor, neste navegador.`);
   });
   form.addEventListener("click", (e) => {
     const b = e.target.closest("[data-zoom-malha]");
@@ -1679,10 +2478,373 @@ function desenharSimulacao() {
   });
 }
 
+// ------------------------------------------------------------------ processamento
+
+const CHAVE_PROCESSAMENTO = "editor-shima-processamento:";
+const EXPLICA_PASSOS = {
+  maquina: "A máquina e a finura do programa. A finura também entra no tempo de tecimento e na ficha.",
+  guias: "Cada número da R3 vira um guia-fio da máquina, com o fio, a cor e o lado por onde ele entra.",
+  economizador: "Quantas vezes cada bloco marcado na R2 se repete. O desenho guarda cada bloco uma vez só.",
+  puxador: "A força do puxador em cada trecho da peça. Costuma ser maior no início e na barra.",
+  ponto: "Cada número da R6 recebe o valor de ponto (o tamanho da laçada) da frontura da frente e da de trás.",
+  velocidade: "A velocidade do carro em cada trecho, em m/s. Costuma ser menor no início e nas transferências.",
+  gerar: "Confere os passos, desenvolve a peça e estima o tempo. O programa (.000) e os ajustes (.QFD) continuam sendo gerados no KnitPaint, com estes valores.",
+};
+let proc = null;
+
+// Valores do processamento da aba: { maquina, finura, guias: { r3: { guia, fio, cor, lado } },
+// pontos: { r6: { f, t } }, puxador: { trecho: v }, velocidade: { trecho: v } }. Os fios que a ficha técnica
+// guardava antes passam para cá (ficha e processamento usam os mesmos).
+function processamentoDe(a) {
+  if (a.processamento) return a.processamento;
+  const salvo = lerArmazenado(CHAVE_PROCESSAMENTO + a.nome, {});
+  const dados = {
+    maquina: salvo.maquina ?? modelo.maquina ?? "",
+    finura: salvo.finura ?? modelo.finura ?? "",
+    guias: { ...(salvo.guias || {}) },
+    pontos: { ...(salvo.pontos || {}) },
+    puxador: { ...(salvo.puxador || {}) },
+    velocidade: { ...(salvo.velocidade || {}) },
+  };
+  const fiosDaFicha = lerArmazenado(CHAVE_FICHA + a.nome, {}).fios || {};
+  for (const [g, fio] of Object.entries(fiosDaFicha)) {
+    if (fio && !(dados.guias[g] && dados.guias[g].fio)) dados.guias[g] = { ...(dados.guias[g] || {}), fio };
+  }
+  a.processamento = dados;
+  return dados;
+}
+
+function gravarProcessamento(a) {
+  gravarArmazenado(CHAVE_PROCESSAMENTO + a.nome, processamentoDe(a));
+}
+
+const somaFaltas = (faltas) => Object.values(faltas).reduce((t, n) => t + n, 0);
+
+// Altura do primeiro painel desenvolvido (pacotes e repetições) e o tempo de uma peça com a velocidade do corpo.
+function alturaDesenvolvida(a) {
+  const todos = RM.paineis(blocosDeOpcao(a));
+  const p = todos.find((q) => q.R && q.x0 !== null);
+  if (!p) return null;
+  const res = desenvolvidoDe(a, p, todos, true);
+  const m = RM.areaDeMalha(a.doc, p);
+  return { p, carreiras: res.painel.carreiras, compactadas: p.y1 - p.y0 + 1, agulhas: m ? m.x1 - m.x0 + 1 : p.x1 - p.x0 + 1 };
+}
+
+function tempoDoProcessamento(a, alt) {
+  if (!alt) return null;
+  const d = processamentoDe(a);
+  return RM.tempoTecimento({ carreiras: alt.carreiras, agulhas: alt.agulhas, pecas: 1, finura: d.finura, velocidade: d.velocidade.corpo });
+}
+
+// Resumo em texto (para baixar ou ir no .zip da ficha).
+function resumoDoProcessamento(a) {
+  const blocos = blocosDeOpcao(a);
+  const linhas = RM.linhasDoProcessamento(a.nome, processamentoDe(a), RM.usoDoProcessamento(a.doc, blocos), repeticoesDe(a));
+  const alt = alturaDesenvolvida(a);
+  if (alt) {
+    linhas.push("", `ALTURA: painel ${alt.p.numero} desenvolvido com ${alt.carreiras} carreiras (${alt.compactadas} no desenho), ${alt.agulhas} agulhas tecendo`);
+    const s = tempoDoProcessamento(a, alt);
+    linhas.push(s === null ? "Tempo estimado: falta a finura ou a velocidade do corpo" : `Tempo estimado por peça: ${formatarTempo(s)} (só a passagem do carro)`);
+  }
+  return linhas;
+}
+
+function abrirProcessar(passo = 0) {
+  const a = abaDat();
+  if (!a) return;
+  fixarFlutuante(a);
+  const uso = RM.usoDoProcessamento(a.doc, blocosDeOpcao(a));
+  const dados = processamentoDe(a);
+  // Cada guia da R3 começa com o mesmo número e uma cor própria; o fio fica para preencher.
+  for (const u of uso.guias) dados.guias[u.valor] = { guia: String(u.valor), fio: "", cor: corPadraoDoGuia(u.valor), lado: "E", ...(dados.guias[u.valor] || {}) };
+  if (proc) clearTimeout(proc.timer);
+  proc = { a, uso, dados, passo: limitar(passo, 0, RM.PASSOS_PROCESSAMENTO.length - 1), log: null, rodando: false, timer: 0 };
+  abrirJanela("dlg-processar");
+  desenharProcessar();
+}
+
+const faltasProc = () => RM.faltasDoProcessamento(proc.dados, proc.uso, repeticoesDe(proc.a));
+
+// Quantos valores cada passo pede (para dizer "nada a preencher").
+function itensDoPasso(id) {
+  const { uso } = proc;
+  return { maquina: 2, guias: uso.guias.length * 2, economizador: uso.blocosR2.length, puxador: uso.trechos.length, ponto: uso.pontos.length * 2, velocidade: uso.trechos.length, gerar: 1 }[id];
+}
+
+function desenharPassosProc() {
+  const faltas = faltasProc();
+  const total = somaFaltas(faltas);
+  $("processar-passos").innerHTML = RM.PASSOS_PROCESSAMENTO.map((s, i) => {
+    let classe, info;
+    if (s.id === "gerar") {
+      classe = proc.rodando ? "rodando" : proc.log && !total ? "ok" : total ? "falta" : "";
+      info = proc.rodando ? "processando…" : proc.log ? (total ? `processado; faltam ${total}` : "resumo pronto") : total ? `faltam ${total} valores` : "pronto para processar";
+    } else if (!itensDoPasso(s.id)) {
+      classe = "ok";
+      info = "nada a preencher";
+    } else {
+      classe = faltas[s.id] ? "falta" : "ok";
+      info = faltas[s.id] ? `falta${faltas[s.id] > 1 ? "m" : ""} ${faltas[s.id]}` : "completo";
+    }
+    return `<li><button type="button" class="passo-proc ${classe}" data-ir-passo="${i}"${i === proc.passo ? ' aria-current="step"' : ""}>
+      <span class="marca-passo" aria-hidden="true">${classe === "ok" ? "✓" : i + 1}</span><span class="nome-passo">${esc(s.nome)}</span><span class="info-passo">${esc(info)}</span></button></li>`;
+  }).join("");
+}
+
+// Onde o valor aparece, uma linha por painel (já escapado para o HTML).
+const ondeUsado = (u) => `<span class="suave pequeno onde-usado">${u.onde.map((o) => esc(`painel ${o.painel}: ${o.carreiras}`)).join("<br>")}</span>`;
+
+function conteudoMaquina() {
+  const { a, dados } = proc;
+  const lista = RM.paineis(blocosDeOpcao(a));
+  const usadas = new Set();
+  lista.forEach((p) => linhasUsadas(a, p).forEach((id) => usadas.add(id)));
+  const ordem = (x) => (x[0] === "L" ? 0 : 100) + Number(x.slice(1));
+  const trechos = proc.uso.trechos.map((t) => `${t.nome} ${t.de === t.ate ? t.de : `${t.de}–${t.ate}`}`).join(" · ");
+  const comMalha = lista.filter((p) => p.x0 !== null).map((p) => `${p.numero} (agulhas ${p.x0 + 1}–${p.x1 + 1})`);
+  const info = [
+    ["Desenho", `${a.doc.largura} × ${a.doc.altura} pontos`],
+    ["Painéis", comMalha.length ? comMalha.join(", ") : String(lista.length)],
+    ["Linhas usadas", [...usadas].sort((x, y) => ordem(x) - ordem(y)).join(", ") || "nenhuma"],
+    ["Trechos", trechos || "—"],
+  ];
+  return `<div class="linha-campos">
+      <label class="campo">Máquina <input type="text" data-proc="maquina" list="proc-maquinas" maxlength="40" value="${esc(dados.maquina ?? "")}" autocomplete="off"></label>
+      <label class="campo">Finura <select data-proc="finura"><option value="">—</option>${RM.FINURAS.map(
+        (f) => `<option value="${f}"${String(dados.finura) === String(f) ? " selected" : ""}>${f}G</option>`,
+      ).join("")}</select></label>
+    </div>
+    <datalist id="proc-maquinas">${RM.MAQUINAS.map((m) => `<option value="${esc(m)}"></option>`).join("")}</datalist>
+    <dl class="info">${info.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+}
+
+function conteudoGuias() {
+  const { uso, dados } = proc;
+  if (!uso.guias.length) return `<p class="suave">A R3 não tem valores: não há guia-fio para configurar.</p>`;
+  return `<div class="tabela-rolavel"><table class="tabela"><thead><tr><th>R3</th><th>Guia-fio</th><th>Fio</th><th>Cor</th><th>Entra pela</th></tr></thead><tbody>${uso.guias
+    .map((u) => {
+      const g = dados.guias[u.valor] || {};
+      const cor = corValida(g.cor) ? g.cor : corPadraoDoGuia(u.valor);
+      return `<tr><td class="mono"><span class="ponto-guia" style="background:${cor}"></span>${u.valor}<br>${ondeUsado(u)}</td>
+        <td><input type="number" min="1" max="32" data-g="${u.valor}" data-campo="guia" value="${esc(g.guia ?? "")}" aria-label="Guia-fio da R3 ${u.valor}"></td>
+        <td><input type="text" maxlength="40" data-g="${u.valor}" data-campo="fio" value="${esc(g.fio ?? "")}" placeholder="ex.: algodão 2/30" autocomplete="off" aria-label="Fio da R3 ${u.valor}"></td>
+        <td><input type="color" data-g="${u.valor}" data-campo="cor" value="${cor}" aria-label="Cor do fio da R3 ${u.valor}"></td>
+        <td><select data-g="${u.valor}" data-campo="lado" aria-label="Lado por onde entra o guia da R3 ${u.valor}"><option value="E"${g.lado !== "D" ? " selected" : ""}>esquerda</option><option value="D"${
+          g.lado === "D" ? " selected" : ""
+        }>direita</option></select></td></tr>`;
+    })
+    .join("")}</tbody></table></div>`;
+}
+
+function conteudoEconomizador() {
+  const { a, uso } = proc;
+  if (!uso.blocosR2.length) return `<p class="suave">A R2 não marca blocos de repetição.</p>`;
+  const reps = repeticoesDe(a);
+  return `<div class="tabela-rolavel"><table class="tabela"><thead><tr><th>Painel</th><th>Carreiras</th><th>R2</th><th>Repete (vezes)</th></tr></thead><tbody>${uso.blocosR2
+    .map(
+      (b) => `<tr><td class="mono">${b.painel}</td><td class="mono">${b.de}–${b.ate}</td><td class="mono">${esc(b.valor)}</td>
+      <td><input type="number" min="1" max="9999" data-rep-painel="${b.painel}" data-rep-chave="${b.chave}" value="${esc((reps[b.painel] || {})[b.chave] ?? "")}" placeholder="vezes" aria-label="Vezes que as carreiras ${b.de} a ${b.ate} do painel ${b.painel} se repetem"></td></tr>`,
+    )
+    .join("")}</tbody></table></div>
+    <p class="pequeno" id="processar-altura">${textoAlturaProc()}</p>
+    <div class="controles"><button type="button" class="botao pequeno" data-abrir="desenvolver">Ver em Pacotes e altura…</button></div>`;
+}
+
+function textoAlturaProc() {
+  const alt = alturaDesenvolvida(proc.a);
+  return alt ? `Painel ${alt.p.numero} desenvolvido: <strong>${alt.carreiras.toLocaleString("pt-BR")}</strong> carreiras (${alt.compactadas} no desenho), com os pacotes escolhidos.` : "";
+}
+
+function conteudoPorTrecho(id) {
+  const { uso, dados } = proc;
+  if (!uso.trechos.length) return `<p class="suave">Sem painel com as linhas de opção R.</p>`;
+  const ehPuxador = id === "puxador";
+  const atributo = ehPuxador ? "data-pux" : "data-vel";
+  const limites = ehPuxador ? 'min="0" max="200" step="1" placeholder="ex.: 40"' : 'min="0.05" max="2" step="0.05" placeholder="ex.: 0,6"';
+  return `<table class="tabela"><thead><tr><th>Trecho</th><th>Carreiras</th><th>${ehPuxador ? "Puxador" : "Velocidade (m/s)"}</th></tr></thead><tbody>${uso.trechos
+    .map(
+      (t) => `<tr><td><span class="ponto-guia" style="background:${corDaParte(t.nome)}"></span>${esc(t.nome)}</td><td class="mono">${t.de === t.ate ? t.de : `${t.de}–${t.ate}`}</td>
+      <td><input type="number" ${limites} ${atributo}="${t.id}" value="${esc(dados[id][t.id] ?? "")}" aria-label="${ehPuxador ? "Puxador" : "Velocidade"} no trecho ${esc(t.nome)}"></td></tr>`,
+    )
+    .join("")}</tbody></table>
+    <div class="controles"><button type="button" class="botao pequeno" data-copiar="${id}">Usar o primeiro valor nos trechos vazios</button></div>`;
+}
+
+function conteudoPonto() {
+  const { uso, dados } = proc;
+  if (!uso.pontos.length) return `<p class="suave">A R6 não tem valores: não há ponto para configurar.</p>`;
+  return `<div class="tabela-rolavel"><table class="tabela"><thead><tr><th>R6</th><th>Frente</th><th>Atrás</th></tr></thead><tbody>${uso.pontos
+    .map((u) => {
+      const p = dados.pontos[u.valor] || {};
+      return `<tr><td class="mono">${u.valor}<br>${ondeUsado(u)}</td>
+        <td><input type="number" min="0" max="999" data-pt="${u.valor}" data-lado="f" value="${esc(p.f ?? "")}" placeholder="ex.: 45" aria-label="Ponto da frente da R6 ${u.valor}"></td>
+        <td><input type="number" min="0" max="999" data-pt="${u.valor}" data-lado="t" value="${esc(p.t ?? "")}" placeholder="ex.: 45" aria-label="Ponto de trás da R6 ${u.valor}"></td></tr>`;
+    })
+    .join("")}</tbody></table></div>`;
+}
+
+function conteudoGerar() {
+  const faltas = faltasProc();
+  const pendentes = RM.PASSOS_PROCESSAMENTO.map((s, i) => ({ s, i })).filter(({ s }) => faltas[s.id]);
+  const situacao = pendentes.length
+    ? `<p class="alerta">Faltam valores em ${pendentes.length} passo${pendentes.length === 1 ? "" : "s"}:</p><div class="controles">${pendentes
+        .map(({ s, i }) => `<button type="button" class="botao pequeno" data-ir-passo="${i}">${esc(s.nome)} (${faltas[s.id]})</button>`)
+        .join("")}</div>`
+    : `<p class="ok-texto">Todos os passos estão preenchidos.</p>`;
+  const log = proc.log
+    ? `<ul class="log-processamento" aria-live="polite">${proc.log.map((l) => `<li class="${l.nivel === "ok" ? "ok-texto" : l.nivel === "alerta" ? "alerta" : ""}">${esc(l.texto)}</li>`).join("")}</ul>`
+    : `<p class="suave pequeno">Aperte Processar para conferir tudo e montar o resumo.</p>`;
+  return situacao + log;
+}
+
+const CONTEUDO_PASSO = {
+  maquina: conteudoMaquina,
+  guias: conteudoGuias,
+  economizador: conteudoEconomizador,
+  puxador: () => conteudoPorTrecho("puxador"),
+  ponto: conteudoPonto,
+  velocidade: () => conteudoPorTrecho("velocidade"),
+  gerar: conteudoGerar,
+};
+
+function desenharProcessar() {
+  const s = RM.PASSOS_PROCESSAMENTO[proc.passo];
+  desenharPassosProc();
+  $("processar-titulo").textContent = `${proc.passo + 1}. ${s.nome}`;
+  $("processar-explica").textContent = EXPLICA_PASSOS[s.id];
+  $("processar-conteudo").innerHTML = CONTEUDO_PASSO[s.id]();
+  const form = $("dlg-processar").querySelector("form");
+  form.querySelector('[data-passo="-1"]').disabled = proc.passo === 0;
+  form.querySelector('[data-passo="1"]').disabled = proc.passo === RM.PASSOS_PROCESSAMENTO.length - 1;
+  $("processar-rodar").disabled = proc.rodando;
+}
+
+// Confere passo a passo, como a máquina leria, e mostra as linhas uma a uma (de uma vez com menos movimento).
+function rodarProcessamento() {
+  if (!proc || proc.rodando) return;
+  const { a, uso, dados } = proc;
+  const faltas = faltasProc();
+  const linhas = [];
+  const linha = (nivel, texto) => linhas.push({ nivel, texto });
+  const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+  const nPaineis = RM.paineis(blocosDeOpcao(a)).length;
+  linha("", `Lendo ${a.nome}: ${a.doc.largura} × ${a.doc.altura} pontos, ${plural(nPaineis, "painel", "painéis")}.`);
+  linha(faltas.maquina ? "alerta" : "ok", `Máquina: ${dados.maquina || "sem máquina"} · ${dados.finura ? `finura ${dados.finura}G` : "sem finura"}.`);
+  linha(faltas.guias ? "alerta" : "ok", `Guia-fios: ${plural(uso.guias.length, "valor", "valores")} na R3${faltas.guias ? `, faltam ${faltas.guias} campos (guia ou fio)` : ", todos com guia e fio"}.`);
+  linha(faltas.economizador ? "alerta" : "ok", `Economizador: ${plural(uso.blocosR2.length, "bloco", "blocos")} na R2${faltas.economizador ? `, ${faltas.economizador} sem repetições` : ""}.`);
+  linha(faltas.puxador ? "alerta" : "ok", `Puxador: ${plural(uso.trechos.length, "trecho", "trechos")}${faltas.puxador ? `, ${faltas.puxador} sem valor` : ", todos com valor"}.`);
+  linha(faltas.ponto ? "alerta" : "ok", `Ponto: ${plural(uso.pontos.length, "valor", "valores")} na R6${faltas.ponto ? `, faltam ${faltas.ponto} campos (frente ou atrás)` : ", todos com frente e atrás"}.`);
+  linha(faltas.velocidade ? "alerta" : "ok", `Velocidade: ${plural(uso.trechos.length, "trecho", "trechos")}${faltas.velocidade ? `, ${faltas.velocidade} sem valor` : ", todos com valor"}.`);
+  const alt = alturaDesenvolvida(a);
+  if (alt) linha("", `Painel ${alt.p.numero} desenvolvido: ${alt.carreiras.toLocaleString("pt-BR")} carreiras (${alt.compactadas} no desenho) e ${alt.agulhas} agulhas tecendo.`);
+  const s = tempoDoProcessamento(a, alt);
+  if (s !== null) linha("", `Tempo estimado: ${formatarTempo(s)} por peça, só a passagem do carro.`);
+  else if (alt) linha("alerta", "Tempo: falta a finura ou a velocidade do corpo para estimar.");
+  const total = somaFaltas(faltas);
+  if (total) linha("alerta", `Faltam ${total} valores: complete os passos marcados antes de levar à máquina.`);
+  else linha("ok", "Pronto: baixe o resumo e use estes valores no KnitPaint para gerar o .000 e o .QFD.");
+  proc.passo = RM.PASSOS_PROCESSAMENTO.length - 1;
+  const parado = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  if (parado) {
+    proc.log = linhas;
+    desenharProcessar();
+    return;
+  }
+  proc.log = [];
+  proc.rodando = true;
+  const proxima = () => {
+    if (!proc) return;
+    proc.log.push(linhas[proc.log.length]);
+    proc.rodando = proc.log.length < linhas.length;
+    desenharProcessar();
+    if (proc.rodando) proc.timer = setTimeout(proxima, 170);
+  };
+  proxima();
+}
+
+{
+  const form = $("dlg-processar").querySelector("form");
+  $("processar-conteudo").addEventListener("input", (e) => {
+    if (!proc || proc.rodando) return;
+    const t = e.target, d = proc.dados;
+    if (t.dataset.proc) d[t.dataset.proc] = t.value;
+    else if (t.dataset.g) {
+      d.guias[t.dataset.g] = { ...(d.guias[t.dataset.g] || {}), [t.dataset.campo]: t.value };
+      if (t.dataset.campo === "cor") t.closest("tr").querySelector(".ponto-guia").style.background = t.value;
+    } else if (t.dataset.pt) d.pontos[t.dataset.pt] = { ...(d.pontos[t.dataset.pt] || {}), [t.dataset.lado]: t.value };
+    else if (t.dataset.pux) d.puxador[t.dataset.pux] = t.value;
+    else if (t.dataset.vel) d.velocidade[t.dataset.vel] = t.value;
+    else if (t.dataset.repChave) {
+      const todas = repeticoesDe(proc.a);
+      const painel = t.dataset.repPainel;
+      todas[painel] = { ...(todas[painel] || {}) };
+      if (String(t.value).trim() === "") delete todas[painel][t.dataset.repChave];
+      else todas[painel][t.dataset.repChave] = inteiro(t.value, 1, 1, 9999);
+      gravarArmazenado(CHAVE_REPETICOES + proc.a.nome, todas);
+      const el = $("processar-altura");
+      if (el) el.innerHTML = textoAlturaProc();
+    } else return;
+    if (!t.dataset.repChave) gravarProcessamento(proc.a);
+    proc.log = null; // o que foi processado antes já não vale
+    desenharPassosProc();
+  });
+  $("processar-conteudo").addEventListener("click", (e) => {
+    if (!proc || proc.rodando) return;
+    const abrir = e.target.closest("[data-abrir]");
+    if (abrir) {
+      if (!mesmaAba(proc)) return;
+      $("dlg-processar").close();
+      RECURSOS[abrir.dataset.abrir]();
+      return;
+    }
+    const ir = e.target.closest("[data-ir-passo]");
+    if (ir) {
+      proc.passo = Number(ir.dataset.irPasso);
+      desenharProcessar();
+      return;
+    }
+    const copiar = e.target.closest("[data-copiar]");
+    if (copiar) {
+      const id = copiar.dataset.copiar, valores = proc.dados[id];
+      const primeiro = proc.uso.trechos.map((t) => valores[t.id]).find((v) => String(v ?? "").trim() !== "");
+      if (primeiro === undefined) return avisar("Escreva o valor de pelo menos um trecho.");
+      proc.uso.trechos.forEach((t) => {
+        if (String(valores[t.id] ?? "").trim() === "") valores[t.id] = primeiro;
+      });
+      gravarProcessamento(proc.a);
+      proc.log = null;
+      desenharProcessar();
+    }
+  });
+  $("processar-passos").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ir-passo]");
+    if (!b || !proc || proc.rodando) return;
+    proc.passo = Number(b.dataset.irPasso);
+    desenharProcessar();
+  });
+  form.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-passo]");
+    if (!b || !proc || proc.rodando) return;
+    proc.passo = limitar(proc.passo + Number(b.dataset.passo), 0, RM.PASSOS_PROCESSAMENTO.length - 1);
+    desenharProcessar();
+  });
+  $("processar-rodar").addEventListener("click", rodarProcessamento);
+  $("processar-txt").addEventListener("click", () => {
+    if (!proc) return;
+    const linhas = resumoDoProcessamento(proc.a);
+    baixar(new Blob([linhas.join("\r\n") + "\r\n"], { type: "text/plain" }), trocarExtensao(proc.a.nome, "_PROCESSAMENTO.txt"));
+  });
+  $("dlg-processar").addEventListener("close", () => {
+    if (proc) clearTimeout(proc.timer);
+    proc = null; // não segura a aba depois de fechar
+  });
+}
+
 // ------------------------------------------------------------------ ficha técnica
 
 const CHAVE_FICHA = "editor-shima-ficha:";
 const ROTULOS_FICHA = { codigo: "Código", descricao: "Descrição", maquina: "Máquina", tempo: "Tempo de tecimento", fio: "Fio", bruto: "Peso bruto", liquido: "Peso líquido", data: "Data" };
+const TIPOS_ARQUIVO = { dat: "desenho", programa: "programa", ajustes: "ajustes", imagem: "imagem" };
 let ficha = null;
 
 // Guia-fios usados na R3 de todos os painéis.
@@ -1696,19 +2858,8 @@ function guiasDoDesenho(a) {
   return [...vistos].sort((x, y) => x - y);
 }
 
-// Agulhas que tecem na área de desenho do painel (da primeira à última com código de malha).
-function agulhasDeMalha(a, p) {
-  const d = a.doc;
-  let esquerda = Infinity, direita = -Infinity;
-  for (let y = p.y0; y <= p.y1; y++) {
-    for (let x = p.x0; x <= p.x1; x++) {
-      if (!RM.TECE.has(d.pixels[y * d.largura + x])) continue;
-      if (x < esquerda) esquerda = x;
-      if (x > direita) direita = x;
-    }
-  }
-  return direita >= esquerda ? direita - esquerda + 1 : p.x1 - p.x0 + 1;
-}
+// Nome sem extensão, sem acento e em maiúsculas, para achar os arquivos que andam juntos (.dat, .000, .QFD).
+const baseDoNome = (nome) => RM.semAcento(trocarExtensao(nome, ""));
 
 function abrirFicha() {
   const a = abaDat();
@@ -1716,47 +2867,73 @@ function abrirFicha() {
   fixarFlutuante(a);
   const contagem = contarCores(a.doc);
   const base = trocarExtensao(a.nome, "");
-  const p = RM.paineis(blocosDeOpcao(a)).find((q) => q.x0 !== null && q.R);
-  const dev = p ? RM.desenvolvimento(a.doc, p, repeticoesDe(a)[p.numero] || {}) : null;
+  const pd = processamentoDe(a);
+  const alt = alturaDesenvolvida(a);
   const padrao = {
-    campos: { codigo: base, descricao: base.replace(/_/g, " "), maquina: "", tempo: "", fio: "", bruto: "", liquido: "", data: new Date().toLocaleDateString("pt-BR") },
-    fios: {},
+    campos: {
+      codigo: base,
+      descricao: base.replace(/_/g, " "),
+      maquina: pd.maquina ? `${pd.maquina}${pd.finura ? ` ${pd.finura}G` : ""}` : "",
+      tempo: "",
+      fio: "",
+      bruto: "",
+      liquido: "",
+      data: new Date().toLocaleDateString("pt-BR"),
+    },
     corTexto: contagem[232] ? 232 : estado.primaria,
     corFundo: estado.fundo,
     escala: 1,
-    tempo: { carreiras: dev ? dev.desenvolvidas : a.doc.altura, agulhas: p ? agulhasDeMalha(a, p) : a.doc.largura, pecas: 1, finura: 7, velocidade: "", sobra: "" },
+    tempo: {
+      carreiras: alt ? alt.carreiras : a.doc.altura,
+      agulhas: alt ? alt.agulhas : a.doc.largura,
+      pecas: 1,
+      finura: Number(pd.finura) || 7,
+      velocidade: pd.velocidade.corpo ?? "",
+      sobra: "",
+    },
   };
   const salvo = lerArmazenado(CHAVE_FICHA + a.nome, {});
+  // Os fios de cada guia ficam no processamento (processamentoDe já trouxe os que estavam aqui).
+  if (salvo.fios && Object.keys(salvo.fios).length) gravarProcessamento(a);
+  delete salvo.fios;
   ficha = {
     a,
     guias: guiasDoDesenho(a),
-    dados: {
-      ...padrao,
-      ...salvo,
-      campos: { ...padrao.campos, ...(salvo.campos || {}) },
-      fios: { ...(salvo.fios || {}) },
-      tempo: { ...padrao.tempo, ...(salvo.tempo || {}) },
-    },
+    erros: null,
+    dados: { ...padrao, ...salvo, campos: { ...padrao.campos, ...(salvo.campos || {}) }, tempo: { ...padrao.tempo, ...(salvo.tempo || {}) } },
   };
   const v = ficha.dados;
   $("ficha-campos").innerHTML = RM.CAMPOS_FICHA.map(
     ([id]) => `<label class="campo">${ROTULOS_FICHA[id]} <input type="text" maxlength="60" data-campo="${id}" value="${esc(v.campos[id] || "")}" autocomplete="off"></label>`,
   ).join("");
   $("ficha-guias").innerHTML = ficha.guias.length
-    ? ficha.guias.map((g) => `<label class="campo">Guia ${g} <input type="text" maxlength="40" data-fio="${g}" value="${esc(v.fios[g] || "")}" placeholder="ex.: algodão 2/30" autocomplete="off"></label>`).join("")
+    ? ficha.guias
+        .map((g) => {
+          const fisico = guiaDaMaquina(pd, g);
+          return `<label class="campo">Guia ${esc(fisico)}${String(fisico) !== String(g) ? ` (R3 ${g})` : ""} <input type="text" maxlength="40" data-fio="${g}" value="${esc(
+            (pd.guias[g] || {}).fio || "",
+          )}" placeholder="ex.: algodão 2/30" autocomplete="off"></label>`;
+        })
+        .join("")
     : `<p class="suave pequeno">Nenhum guia-fio na R3 deste desenho.</p>`;
   const form = $("dlg-ficha").querySelector("form");
   for (const k of Object.keys(v.tempo)) if (form[`t-${k}`]) form[`t-${k}`].value = v.tempo[k];
   form.corTexto.value = v.corTexto;
   form.corFundo.value = v.corFundo;
   form.escala.value = String(v.escala);
+  desenharArquivosFicha();
   abrirJanela("dlg-ficha");
   desenharFicha();
+  desenharChecklist();
 }
+
+// Número do guia-fio na máquina para o valor g da R3 (o do processamento ou, sem ele, o próprio g).
+const guiaDaMaquina = (pd, g) => (pd.guias[g] && String(pd.guias[g].guia ?? "").trim()) || g;
 
 function imagemDaFicha() {
   const v = ficha.dados;
-  const linhas = RM.linhasDaFicha(v.campos, ficha.guias.map((g) => ({ guia: g, fio: v.fios[g] || "" })));
+  const pd = processamentoDe(ficha.a);
+  const linhas = RM.linhasDaFicha(v.campos, ficha.guias.map((g) => ({ guia: guiaDaMaquina(pd, g), fio: (pd.guias[g] || {}).fio || "" })));
   return { linhas, img: RM.textoEmPixels(linhas, { cor: v.corTexto, fundo: v.corFundo, escala: v.escala, margem: 1 }) };
 }
 
@@ -1788,20 +2965,121 @@ function gravarFicha() {
   gravarArmazenado(CHAVE_FICHA + a.nome, dados);
 }
 
+// Arquivos abertos que podem ir no .zip; já vêm marcados o desenho e os que têm o mesmo nome (.000, .QFD...).
+function desenharArquivosFicha() {
+  const { a } = ficha;
+  const base = baseDoNome(a.nome);
+  $("ficha-arquivos").innerHTML = estado.abas
+    .map((x) => {
+      const marcado = x === a || baseDoNome(x.nome) === base;
+      return `<li><label><input type="checkbox" data-arquivo="${x.id}"${marcado ? " checked" : ""}><span class="nome-arquivo">${esc(x.nome)}${
+        x.modificado ? ' <span class="suave">(alterado)</span>' : ""
+      }</span><span class="suave mono">${esc(TIPOS_ARQUIVO[x.tipo] || x.tipo)}</span></label></li>`;
+    })
+    .join("");
+}
+
+// Junta os arquivos escolhidos (o desenho como está agora) e, se pedido, a ficha e o resumo do processamento.
+async function baixarZipDaFicha() {
+  if (!ficha) return;
+  const { a } = ficha;
+  const form = $("dlg-ficha").querySelector("form");
+  const escolhidas = [...$("ficha-arquivos").querySelectorAll("[data-arquivo]:checked")]
+    .map((el) => estado.abas.find((x) => x.id === Number(el.dataset.arquivo)))
+    .filter(Boolean);
+  if (!escolhidas.length && !form.zipResumo.checked) return avisar("Marque pelo menos um arquivo para o .zip.");
+  const arquivos = [];
+  const usados = new Set();
+  const nomeLivre = (nome) => {
+    let n = nome;
+    for (let k = 2; usados.has(n.toUpperCase()); k++) n = nome.replace(/(\.[^.]*)?$/, (ext) => `_${k}${ext}`);
+    usados.add(n.toUpperCase());
+    return n;
+  };
+  try {
+    for (const x of escolhidas) {
+      let bytes = null;
+      if (x.tipo === "dat") bytes = bytesDoDesenho(x);
+      else if (x.aberto && x.aberto.bytes) bytes = x.aberto.bytes;
+      else if (x.aberto && x.aberto.url) bytes = new Uint8Array(await (await fetch(x.aberto.url)).arrayBuffer());
+      if (bytes) arquivos.push({ nome: nomeLivre(x.nome), bytes });
+    }
+  } catch (erro) {
+    return avisar(`Não foi possível juntar os arquivos: ${erro.message}`, true);
+  }
+  if (form.zipResumo.checked) {
+    const texto = (linhas) => new TextEncoder().encode(linhas.join("\r\n") + "\r\n");
+    arquivos.push({ nome: nomeLivre(trocarExtensao(a.nome, "_FICHA.txt")), bytes: texto(imagemDaFicha().linhas) });
+    arquivos.push({ nome: nomeLivre(trocarExtensao(a.nome, "_PROCESSAMENTO.txt")), bytes: texto(resumoDoProcessamento(a)) });
+  }
+  const nome = trocarExtensao(a.nome, "_MAQUINA.zip");
+  const entregue = await baixar(new Blob([zipComArquivos(arquivos)], { type: "application/zip" }), nome);
+  if (entregue) avisar(`${entregue} com ${arquivos.length} arquivo${arquivos.length === 1 ? "" : "s"}: extraia e copie para o pendrive da máquina.`);
+}
+
+// O que conferir antes de levar à máquina, com o que falta e onde resolver.
+function itensAntesDeTecer() {
+  const { a } = ficha;
+  const blocos = blocosDeOpcao(a);
+  if (ficha.erros === null) ficha.erros = RM.verificarDesenho(a.doc, blocos, {}).filter((i) => i.nivel === "erro").length;
+  const uso = RM.usoDoProcessamento(a.doc, blocos);
+  const pd = processamentoDe(a);
+  const total = somaFaltas(RM.faltasDoProcessamento(pd, uso, repeticoesDe(a)));
+  const preenchido = (v) => String(v ?? "").trim() !== "";
+  const semFio = uso.guias.filter((u) => !preenchido((pd.guias[u.valor] || {}).fio)).map((u) => u.valor);
+  const c = ficha.dados.campos;
+  const vazios = ["codigo", "descricao", "maquina", "fio"].filter((k) => !preenchido(c[k])).map((k) => ROTULOS_FICHA[k].toLowerCase());
+  const base = baseDoNome(a.nome);
+  const junto = (tipo) => estado.abas.some((x) => x.tipo === tipo && baseDoNome(x.nome) === base);
+  const programas = junto("programa") && junto("ajustes");
+  const erros = ficha.erros;
+  return [
+    { ok: !erros, titulo: "Verificação sem erros", detalhe: erros ? `${erros} erro${erros === 1 ? "" : "s"} no Verificar` : "nenhum erro nas regras do Verificar", ir: "verificar", botao: "Verificar…" },
+    { ok: !total, titulo: "Processamento completo", detalhe: total ? `faltam ${total} valores` : "todos os passos preenchidos", ir: "processar", botao: "Processar…" },
+    { ok: !semFio.length, titulo: "Fio de cada guia-fio", detalhe: semFio.length ? `sem fio: R3 ${semFio.join(", ")} (preencha nesta ficha)` : uso.guias.length ? "todos os guias com fio" : "a R3 não usa guias" },
+    { ok: !vazios.length, titulo: "Ficha preenchida", detalhe: vazios.length ? `falta: ${vazios.join(", ")}` : "código, descrição, máquina e fio" },
+    { ok: preenchido(c.tempo), titulo: "Tempo de tecimento", detalhe: preenchido(c.tempo) ? c.tempo : "calcule aqui e use no campo TEMPO TEC" },
+    { ok: !a.modificado, titulo: "Desenho salvo", detalhe: a.modificado ? "há alterações sem salvar" : "sem alterações pendentes", ir: "salvar", botao: "Salvar" },
+    {
+      ok: programas,
+      titulo: "Programa (.000) e ajustes (.QFD)",
+      detalhe: programas ? "abertos, com o mesmo nome do desenho" : "gere no KnitPaint com estes valores, ou abra os da pasta para irem no .zip",
+    },
+  ];
+}
+
+function desenharChecklist() {
+  const itens = itensAntesDeTecer();
+  $("ficha-check-total").textContent = `${itens.filter((i) => i.ok).length} de ${itens.length}`;
+  $("ficha-checklist").innerHTML = itens
+    .map(
+      (i) => `<li class="${i.ok ? "ok" : "pendente"}"><span class="marca-check" aria-hidden="true">${i.ok ? "✓" : "!"}</span><span><span class="escondido">${
+        i.ok ? "Feito:" : "Pendente:"
+      } </span>${esc(i.titulo)}<small>${esc(i.detalhe)}</small></span>${!i.ok && i.ir ? `<button type="button" class="botao pequeno" data-ir="${i.ir}">${esc(i.botao)}</button>` : "<span></span>"}</li>`,
+    )
+    .join("");
+}
+
 {
   const form = $("dlg-ficha").querySelector("form");
   form.addEventListener("input", (e) => {
     if (!ficha) return;
     const alvo = e.target;
     const v = ficha.dados;
-    if (alvo.dataset.campo) v.campos[alvo.dataset.campo] = alvo.value;
-    else if (alvo.dataset.fio) v.fios[alvo.dataset.fio] = alvo.value;
-    else if (alvo.name && alvo.name.startsWith("t-")) v.tempo[alvo.name.slice(2)] = alvo.value;
-    else if (alvo.name === "corTexto" || alvo.name === "corFundo") v[alvo.name] = numeroCor(alvo.value);
-    else if (alvo.name === "escala") v.escala = Number(alvo.value);
-    else return;
-    gravarFicha();
+    if (alvo.dataset.fio) {
+      const pd = processamentoDe(ficha.a);
+      pd.guias[alvo.dataset.fio] = { ...(pd.guias[alvo.dataset.fio] || {}), fio: alvo.value };
+      gravarProcessamento(ficha.a);
+    } else {
+      if (alvo.dataset.campo) v.campos[alvo.dataset.campo] = alvo.value;
+      else if (alvo.name && alvo.name.startsWith("t-")) v.tempo[alvo.name.slice(2)] = alvo.value;
+      else if (alvo.name === "corTexto" || alvo.name === "corFundo") v[alvo.name] = numeroCor(alvo.value);
+      else if (alvo.name === "escala") v.escala = Number(alvo.value);
+      else return;
+      gravarFicha();
+    }
     desenharFicha();
+    desenharChecklist();
   });
   $("ficha-usar-tempo").addEventListener("click", () => {
     const s = ficha && tempoDaFicha();
@@ -1810,11 +3088,21 @@ function gravarFicha() {
     $("ficha-campos").querySelector('[data-campo="tempo"]').value = ficha.dados.campos.tempo;
     gravarFicha();
     desenharFicha();
+    desenharChecklist();
   });
   $("ficha-txt").addEventListener("click", () => {
     if (!ficha) return;
     const { linhas } = imagemDaFicha();
     baixar(new Blob([linhas.join("\r\n") + "\r\n"], { type: "text/plain" }), trocarExtensao(ficha.a.nome, "_FICHA.txt"));
+  });
+  $("ficha-zip").addEventListener("click", baixarZipDaFicha);
+  $("ficha-checklist").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ir]");
+    if (!b || !mesmaAba(ficha)) return;
+    const ir = b.dataset.ir;
+    $("dlg-ficha").close();
+    if (ir === "salvar") salvar();
+    else RECURSOS[ir]();
   });
   $("ficha-escrever").addEventListener("click", () => {
     if (!mesmaAba(ficha)) return;
@@ -1840,6 +3128,7 @@ const RECURSOS = {
   jacquard: abrirJacquard,
   verificar: abrirVerificar,
   desenvolver: abrirDesenvolver,
+  processar: () => abrirProcessar(),
   simular: abrirSimular,
   ficha: abrirFicha,
 };
@@ -1861,7 +3150,11 @@ document.querySelectorAll("dialog.largo").forEach((dlg) =>
 // Ao fechar, os diálogos soltam a aba em que estavam (senão ela e o histórico dela ficam na memória).
 $("dlg-jacquard").addEventListener("close", () => (jacquard = null));
 $("dlg-desenvolver").addEventListener("close", () => (desenv = null));
-$("dlg-simular").addEventListener("close", () => (simul = null));
+$("dlg-simular").addEventListener("close", () => {
+  cancelAnimationFrame(pedidoSimular);
+  pedidoSimular = 0;
+  simul = null;
+});
 $("dlg-ficha").addEventListener("close", () => (ficha = null));
 
 desenharLegendaSimbolos();

@@ -544,14 +544,111 @@
     return { guias, areas, guiaDe, areaDe };
   }
 
+  // Listra de cada carreira, de baixo para cima (índice na lista), repetindo a sequência até a altura.
+  function listrasPorCarreira(h, listras) {
+    const seq = [];
+    listras.forEach((l, i) => {
+      for (let k = 0; k < Math.max(1, Math.round(l.carreiras)); k++) seq.push(i);
+    });
+    return Array.from({ length: h }, (_, c) => (seq.length ? seq[c % seq.length] : -1));
+  }
+
   // Listras de baixo para cima: [{ cor, carreiras }], repetidas até completar a altura.
   function gerarListras(w, h, listras) {
-    const seq = [];
-    for (const l of listras) for (let i = 0; i < Math.max(1, Math.round(l.carreiras)); i++) seq.push(l.cor);
     const px = new Uint8Array(w * h);
-    if (!seq.length) return px;
-    for (let c = 0; c < h; c++) px.fill(seq[c % seq.length], (h - 1 - c) * w, (h - c) * w);
+    listrasPorCarreira(h, listras).forEach((i, c) => {
+      if (i >= 0) px.fill(listras[i].cor, (h - 1 - c) * w, (h - c) * w);
+    });
     return px;
+  }
+
+  function sorteio(semente) {
+    let s = semente >>> 0 || 1;
+    return () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+  }
+
+  // Módulo de rosetas de onça que se repete sem emenda na largura e na altura.
+  // cores = [fundo, contorno da roseta (e pintas), centro da roseta].
+  function gerarOnca(w, h, semente, cores) {
+    const r = sorteio(semente);
+    const rosetas = [];
+    const sx = 18, sy = 15;
+    for (let gy = 0; gy < Math.ceil(h / sy); gy++) {
+      for (let gx = 0; gx < Math.ceil(w / sx); gx++) {
+        rosetas.push({
+          cx: gx * sx + (gy % 2) * (sx / 2) + (r() - 0.5) * 6,
+          cy: gy * sy + sy / 2 + (r() - 0.5) * 5,
+          rx: 5.5 + r() * 2.5,
+          ry: 4.5 + r() * 2,
+          n: 3 + Math.floor(r() * 3),
+          fase: r() * 6.28,
+          centro: r() < 0.8,
+        });
+      }
+    }
+    const pintas = [];
+    for (let i = 0; i < Math.round((w * h) / 140); i++) pintas.push({ x: r() * w, y: r() * h, rr: 0.8 + r() * 0.9 });
+    const delta = (a, b, t) => {
+      const v = a - b;
+      return v - t * Math.round(v / t);
+    };
+    const px = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let v = 0;
+        for (const o of rosetas) {
+          const dx = delta(x + 0.5, o.cx, w), dy = delta(y + 0.5, o.cy, h);
+          if (Math.abs(dx) > 9.5 || Math.abs(dy) > 7.5) continue;
+          const q = Math.sqrt((dx / o.rx) ** 2 + (dy / o.ry) ** 2);
+          if (q < 0.62 && o.centro) v = 2;
+          else if (q >= 0.72 && q <= 1.08 && Math.sin(o.n * Math.atan2(dy, dx) + o.fase) > -0.35) v = 1;
+        }
+        if (!v) {
+          for (const p of pintas) {
+            const dx = delta(x + 0.5, p.x, w), dy = delta(y + 0.5, p.y, h);
+            if (dx * dx + dy * dy < p.rr * p.rr) {
+              v = 1;
+              break;
+            }
+          }
+        }
+        px[y * w + x] = cores[v];
+      }
+    }
+    return px;
+  }
+
+  // Logo em pontos: separa a imagem (RGBA) em k níveis de claridade (2 a 4 fios) e ordena os níveis do mais
+  // usado (o fundo) para o menos usado. Devolve o nível de cada ponto e a cor média de cada nível.
+  function quantizarLuminancia(rgba, w, h, k) {
+    k = limitar(Math.round(k), 2, 4);
+    const n = w * h;
+    const lum = new Float32Array(n);
+    let mn = 255, mx = 0;
+    for (let i = 0; i < n; i++) {
+      const v = rgba[i * 4 + 3] < 128 ? 255 : 0.299 * rgba[i * 4] + 0.587 * rgba[i * 4 + 1] + 0.114 * rgba[i * 4 + 2];
+      lum[i] = v;
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+    const nivel = new Uint8Array(n);
+    const soma = Array.from({ length: k }, () => [0, 0, 0, 0]);
+    for (let i = 0; i < n; i++) {
+      const b = mx > mn ? Math.min(k - 1, Math.floor(((lum[i] - mn) / (mx - mn + 0.001)) * k)) : 0;
+      nivel[i] = b;
+      const transparente = rgba[i * 4 + 3] < 128;
+      soma[b][0] += transparente ? 255 : rgba[i * 4];
+      soma[b][1] += transparente ? 255 : rgba[i * 4 + 1];
+      soma[b][2] += transparente ? 255 : rgba[i * 4 + 2];
+      soma[b][3]++;
+    }
+    const ordem = soma.map((t, i) => ({ i, n: t[3] })).sort((a, b) => b.n - a.n || a.i - b.i).map((o) => o.i);
+    const novo = new Uint8Array(k);
+    ordem.forEach((b, pos) => (novo[b] = pos));
+    const px = new Uint8Array(n);
+    for (let i = 0; i < n; i++) px[i] = novo[nivel[i]];
+    const medias = ordem.map((b) => (soma[b][3] ? [0, 1, 2].map((j) => Math.round(soma[b][j] / soma[b][3])) : null));
+    return { px, medias, k };
   }
 
   // Losango (argyle): losangos da cor a no centro de cada módulo, cor b em volta e, se houver, linhas
@@ -716,6 +813,254 @@
     const px = new Uint8Array(W * linhas.length);
     linhas.forEach((y, i) => px.set(doc.pixels.subarray(y * W, (y + 1) * W), i * W));
     return { w: W, h: linhas.length, px };
+  }
+
+  // ------------------------------------------------------------------ trechos e pacotes
+
+  const NOMES_TRECHOS = { inicio: "Início", barra: "Barra", transferencia: "Transferência", corpo: "Corpo", final: "Final" };
+
+  // Divide o painel em trechos pelas linhas de opção, de baixo para cima: transferência onde há R5, corpo no
+  // maior trecho com ponto (R6), barra entre o primeiro ponto e o corpo, início antes dela e final depois do
+  // corpo. Devolve [{ id, nome, de, ate }] em carreiras (contadas de baixo).
+  function trechosDoPainel(doc, painel) {
+    const H = doc.altura;
+    if (!painel.R) return [{ id: "corpo", nome: NOMES_TRECHOS.corpo, de: H - painel.y1, ate: H - painel.y0 }];
+    const segs = [];
+    for (let y = painel.y1; y >= painel.y0; y--) {
+      const r5 = valoresDaLinha(doc, painel.R, 5, y).length > 0;
+      const r6 = valoresDaLinha(doc, painel.R, 6, y).join(",");
+      const tipo = r5 ? "R5" : r6 ? `R6:${r6}` : "";
+      const c = H - y;
+      const ult = segs[segs.length - 1];
+      if (ult && ult.tipo === tipo) ult.ate = c;
+      else segs.push({ tipo, de: c, ate: c });
+    }
+    let corpo = -1, maior = -1;
+    segs.forEach((g, i) => {
+      if (g.tipo.startsWith("R6") && g.ate - g.de + 1 > maior) [corpo, maior] = [i, g.ate - g.de + 1];
+    });
+    if (corpo < 0) segs.forEach((g, i) => {
+      if (g.ate - g.de + 1 > maior) [corpo, maior] = [i, g.ate - g.de + 1];
+    });
+    let viuPonto = false;
+    const trechos = [];
+    segs.forEach((g, i) => {
+      let id;
+      if (i === corpo) id = "corpo";
+      else if (g.tipo === "R5") id = "transferencia";
+      else if (i > corpo) id = "final";
+      else {
+        if (g.tipo) viuPonto = true;
+        id = viuPonto ? "barra" : "inicio";
+      }
+      const ult = trechos[trechos.length - 1];
+      if (ult && ult.base === id) ult.ate = g.ate;
+      else trechos.push({ base: id, de: g.de, ate: g.ate });
+    });
+    const vistos = {};
+    return trechos.map((t) => {
+      vistos[t.base] = (vistos[t.base] || 0) + 1;
+      const n = vistos[t.base];
+      return { id: n > 1 ? `${t.base}-${n}` : t.base, nome: n > 1 ? `${NOMES_TRECHOS[t.base]} ${n}` : NOMES_TRECHOS[t.base], de: t.de, ate: t.ate };
+    });
+  }
+
+  // Agulhas que tecem na área de desenho do painel (da primeira à última com código de malha).
+  function areaDeMalha(doc, painel) {
+    if (painel.x0 === null) return null;
+    let esquerda = Infinity, direita = -Infinity;
+    for (let y = painel.y0; y <= painel.y1; y++) {
+      for (let x = painel.x0; x <= painel.x1; x++) {
+        if (!TECE.has(doc.pixels[y * doc.largura + x])) continue;
+        if (x < esquerda) esquerda = x;
+        if (x > direita) direita = x;
+      }
+    }
+    return direita >= esquerda ? { x0: esquerda, x1: direita } : { x0: painel.x0, x1: painel.x1 };
+  }
+
+  const NOMES_BARRA = { tubular: "Barra tubular", rib11: "Barra em ribana 1×1", rib22: "Barra em ribana 2×2" };
+
+  // Desenho desenvolvido com pacotes, como a atribuição de desenvolvimento do KnitPaint:
+  //   inicio  { tipo: "arquivo" | "desperdicio", n }   n carreiras de fio de desperdício e 1 de separação antes
+  //   barra   { tipo: "arquivo" | "tubular" | "rib11" | "rib22" | "sem", n }   troca o trecho da barra
+  //   final   { tipo: "arquivo" | "arremate" | "desperdicio", n }   acrescenta depois da última carreira
+  //   repeticoes  { "de-ate": vezes } dos blocos da R2
+  //   codigos { desperdicio, separacao, arremate, frente, tras, tubularA, tubularB }
+  //   paineis  painéis cujas agulhas que tecem recebem os pacotes (padrão: só o painel)
+  //   semPixels, limite  só conta as carreiras (px: null) quando pedido ou quando passa de limite
+  // As carreiras são inteiras (todos os painéis e linhas de opção). Uma carreira nova copia a carreira de
+  // referência do trecho e troca só as agulhas que tecem de cada painel pelo código do pacote.
+  function desenvolverComPacotes(doc, painel, opcoes = {}) {
+    const W = doc.largura, H = doc.altura;
+    const cod = { desperdicio: 1, separacao: 3, arremate: 16, frente: 1, tras: 2, tubularA: 51, tubularB: 52, ...(opcoes.codigos || {}) };
+    const inicio = { tipo: "arquivo", n: 20, ...(opcoes.inicio || {}) };
+    const barra = { tipo: "arquivo", n: 10, ...(opcoes.barra || {}) };
+    const final = { tipo: "arquivo", n: 12, ...(opcoes.final || {}) };
+    const qtd = (n, padrao) => limitar(Math.round(numero(n, padrao)), 1, 2000);
+    const trechos = trechosDoPainel(doc, painel);
+    const nomeDe = (c) => (trechos.find((t) => c >= t.de && c <= t.ate) || { nome: "" }).nome;
+    const dev = desenvolvimento(doc, painel, opcoes.repeticoes || {});
+    const blocoEm = new Map(dev.blocos.filter((b) => b.vezes > 1).map((b) => [b.de, b]));
+    const areas = (opcoes.paineis || [painel]).map((p) => areaDeMalha(doc, p)).filter(Boolean);
+    const barraT = trechos.find((t) => t.id === "barra");
+    const transfT = barraT && trechos.find((t) => t.id === "transferencia" && t.de === barraT.ate + 1);
+    const cIni = H - painel.y1, cFim = H - painel.y0;
+    const linhas = []; // de baixo para cima: { y } da carreira do arquivo ou { ref, codigo | barra, i } nova
+    const gerar = (ref, parte, n, fn) => {
+      for (let i = 0; i < n; i++) linhas.push({ ref, parte, gerada: true, codigo: fn(i) });
+    };
+    for (let c = 1; c < cIni; c++) linhas.push({ y: H - c, parte: "" });
+    if (inicio.tipo === "desperdicio") {
+      gerar(painel.y1, "Fio de desperdício", qtd(inicio.n, 20), () => cod.desperdicio);
+      gerar(painel.y1, "Separação", 1, () => cod.separacao);
+    }
+    let c = cIni;
+    while (c <= cFim) {
+      if (barraT && c === barraT.de && barra.tipo !== "arquivo") {
+        if (barra.tipo !== "sem") {
+          const ref = H - barraT.de;
+          const n = qtd(barra.n, 10);
+          for (let i = 0; i < n; i++) linhas.push({ ref, parte: NOMES_BARRA[barra.tipo] || "Barra", gerada: true, barra: barra.tipo, i });
+        }
+        c = barraT.ate + 1;
+        if (barra.tipo === "sem" && transfT && c === transfT.de) c = transfT.ate + 1;
+        continue;
+      }
+      const b = blocoEm.get(c);
+      if (b) {
+        for (let r = 0; r < b.vezes; r++) for (let k = b.de; k <= b.ate; k++) linhas.push({ y: H - k, parte: nomeDe(k) });
+        c = b.ate + 1;
+        continue;
+      }
+      linhas.push({ y: H - c, parte: nomeDe(c) });
+      c++;
+    }
+    if (final.tipo === "arremate") gerar(painel.y0, "Arremate", 1, () => cod.arremate);
+    else if (final.tipo === "desperdicio") {
+      gerar(painel.y0, "Separação", 1, () => cod.separacao);
+      gerar(painel.y0, "Fio de desperdício", qtd(final.n, 12), () => cod.desperdicio);
+    }
+    for (let k = cFim + 1; k <= H; k++) linhas.push({ y: H - k, parte: "" });
+
+    const h = linhas.length;
+    // Partes do desenho novo (carreiras contadas de baixo), para mostrar o que entrou.
+    const partes = [];
+    linhas.forEach((l, i) => {
+      if (!l.parte) return;
+      const ult = partes[partes.length - 1];
+      if (ult && ult.nome === l.parte && ult.ate === i) ult.ate = i + 1;
+      else partes.push({ nome: l.parte, de: i + 1, ate: i + 1, gerada: !!l.gerada });
+    });
+    const painelDe = linhas.findIndex((l) => l.parte) + 1;
+    const painelAte = linhas.length - linhas.slice().reverse().findIndex((l) => l.parte);
+    const resumo = { w: W, h, partes, painel: { de: painelDe, ate: painelAte, carreiras: painelAte - painelDe + 1 } };
+    // Só a contagem (sem a imagem) quando pedido ou quando passaria do limite de carreiras.
+    if (opcoes.semPixels || (opcoes.limite && h > opcoes.limite)) return { ...resumo, px: null };
+    const px = new Uint8Array(W * h);
+    linhas.forEach((l, i) => {
+      const destino = (h - 1 - i) * W;
+      const origem = (l.gerada ? l.ref : l.y) * W;
+      px.set(doc.pixels.subarray(origem, origem + W), destino);
+      if (!l.gerada) return;
+      for (const a of areas) {
+        for (let x = a.x0; x <= a.x1; x++) {
+          let v = l.codigo;
+          if (l.barra === "tubular") v = l.i % 2 ? cod.tubularB : cod.tubularA;
+          else if (l.barra === "rib11") v = (x - a.x0) % 2 ? cod.tras : cod.frente;
+          else if (l.barra === "rib22") v = (x - a.x0) % 4 < 2 ? cod.frente : cod.tras;
+          px[destino + x] = v;
+        }
+      }
+    });
+    return { ...resumo, px };
+  }
+
+  // ------------------------------------------------------------------ processamento
+
+  const PASSOS_PROCESSAMENTO = [
+    { id: "maquina", nome: "Máquina" },
+    { id: "guias", nome: "Guia-fios" },
+    { id: "economizador", nome: "Economizador" },
+    { id: "puxador", nome: "Puxador" },
+    { id: "ponto", nome: "Ponto" },
+    { id: "velocidade", nome: "Velocidade" },
+    { id: "gerar", nome: "Gerar programa" },
+  ];
+  const MAQUINAS = ["SSG122SV", "SVR123SP", "SRY123LP", "MACH2XS (WHOLEGARMENT)", "N.SSR072 (golas)"];
+  const FINURAS = [3, 5, 7, 10, 12, 14, 16, 18];
+
+  // O que o processamento precisa: os guia-fios da R3 e os pontos da R6 usados (com as carreiras de cada
+  // painel), os trechos do primeiro painel e os blocos do economizador (R2) de cada painel.
+  function usoDoProcessamento(doc, blocos) {
+    const lista = paineis(blocos).filter((p) => p.R);
+    const coletar = (k) => {
+      const valores = new Map();
+      for (const p of lista) {
+        if (!p.R.colunas[k]) continue;
+        for (let y = p.R.carreiraInicio; y <= p.R.carreiraFim; y++) {
+          for (const v of valoresDaLinha(doc, p.R, k, y)) {
+            if (!valores.has(v)) valores.set(v, new Map());
+            const porPainel = valores.get(v);
+            if (!porPainel.has(p.numero)) porPainel.set(p.numero, []);
+            porPainel.get(p.numero).push(doc.altura - y);
+          }
+        }
+      }
+      return [...valores]
+        .sort((a, b) => a[0] - b[0])
+        .map(([valor, porPainel]) => ({ valor, onde: [...porPainel].map(([painel, cs]) => ({ painel, carreiras: intervalos(cs) })) }));
+    };
+    const primeiro = lista.find((p) => p.x0 !== null) || lista[0];
+    return {
+      guias: coletar(3),
+      pontos: coletar(6),
+      trechos: primeiro ? trechosDoPainel(doc, primeiro) : [],
+      blocosR2: lista.flatMap((p) => (p.R.colunas[2] ? desenvolvimento(doc, p).blocos.map((b) => ({ painel: p.numero, chave: b.chave, de: b.de, ate: b.ate, valor: b.valor })) : [])),
+    };
+  }
+
+  const vazio = (v) => String(v ?? "").trim() === "";
+
+  // Quantos valores faltam em cada passo. dados: { maquina, finura, guias: { r3: { guia, fio, cor, lado } },
+  // pontos: { r6: { f, t } }, puxador: { trecho: valor }, velocidade: { trecho: valor } }.
+  function faltasDoProcessamento(dados, uso, repeticoes = {}) {
+    const g = dados.guias || {}, p = dados.pontos || {}, pux = dados.puxador || {}, vel = dados.velocidade || {};
+    return {
+      maquina: (vazio(dados.maquina) ? 1 : 0) + (vazio(dados.finura) ? 1 : 0),
+      guias: uso.guias.reduce((n, u) => n + (vazio((g[u.valor] || {}).guia) ? 1 : 0) + (vazio((g[u.valor] || {}).fio) ? 1 : 0), 0),
+      economizador: uso.blocosR2.filter((b) => vazio((repeticoes[b.painel] || {})[b.chave])).length,
+      puxador: uso.trechos.filter((t) => vazio(pux[t.id])).length,
+      ponto: uso.pontos.reduce((n, u) => n + (vazio((p[u.valor] || {}).f) ? 1 : 0) + (vazio((p[u.valor] || {}).t) ? 1 : 0), 0),
+      velocidade: uso.trechos.filter((t) => vazio(vel[t.id])).length,
+      gerar: 0,
+    };
+  }
+
+  // Resumo do processamento em texto, para levar à máquina ou ao KnitPaint.
+  function linhasDoProcessamento(nome, dados, uso, repeticoes = {}) {
+    const g = dados.guias || {}, p = dados.pontos || {}, pux = dados.puxador || {}, vel = dados.velocidade || {};
+    const ou = (v) => (vazio(v) ? "—" : String(v).trim());
+    const onde = (u) => u.onde.map((o) => `painel ${o.painel}: ${o.carreiras}`).join("; ");
+    const linhas = [`PROCESSAMENTO · ${nome}`, "", `Máquina: ${ou(dados.maquina)} · finura ${vazio(dados.finura) ? "—" : `${dados.finura}G`}`, "", "GUIA-FIOS (R3)"];
+    for (const u of uso.guias) {
+      const d = g[u.valor] || {};
+      const lado = d.lado === "D" ? "direita" : d.lado === "E" ? "esquerda" : "—";
+      linhas.push(`R3 ${u.valor} → guia ${ou(d.guia)} · fio ${ou(d.fio)} · cor ${ou(d.cor)} · entra pela ${lado} (${onde(u)})`);
+    }
+    if (!uso.guias.length) linhas.push("(nenhum valor na R3)");
+    linhas.push("", "ECONOMIZADOR (R2)");
+    for (const b of uso.blocosR2) linhas.push(`Painel ${b.painel}, carreiras ${b.de}–${b.ate} (R2 = ${b.valor}): repete ${ou((repeticoes[b.painel] || {})[b.chave])} vez(es)`);
+    if (!uso.blocosR2.length) linhas.push("(nenhum bloco na R2)");
+    linhas.push("", "PONTO (R6)");
+    for (const u of uso.pontos) {
+      const d = p[u.valor] || {};
+      linhas.push(`R6 ${u.valor} → frente ${ou(d.f)} · atrás ${ou(d.t)} (${onde(u)})`);
+    }
+    if (!uso.pontos.length) linhas.push("(nenhum valor na R6)");
+    linhas.push("", "PUXADOR E VELOCIDADE POR TRECHO");
+    for (const t of uso.trechos) linhas.push(`${t.nome} (carreiras ${t.de}–${t.ate}): puxador ${ou(pux[t.id])} · velocidade ${ou(vel[t.id])}`);
+    return linhas;
   }
 
   // ------------------------------------------------------------------ verificação
@@ -904,6 +1249,8 @@
     BIBLIOTECA, repetirMotivo,
     coresDaArea, flutuacoes, guiasIntarsia, gerarListras, gerarLosango,
     paineis, colunaDoValor, valoresDaLinha, faixasDaLinha, pintarValorNaLinha, desenvolvimento, desenharDesenvolvido,
+    trechosDoPainel, areaDeMalha, desenvolverComPacotes, listrasPorCarreira, gerarOnca, quantizarLuminancia,
+    PASSOS_PROCESSAMENTO, MAQUINAS, FINURAS, usoDoProcessamento, faltasDoProcessamento, linhasDoProcessamento,
     TECE, verificarDesenho, intervalos,
     tempoTecimento, tipoDePonto, semAcento, CAMPOS_FICHA, linhasDaFicha, FONTE, textoEmPixels,
   };
