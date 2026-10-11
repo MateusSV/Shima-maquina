@@ -56,38 +56,49 @@ No painel à direita, em **Desenvolver o modelo**, **Biblioteca de pontos** e **
 
 - **Modelo**: escolha o estilo (painel reto, gola careca, gola V, cardigã, regata, gola polo), a densidade
   da amostra (colunas e carreiras em 10 cm), a máquina, a finura e as medidas em cm; o editor calcula as
-  agulhas e carreiras de cada peça e desenha o **esquema** dela em cm, com as cotas.
+  agulhas e carreiras de cada peça e desenha o **esquema** dela em cm, com as cotas. Mostra também a distância
+  entre agulhas da finura e o desenho aberto medido em cm com a amostra (**No seu arquivo**).
 - **Forma**: para cada peça, as diminuições e aumentos espalhados pelas carreiras, arremates, malha parcial
-  dos ombros e marcas de diminuição, passo a passo. Clique num passo para ver as carreiras dele na prévia.
-  Cria um desenho novo com a forma ou cola no desenho aberto. Os códigos usados (malha, fora, arremate,
+  dos ombros e marcas de diminuição, passo a passo. **Ajuste em agulhas e carreiras**: largura, altura, barra,
+  cava, arremates da cava e da gola, degraus do ombro, copa e topo da manga podem ser mudados à mão (e voltar
+  aos números do Modelo). A grade mostra a peça na proporção da malha ou quadrada, com zoom, números nos eixos
+  e, passando o mouse, a carreira, a agulha e o que acontece nela; clique num passo para destacar as carreiras
+  dele. Cria um desenho novo com a forma ou cola no desenho aberto. Os códigos usados (malha, fora, arremate,
   malha parcial, diminuições) podem ser trocados.
 - **Biblioteca de pontos e carimbo (K)**: trança, barra, links, rendado, flutuação, transferência e tuck.
   O carimbo põe o motivo com o canto de baixo à esquerda no clique e, arrastando, repete alinhado.
-  **Repetir o motivo na seleção** em repetição normal ou em degraus. **Usar a cópia** e **Guardar motivo**
-  criam os seus próprios motivos (ficam no navegador).
+  **Repetir o motivo** na seleção ou, sem seleção, no corpo do painel que está na tela, em repetição normal ou
+  em degraus. **Usar a cópia** e **Guardar motivo** criam os seus próprios motivos (ficam no navegador).
+- **Voltar ao original** (em Desenho): volta a aba a como o arquivo foi aberto (dá para desfazer). A barra de
+  baixo mostra também o trecho do ponto (início, barra, corpo…).
 - **Símbolos**: com zoom de 800% ou mais, mostra o tipo de ponto de cada código (frente, atrás, tuck, sem
   seleção, mover).
 - **Gerar padrão**: listras (com `cor:carreiras:guia`, o guia-fio de cada listra vai para a R3 da seleção),
   losango (argyle), **onça** (rosetas que se repetem sem emenda; “Sortear” troca as rosetas), **logo em
-  pontos** (de um texto ou de uma imagem PNG/JPG, separado em 2 a 4 fios, na proporção da amostra) e texto em
-  letras de pixels.
+  pontos** (de um texto ou de uma imagem PNG/JPG, com a largura em cm, separado em 2 a 4 fios na proporção da
+  amostra; “Usar as cores da imagem” escolhe para cada fio a cor da paleta mais parecida) e texto em letras
+  de pixels.
 - **Jacquard e intarsia**: fios soltos no avesso em flutuação, birdseye, escada ou tubular, com a maior
-  flutuação marcada no desenho e a **vista do avesso** (espelhada, com cada fio solto na cor dele); quantos
-  guia-fios a intarsia precisa, o mapa e a tabela de cada guia (cor, carreiras e áreas).
+  flutuação marcada no desenho, quantas carreiras a máquina tece (uma por fio) e a **vista do avesso**
+  (espelhada, com cada fio solto na cor dele); quantos guia-fios a intarsia precisa, as áreas pequenas, o mapa
+  e a tabela de cada guia (cor, carreiras e áreas). Passando o mouse no mapa: agulha, carreira, cor, área e guia.
 - **Linhas de opção**: a grade mostra as 20 linhas de cada lado, com as que têm valores marcadas; escolha uma
-  para ver as faixas de valores por carreira, dar um nome a ela e **pintar um valor** de uma carreira até
-  outra. O conta-gotas numa linha de opção a escolhe. **Escurecer o desenho** deixa só as linhas de opção
-  em destaque.
+  (na grade, na tabela da carreira ou com o conta-gotas) para ver as faixas de valores por carreira, dar um
+  nome a ela e **pintar um valor** de uma carreira até outra; a linha escolhida ganha um contorno no desenho.
+  **Escurecer o desenho** deixa só as linhas de opção em destaque.
 - **Verificar**: procura carreiras com malha sem guia-fio (R3) ou sem ponto (R6), cancelar malha (R5) com
-  guia-fio, falta da largura do guia (13), flutuações longas (16) e painéis diferentes. Mostra as agulhas
-  das duas fronturas com o carro passando, carreira a carreira.
+  guia-fio, falta da largura do guia (13), flutuações longas (16), painéis diferentes, fios soltos longos e
+  guias demais na intarsia do corpo, e trechos difíceis na forma das peças do Modelo. Cada aviso tem um botão
+  para a ferramenta que resolve (a linha de opção, o ponto no Processar, o jacquard, a forma). Mostra as
+  agulhas das duas fronturas com o carro passando, carreira a carreira.
 - **Pacotes e altura**: o painel dividido em trechos (início, barra, transferência, corpo, final) pelas linhas
-  R5 e R6; troque o início (com fio de desperdício e separação), a barra (tubular, ribana 1×1 ou 2×2, ou
+  R5 e R6, com os códigos, guias e pontos de cada um (clique num trecho para destacá-lo ou selecioná-lo no
+  desenho); troque o início (com fio de desperdício e separação), a barra (tubular, ribana 1×1 ou 2×2, ou
   sem barra) e o final (com arremate ou fio de desperdício para remalhar), diga quantas vezes cada bloco do
   economizador (R2) repete e veja a altura real. **Criar desenho desenvolvido** abre a peça inteira numa aba
   nova. Os códigos dos pacotes podem ser trocados.
 - **Processar**: em 7 passos, a máquina e a finura, cada número da R3 como guia-fio (guia, fio, cor e lado de
-  entrada), as repetições da R2, o puxador e a velocidade de cada trecho e o ponto da frente e de trás de cada
+  entrada), as repetições da R2 (com o valor da R1 dentro de cada bloco), o puxador e a velocidade de cada trecho e o ponto da frente e de trás de cada
   número da R6. **Processar** confere tudo, desenvolve a peça e estima o tempo; o resumo baixa em `.txt`.
 - **Simular malha**: prévia da malha (frente ou avesso, tipo de fio, cor pelo guia-fio ou pelo desenho), com
   **variantes de cor** prontas ou guardadas por você e a **peça inteira** do Modelo em 2D, com o desenho
@@ -95,7 +106,8 @@ No painel à direita, em **Desenvolver o modelo**, **Biblioteca de pontos** e **
 - **Ficha técnica**: código, descrição, máquina, tempo, fio, pesos, data e fio de cada guia (os mesmos do
   Processar); estimativa do tempo de tecimento; baixa em `.txt` ou escreve a ficha no desenho em letras de
   pixels. **Enviar à máquina** baixa um `.zip` com os arquivos abertos escolhidos (o desenho como está agora,
-  `.000`, `.QFD`) e os resumos; **Antes de tecer** lista o que ainda falta conferir.
+  `.000`, `.QFD`) e os resumos; **Antes de tecer** lista o que ainda falta conferir (cada item pode ser
+  marcado à mão, inclusive a amostra tecida e aprovada).
 
 Os significados de códigos e linhas de opção vêm de referências públicas do KnitPaint e mudam entre
 versões: os nomes aparecem com “?” e os códigos usados pelos recursos podem ser trocados. Os valores do

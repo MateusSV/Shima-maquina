@@ -324,6 +324,7 @@ function abrirBuffer(nome, buffer, origem) {
   const aba = { id: ++contadorAbas, nome, origem, tipo: aberto.tipo, aberto, modificado: false, tamanho: buffer.byteLength };
   if (aba.tipo === "dat") {
     Object.assign(aba, { doc: aberto.doc, hist: [], refazer: [], selecao: null, flutuante: null, zoom: null, rolagem: null });
+    aba.original = retrato(aba); // para "Voltar ao original"
   } else {
     Object.assign(aba, { guia: "resumo", detalhe: null, comparar: "" });
   }
@@ -779,6 +780,10 @@ function posicionarCaixas() {
   if (a.selecao) posicionar(caixaSel, a.selecao);
   caixaFlu.hidden = !a.flutuante;
   if (a.flutuante) posicionar(caixaFlu, a.flutuante);
+  const contorno = $("contorno-linha");
+  const r = contornoDaLinha(a);
+  contorno.hidden = !r;
+  if (r) posicionar(contorno, r);
 }
 
 // ------------------------------------------------------------------ histórico
@@ -822,6 +827,19 @@ function restaurar(aba, r) {
     renderizar();
     atualizarPainel();
   }
+}
+
+// Volta o desenho a como ele foi aberto; é uma alteração como as outras, que dá para desfazer.
+async function voltarAoOriginal(a) {
+  if (!a.original) return;
+  fixarFlutuante(a);
+  if (!(await perguntar(`Voltar ${a.nome} a como ele foi aberto? Todas as alterações desta aba saem do desenho (dá para desfazer com Ctrl+Z).`, "Voltar ao original"))) return;
+  if (abaDat() !== a) return;
+  salvarHistorico(a);
+  const o = a.original;
+  restaurar(a, { pixels: o.pixels.slice(), largura: o.largura, altura: o.altura, paleta: o.paleta.map((c) => c.slice()) });
+  atualizarBotoes();
+  avisar("O desenho voltou a como foi aberto. Ctrl+Z desfaz.");
 }
 
 function desfazer() {
@@ -1334,6 +1352,9 @@ const ACOES = {
     form.altura.value = a.doc.altura;
     abrirDialogo("dlg-redimensionar");
   },
+  "voltar-original"(a) {
+    voltarAoOriginal(a);
+  },
   // Biblioteca de pontos (editor_recursos.js)
   "repetir-motivo"(a) {
     repetirMotivoNaSelecao(a);
@@ -1617,6 +1638,9 @@ $("dlg-novo").addEventListener("close", () => {
   const form = dlg.querySelector("form");
   let nome = form.nome.value.trim() || "NOVO.dat";
   if (!/\.dat$/i.test(nome)) nome += ".dat";
+  // Nome único: os valores guardados no navegador (processamento, pacotes, ficha) vão pelo nome do arquivo.
+  const pedido = nome;
+  for (let n = 2; estado.abas.some((x) => x.nome === nome); n++) nome = pedido.replace(/\.dat$/i, `_${n}.dat`);
   const largura = limitar(Math.round(Number(form.largura.value)), 1, 8000);
   const altura = limitar(Math.round(Number(form.altura.value)), 1, 8000);
   const doc = ShimaDat.novo(largura, altura, ref.doc);
@@ -1625,6 +1649,7 @@ $("dlg-novo").addEventListener("close", () => {
     id: ++contadorAbas, nome, origem: "novo", tipo: "dat", aberto: { tipo: "dat", doc }, modificado: true, tamanho: 0,
     doc, hist: [], refazer: [], selecao: null, flutuante: null, zoom: null, rolagem: null,
   };
+  aba.original = retrato(aba);
   estado.abas.push(aba);
   mostrarAba(aba);
 });
@@ -1888,7 +1913,10 @@ function atualizarBotoes() {
   tem("cortar-desenho", !!a.selecao);
   for (const acao of ["duplicar-carreiras", "excluir-carreiras", "duplicar-agulhas", "excluir-agulhas"]) tem(acao, !!a.selecao);
   tem("mudar-tamanho", sel);
-  tem("repetir-motivo", !!a.selecao && !!estado.motivo);
+  tem("repetir-motivo", !!estado.motivo);
+  const repetir = document.querySelector('[data-acao="repetir-motivo"]');
+  if (repetir) repetir.textContent = a.selecao ? "Repetir o motivo na seleção" : "Repetir o motivo no corpo";
+  tem("voltar-original", !!a.original && a.hist.length > 0);
   tem("usar-copia", !!estado.area);
   tem("guardar-motivo", !!estado.motivo);
 }
@@ -1918,7 +1946,10 @@ function desenharOpcoes() {
       const painel = Math.floor(blocos.indexOf(b) / 2) + 1;
       const linhas = valores.length
         ? valores
-            .map((v) => `<tr><th class="mono">${v.linha}</th><td class="mono">${v.cores.join(", ")}</td><td class="suave">${esc(nomeDaLinha(v.linha))}</td></tr>`)
+            .map(
+              (v) =>
+                `<tr><th class="mono"><button type="button" class="link-linha" data-escolher-linha="${v.linha}" data-bloco="${blocos.indexOf(b)}" title="Escolher a linha ${v.linha} em Uma linha">${v.linha}</button></th><td class="mono">${v.cores.join(", ")}</td><td class="suave">${esc(nomeDaLinha(v.linha))}</td></tr>`,
+            )
             .join("")
         : `<tr><td colspan="3" class="suave">sem valores</td></tr>`;
       return `<table class="tabela tabela-opcoes"><caption>${b.lado === "L" ? "Esquerda" : "Direita"} · painel ${painel}</caption><tbody>${linhas}</tbody></table>`;
@@ -1936,7 +1967,8 @@ function atualizarStatus(p) {
     const linha = ShimaDat.linhaDeOpcaoEm(blocosDeOpcao(a), p.x, p.y);
     const nomeLinha = linha ? nomeDaLinha(linha.lado + linha.numero) : "";
     const textoLinha = linha ? ` · Linha de opção ${linha.lado}${linha.numero}${nomeLinha ? `: ${nomeLinha}` : ""}` : "";
-    $("status-posicao").textContent = `Agulha ${p.x + 1} · Carreira ${d.altura - p.y} · Cor ${n}${nome ? ` (${nome})` : ""}${textoLinha}`;
+    const trecho = trechoNoPonto(a, p.x, p.y);
+    $("status-posicao").textContent = `Agulha ${p.x + 1} · Carreira ${d.altura - p.y} · Cor ${n}${nome ? ` (${nome})` : ""}${textoLinha}${trecho ? ` · ${trecho}` : ""}`;
     if (estado.carreiraFoco !== p.y) {
       estado.carreiraFoco = p.y;
       desenharOpcoes();

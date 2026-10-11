@@ -259,9 +259,10 @@
     passos.push({ nome: "Barra", de: 1, ate: barra, texto: `${W} agulhas, ${barra} carreiras de barra.` });
     passos.push({ nome: "Corpo reto", de: barra + 1, ate: cava0 - 1, texto: `${cava0 - 1 - barra} carreiras sem forma.` });
     passos.push({ nome: "Cava: arremate", de: cava0, ate: cava0, texto: `${arremC} agulhas de cada lado.` });
-    if (evCava.length) passos.push({ nome: "Cava: diminuições", de: cava0 + evCava[0].off, ate: cava0 + evCava[evCava.length - 1].off, texto: `${resumoEventos(evCava, "−")}.` });
+    const eventos = (lista, inicio) => lista.map((e) => ({ carreira: inicio + e.off, n: e.n, intervalo: e.intervalo }));
+    if (evCava.length) passos.push({ nome: "Cava: diminuições", de: cava0 + evCava[0].off, ate: cava0 + evCava[evCava.length - 1].off, texto: `${resumoEventos(evCava, "−")}.`, eventos: eventos(evCava, cava0) });
     passos.push({ nome: "Gola: arremate central", de: gola0, ate: gola0, texto: `${arremG} agulhas no centro. Daqui para cima os dois lados seguem separados.` });
-    if (evGola.length) passos.push({ nome: "Gola: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `${resumoEventos(evGola, "−")}.` });
+    if (evGola.length) passos.push({ nome: "Gola: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `${resumoEventos(evGola, "−")}.`, eventos: eventos(evGola, gola0) });
     passos.push({ nome: "Ombro: malha parcial", de: ombro0, ate: H, texto: `${deg} degraus de ${degraus.join(", ")} agulhas, um a cada 2 carreiras.` });
     passos.push({ nome: "Arremate final", de: H, ate: H, texto: `Arremata ${Math.max(0, ombro)} agulhas em cada ombro.` });
     const resumo = `Começa com ${W} agulhas, fica com ${W - 2 * recuo} depois da cava e termina em 2 ombros de ${Math.max(0, ombro)} agulhas com uma gola de ${abertura}. São ${recuo} agulhas tiradas de cada lado na cava e ${ladoGola} de cada lado da gola.`;
@@ -315,9 +316,10 @@
     }
     const passos = [];
     passos.push({ nome: "Punho", de: 1, ate: barra, texto: `${punho} agulhas, ${barra} carreiras de barra.` });
-    if (evAum.length) passos.push({ nome: "Aumentos", de: barra + evAum[0].off, ate: barra + evAum[evAum.length - 1].off, texto: `${resumoEventos(evAum, "+")}.` });
+    const eventos = (lista, inicio) => lista.map((e) => ({ carreira: inicio + e.off, n: e.n, intervalo: e.intervalo }));
+    if (evAum.length) passos.push({ nome: "Aumentos", de: barra + evAum[0].off, ate: barra + evAum[evAum.length - 1].off, texto: `${resumoEventos(evAum, "+")}.`, eventos: eventos(evAum, barra) });
     passos.push({ nome: "Copa: arremate", de: copa0, ate: copa0, texto: `${arremC} agulhas de cada lado.` });
-    if (evCopa.length) passos.push({ nome: "Copa: diminuições", de: copa0 + evCopa[0].off, ate: copa0 + evCopa[evCopa.length - 1].off, texto: `${resumoEventos(evCopa, "−")}.` });
+    if (evCopa.length) passos.push({ nome: "Copa: diminuições", de: copa0 + evCopa[0].off, ate: copa0 + evCopa[evCopa.length - 1].off, texto: `${resumoEventos(evCopa, "−")}.`, eventos: eventos(evCopa, copa0) });
     passos.push({ nome: "Arremate final", de: H, ate: H, texto: `Arremata o topo da copa (${topo} agulhas).` });
     const resumo = `Começa no punho com ${punho} agulhas, ganha ${aum} de cada lado até ${punho + 2 * aum} na cava e fecha a copa em ${topo} agulhas.`;
     return { W, H, linhas, passos, resumo };
@@ -331,6 +333,24 @@
     if (forma.tipo === "manga") return planoManga(forma, porVez, marca);
     if (forma.tipo === "corpo") return planoCorpo(forma, porVez, marca);
     return planoPainel(forma);
+  }
+
+  // Trechos difíceis da forma: duas ou mais diminuições (ou aumentos) seguidas de 2 agulhas ou mais a cada
+  // 2 carreiras ou menos. Pedem velocidade menor e atenção ao puxador. Devolve [{ passo, de, ate, vezes, n, intervalo }].
+  function trechosDificeis(plano) {
+    const lista = [];
+    for (const s of plano.passos) {
+      const ev = s.eventos || [];
+      const forte = (e) => e.n >= 2 && e.intervalo <= 2;
+      for (let i = 0; i < ev.length; i++) {
+        if (!forte(ev[i])) continue;
+        let j = i;
+        while (j + 1 < ev.length && forte(ev[j + 1])) j++;
+        if (j > i) lista.push({ passo: s.nome, de: ev[i].carreira, ate: ev[j].carreira, vezes: j - i + 1, n: Math.max(...ev.slice(i, j + 1).map((e) => e.n)), intervalo: ev[i].intervalo });
+        i = j;
+      }
+    }
+    return lista;
   }
 
   // Desenho da forma em números de cor (linha de cima primeiro, como o .dat).
@@ -736,6 +756,21 @@
     return out;
   }
 
+  // Valores que a linha k guarda nas carreiras de–ate (contadas de baixo), sem a marca da coluna-guia e sem
+  // repetir: na R1 do exemplo, o 1 dentro do bloco do economizador (a guia tem 6 e 7 alternando).
+  function valoresNasCarreiras(doc, bloco, k, de, ate) {
+    if (!bloco.colunas[k]) return [];
+    const marca = guiaComMarca(doc, bloco, k);
+    const vistos = [];
+    for (let c = de; c <= ate; c++) {
+      const y = doc.altura - c;
+      if (y < bloco.carreiraInicio || y > bloco.carreiraFim) continue;
+      const v = doc.pixels[y * doc.largura + colunaDoValor(doc, bloco, k, y, marca)];
+      if (v && !vistos.includes(v)) vistos.push(v);
+    }
+    return vistos.sort((a, b) => a - b);
+  }
+
   // Faixas de carreiras com o mesmo valor, de baixo para cima. Trechos em que o valor alterna a cada
   // carreira entre dois números viram uma faixa só ("6 e 7 alternando").
   function faixasDaLinha(doc, bloco, k) {
@@ -1030,6 +1065,31 @@
     return { ...resumo, px };
   }
 
+  // O que tem num trecho do painel: os códigos mais usados nas agulhas que tecem, se as carreiras alternam entre
+  // dois códigos (51 e 52 na barra do exemplo) e os valores de guia-fio (R3), ponto (R6), cancelar malha (R5) e
+  // economizador (R2) nas carreiras dele.
+  function resumoDoTrecho(doc, painel, trecho) {
+    const H = doc.altura, W = doc.largura;
+    const m = areaDeMalha(doc, painel) || { x0: 0, x1: W - 1 };
+    const total = new Map();
+    const principal = []; // código mais usado em cada carreira, de baixo para cima
+    for (let c = trecho.de; c <= trecho.ate; c++) {
+      const y = H - c;
+      const linha = new Map();
+      for (let x = m.x0; x <= m.x1; x++) {
+        const v = doc.pixels[y * W + x];
+        linha.set(v, (linha.get(v) || 0) + 1);
+        total.set(v, (total.get(v) || 0) + 1);
+      }
+      principal.push([...linha].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]);
+    }
+    const codigos = [...total].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([cor, n]) => ({ cor, n }));
+    let alterna = null;
+    if (principal.length >= 4 && principal[0] !== principal[1] && principal.every((v, i) => v === principal[i % 2])) alterna = [principal[0], principal[1]];
+    const valores = (k) => (painel.R ? valoresNasCarreiras(doc, painel.R, k, trecho.de, trecho.ate) : []);
+    return { codigos, alterna, guias: valores(3), pontos: valores(6), cancela: valores(5).length > 0, economizador: valores(2) };
+  }
+
   // ------------------------------------------------------------------ processamento
 
   const PASSOS_PROCESSAMENTO = [
@@ -1070,7 +1130,11 @@
       guias: coletar(3),
       pontos: coletar(6),
       trechos: primeiro ? trechosDoPainel(doc, primeiro) : [],
-      blocosR2: lista.flatMap((p) => (p.R.colunas[2] ? desenvolvimento(doc, p).blocos.map((b) => ({ painel: p.numero, chave: b.chave, de: b.de, ate: b.ate, valor: b.valor })) : [])),
+      blocosR2: lista.flatMap((p) =>
+        p.R.colunas[2]
+          ? desenvolvimento(doc, p).blocos.map((b) => ({ painel: p.numero, chave: b.chave, de: b.de, ate: b.ate, valor: b.valor, dentro: valoresNasCarreiras(doc, p.R, 1, b.de, b.ate) }))
+          : [],
+      ),
     };
   }
 
@@ -1104,7 +1168,10 @@
     }
     if (!uso.guias.length) linhas.push("(nenhum valor na R3)");
     linhas.push("", "ECONOMIZADOR (R2)");
-    for (const b of uso.blocosR2) linhas.push(`Painel ${b.painel}, carreiras ${b.de}–${b.ate} (R2 = ${b.valor}): repete ${ou((repeticoes[b.painel] || {})[b.chave])} vez(es)`);
+    for (const b of uso.blocosR2) {
+      const dentro = b.dentro && b.dentro.length ? `, R1 = ${b.dentro.join("/")}` : "";
+      linhas.push(`Painel ${b.painel}, carreiras ${b.de}–${b.ate} (R2 = ${b.valor}${dentro}): repete ${ou((repeticoes[b.painel] || {})[b.chave])} vez(es)`);
+    }
     if (!uso.blocosR2.length) linhas.push("(nenhum bloco na R2)");
     linhas.push("", "PONTO (R6)");
     for (const u of uso.pontos) {
@@ -1141,13 +1208,13 @@
     const itens = [];
     const lista = paineis(blocos);
     if (!lista.length) {
-      itens.push({ nivel: "info", titulo: "Sem linhas de opção", texto: "Não foram encontrados blocos L1–L20 e R1–R20 neste desenho. As regras de guia-fio, ponto e cancelar malha precisam deles." });
+      itens.push({ nivel: "info", regra: "sem-linhas", titulo: "Sem linhas de opção", texto: "Não foram encontrados blocos L1–L20 e R1–R20 neste desenho. As regras de guia-fio, ponto e cancelar malha precisam deles." });
       return itens;
     }
     const resumos = [];
     for (const p of lista) {
       if (!p.L || !p.R) {
-        itens.push({ nivel: "aviso", titulo: `Bloco de linhas de opção sem par (painel ${p.numero})`, texto: "Achei só um lado (L ou R) deste painel. Confira se o outro lado está completo." });
+        itens.push({ nivel: "aviso", regra: "sem-par", painel: p.numero, titulo: `Bloco de linhas de opção sem par (painel ${p.numero})`, texto: "Achei só um lado (L ou R) deste painel. Confira se o outro lado está completo." });
         continue;
       }
       const semGuia = [], semPonto = [], cancelaComGuia = [], cancela = [], semLargura = [], soltos = [];
@@ -1175,12 +1242,12 @@
       }
       const onde = (lista2) => ({ carreiras: intervalos(lista2), y: H - lista2[0], x0: p.x0, x1: p.x1, painel: p.numero });
       const nome = lista.length > 1 ? ` (painel ${p.numero})` : "";
-      if (semGuia.length) itens.push({ nivel: "aviso", titulo: `Carreiras com malha e sem guia-fio (R3)${nome}`, texto: "Estas carreiras têm códigos de malha, mas a linha R3 está vazia. Pode ser que usem o guia da carreira anterior; confira no KnitPaint.", ...onde(semGuia) });
-      if (semPonto.length) itens.push({ nivel: "aviso", titulo: `Carreiras com malha e sem número de ponto (R6)${nome}`, texto: "Sem R6 a carreira usa o ponto padrão da máquina. Confira se é isso que você quer.", ...onde(semPonto) });
-      if (cancelaComGuia.length) itens.push({ nivel: "aviso", titulo: `Cancelar malha (R5) com guia-fio (R3)${nome}`, texto: "A carreira não tece, mas tem guia-fio. Confira se o guia deve passar nessa carreira.", ...onde(cancelaComGuia) });
-      else if (cancela.length) itens.push({ nivel: "info", titulo: `Cancelar malha sem guia-fio: coerente${nome}`, texto: "Nas carreiras com R5 a malha é cancelada e a R3 está vazia: as agulhas só transferem ou esperam.", ...onde(cancela) });
-      if (semLargura.length) itens.push({ nivel: "aviso", titulo: `Carreiras com malha sem a largura do guia-fio (13)${nome}`, texto: "O código 13 marca até onde o guia-fio vai. Estas carreiras tecem, mas não têm a marca na área do painel.", ...onde(semLargura) });
-      if (soltos.length) itens.push({ nivel: "aviso", titulo: `Flutuações longas (16)${nome}`, texto: `Há mais de ${limite} agulhas seguidas sem seleção (16) na mesma carreira: o fio fica solto por trás.`, ...onde(soltos) });
+      if (semGuia.length) itens.push({ nivel: "aviso", regra: "sem-guia", titulo: `Carreiras com malha e sem guia-fio (R3)${nome}`, texto: "Estas carreiras têm códigos de malha, mas a linha R3 está vazia. Pode ser que usem o guia da carreira anterior; confira no KnitPaint.", ...onde(semGuia) });
+      if (semPonto.length) itens.push({ nivel: "aviso", regra: "sem-ponto", titulo: `Carreiras com malha e sem número de ponto (R6)${nome}`, texto: "Sem R6 a carreira usa o ponto padrão da máquina. Confira se é isso que você quer.", ...onde(semPonto) });
+      if (cancelaComGuia.length) itens.push({ nivel: "aviso", regra: "cancela-com-guia", titulo: `Cancelar malha (R5) com guia-fio (R3)${nome}`, texto: "A carreira não tece, mas tem guia-fio. Confira se o guia deve passar nessa carreira.", ...onde(cancelaComGuia) });
+      else if (cancela.length) itens.push({ nivel: "info", regra: "cancela-coerente", titulo: `Cancelar malha sem guia-fio: coerente${nome}`, texto: "Nas carreiras com R5 a malha é cancelada e a R3 está vazia: as agulhas só transferem ou esperam.", ...onde(cancela) });
+      if (semLargura.length) itens.push({ nivel: "aviso", regra: "sem-largura", titulo: `Carreiras com malha sem a largura do guia-fio (13)${nome}`, texto: "O código 13 marca até onde o guia-fio vai. Estas carreiras tecem, mas não têm a marca na área do painel.", ...onde(semLargura) });
+      if (soltos.length) itens.push({ nivel: "aviso", regra: "soltos-16", titulo: `Flutuações longas (16)${nome}`, texto: `Há mais de ${limite} agulhas seguidas sem seleção (16) na mesma carreira: o fio fica solto por trás.`, ...onde(soltos) });
       const r2 = new Set();
       for (let y = p.y0; y <= p.y1; y++) valoresDaLinha(doc, p.R, 2, y).forEach((v) => r2.add(v));
       resumos.push({ numero: p.numero, largura: direita >= esquerda ? direita - esquerda + 1 : 0, carreiras: p.y1 - p.y0 + 1, r2: [...r2].sort((a, b) => a - b).join("/") || "—", y0: p.y0 });
@@ -1191,6 +1258,7 @@
       if (dif.length) {
         itens.push({
           nivel: "aviso",
+          regra: "paineis-diferentes",
           titulo: "Os painéis são diferentes",
           texto: `${resumos.map((r) => `Painel ${r.numero}: ${r.largura} agulhas de malha, ${r.carreiras} carreiras, R2 = ${r.r2}`).join(". ")}. Confira se é de propósito (por exemplo, peças de tamanhos diferentes).`,
           carreiras: "",
@@ -1198,7 +1266,7 @@
         });
       }
     }
-    if (!itens.some((i) => i.nivel !== "info")) itens.push({ nivel: "info", titulo: "Nenhum problema encontrado", texto: "As regras de guia-fio, ponto, cancelar malha, largura do guia e flutuação passaram." });
+    if (!itens.some((i) => i.nivel !== "info")) itens.push({ nivel: "info", regra: "nenhum", titulo: "Nenhum problema encontrado", texto: "As regras de guia-fio, ponto, cancelar malha, largura do guia e flutuação passaram." });
     return itens;
   }
 
@@ -1300,10 +1368,10 @@
 
   const api = {
     ESTILOS, calcularModelo, distribuir, resumoEventos, planoForma, pixelsDaForma,
-    BIBLIOTECA, repetirMotivo,
+    trechosDificeis, BIBLIOTECA, repetirMotivo,
     coresDaArea, flutuacoes, guiasIntarsia, gerarListras, gerarLosango,
     paineis, colunaDoValor, valoresDaLinha, faixasDaLinha, pintarValorNaLinha, desenvolvimento, desenharDesenvolvido,
-    trechosDoPainel, areaDeMalha, desenvolverComPacotes, listrasPorCarreira, gerarOnca, quantizarLuminancia,
+    trechosDoPainel, areaDeMalha, desenvolverComPacotes, resumoDoTrecho, valoresNasCarreiras, listrasPorCarreira, gerarOnca, quantizarLuminancia,
     PASSOS_PROCESSAMENTO, MAQUINAS, FINURAS, usoDoProcessamento, faltasDoProcessamento, linhasDoProcessamento,
     TECE, verificarDesenho, intervalos,
     tempoTecimento, tipoDePonto, semAcento, CAMPOS_FICHA, linhasDaFicha, FONTE, textoEmPixels,
