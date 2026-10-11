@@ -920,7 +920,8 @@ function textoDoArquivoAberto() {
   if (!lista.length) return `<strong>No seu arquivo:</strong> ${esc(a.nome)} não tem painéis com as linhas de opção.`;
   const col = Math.max(0.1, decimal(modelo.colunas, 30)), car = Math.max(0.1, decimal(modelo.carreiras, 40));
   const paineis = lista.map((p) => {
-    const m = RM.areaDeMalha(a.doc, p);
+    // Painel ainda sem malha (só 0 e marcas): vale a largura da área de desenho.
+    const m = RM.areaDeMalha(a.doc, p) || { x0: p.x0, x1: p.x1 };
     return { p, agulhas: m.x1 - m.x0 + 1, carreiras: p.y1 - p.y0 + 1 };
   });
   const primeiro = paineis[0];
@@ -1539,13 +1540,6 @@ function abrirGerar() {
     form.largura.value = 48;
     form.altura.value = 40;
   }
-  if (!form.dataset.pronto) {
-    form.corA.value = estado.primaria;
-    form.corB.value = estado.secundaria;
-    form.corTexto.value = estado.primaria;
-    form.corFundo.value = estado.secundaria;
-    form.dataset.pronto = "1";
-  }
   abrirJanela("dlg-gerar");
   desenharGerar();
 }
@@ -1632,9 +1626,13 @@ function imagemDoLogo(form) {
   return { w, h, px, fonte, medias: q.medias };
 }
 
-const RESERVADAS_FIO = new Set([0, 13, 16, 60, 70]); // sem malha, largura do guia, sem seleção e transferência não são cor de fio
+// Sem malha, largura do guia, sem seleção, transferência e o 99 dos arquivos (nada tece) não são cor de fio.
+const RESERVADAS_FIO = new Set([0, 13, 16, 60, 70, 99]);
+// Cor de fio para o Verificar e o Jacquard: nem marca nem código de ponto (1 frente, 2 trás...).
+const ehCorDeFio = (c) => !RESERVADAS_FIO.has(c) && !RM.tipoDePonto(c);
 
-// Para cada fio, a cor da paleta mais parecida com a cor dele na imagem (sem repetir a mesma cor).
+// Para cada fio, a cor da paleta mais parecida com a cor dele na imagem (sem repetir a mesma cor e só entre as
+// cores de fio: o preto da paleta, por exemplo, é o código 1, de ponto).
 function coresDaImagemNosFios(form) {
   const a = abaDat();
   const img = imagemDoLogo(form);
@@ -1645,7 +1643,7 @@ function coresDaImagemNosFios(form) {
     if (!m) return null;
     let melhor = -1, menor = Infinity;
     paleta.forEach((c, i) => {
-      if (usadas.has(i) || RESERVADAS_FIO.has(i)) return;
+      if (usadas.has(i) || !ehCorDeFio(i)) return;
       const dist = (c[0] - m[0]) ** 2 + (c[1] - m[1]) ** 2 + (c[2] - m[2]) ** 2;
       if (dist < menor) [melhor, menor] = [i, dist];
     });
@@ -1714,7 +1712,7 @@ function areaNoPainel(sel, p) {
 function textoListrasR3(a, form) {
   if (!form.listrasR3.checked) return "";
   const listras = lerListras(form.listras.value);
-  if (listras.length && !listras.some((l) => l.guia)) return "Escreva o guia de cada listra como cor:carreiras:guia, por exemplo 1:6:3.";
+  if (listras.length && !listras.some((l) => l.guia)) return "Escreva o guia de cada listra como cor:carreiras:guia, por exemplo 4:6:3.";
   if (!a.selecao) return "Selecione no desenho a área das listras antes de abrir: com a R3, elas entram direto na seleção.";
   const p = painelDaArea(a, a.selecao);
   if (!p || !p.R.colunas[3]) return "A seleção não está num painel com a linha R3.";
@@ -1754,6 +1752,7 @@ function desenharGerar() {
   const cv = $("gerar-previa");
   $("gerar-colar").disabled = !img;
   cv.hidden = !img;
+  $("gerar-aviso-cores").hidden = true;
   if (!img) {
     $("gerar-info").textContent =
       tipo === "listras" ? "Escreva as listras como cor:carreiras, separadas por vírgula." : tipo === "logo" ? "Escreva o texto do logo ou escolha uma imagem." : "Tamanho grande demais.";
@@ -1764,6 +1763,29 @@ function desenharGerar() {
   $("gerar-info").textContent = `${img.w} agulhas × ${img.h} carreiras · cores ${cores.join(", ")}. ${
     comR3 ? "Entra direto na seleção." : "Entra como colagem no canto da seleção (ou no canto visível)."
   }`;
+  const aviso = avisoDasCoresGeradas(cores, comR3);
+  $("gerar-aviso-cores").textContent = aviso;
+  $("gerar-aviso-cores").hidden = !aviso;
+}
+
+// O 0 não tem malha (colado por cima, abre buraco no corpo) e os códigos de ponto não contam como fio no Verificar
+// nem no Jacquard: avisa quando o padrão usa um deles.
+function avisoDasCoresGeradas(cores, direto) {
+  const avisos = [];
+  // Com "Colar sem a cor de fundo" e o fundo 0, o 0 da colagem não apaga o que está embaixo.
+  const zeroPassa = !direto && estado.colarTransparente && estado.fundo === 0;
+  if (cores.includes(0) && !zeroPassa) {
+    avisos.push(`A cor 0 não tem malha: no corpo, ela abre buracos. Troque a cor${direto ? "" : " ou marque “Colar sem a cor de fundo” (com o fundo 0) no painel"}.`);
+  }
+  const dePonto = cores.filter((c) => c !== 0 && !ehCorDeFio(c));
+  if (dePonto.length) {
+    const nome = (c) => (LEGENDA_SIMBOLOS.find(([tipo]) => tipo === RM.tipoDePonto(c)) || [])[2];
+    const nomes = dePonto.map((c) => (nome(c) ? `${c} (${nome(c)})` : String(c)));
+    avisos.push(
+      `${dePonto.length === 1 ? "A cor" : "As cores"} ${RM.listaComE(nomes)} ${dePonto.length === 1 ? "é código de ponto ou marca e não conta" : "são códigos de ponto ou marcas e não contam"} como fio no Verificar e no Jacquard. Para um padrão de cores, use cores de fio, como 4, 5, 6 e 7.`,
+    );
+  }
+  return avisos.join(" ");
 }
 
 // Listras direto na seleção, com o guia de cada listra escrito na R3 do painel, carreira a carreira.
@@ -1772,7 +1794,7 @@ function aplicarListrasComR3(a, form) {
   const sel = a.selecao;
   const listras = lerListras(form.listras.value);
   if (!listras.length) return;
-  if (!listras.some((l) => l.guia)) return avisar("Escreva o guia de cada listra como cor:carreiras:guia (por exemplo 1:6:3).", true);
+  if (!listras.some((l) => l.guia)) return avisar("Escreva o guia de cada listra como cor:carreiras:guia (por exemplo 4:6:3).", true);
   if (!sel) return avisar("Selecione no desenho a área das listras: com a R3, elas entram direto na seleção.", true);
   const p = painelDaArea(a, sel);
   if (!p || !p.R.colunas[3]) return avisar("A seleção precisa estar num painel com a linha R3.", true);
@@ -1847,13 +1869,19 @@ function aplicarListrasComR3(a, form) {
 let jacquard = null;
 const LIMITE_JACQUARD = 300000; // pontos analisados de uma vez
 
-// Cores que são fio no jacquard. Nunca contam o 0, as marcas (13 largura do guia, 16 sem seleção) e a
-// transferência (60/70). Sem seleção também ficam de fora as cores com menos de 5% dos pontos (ourela e marcas)
-// e, no corpo de um painel, os códigos de ponto (uma ribana de 1 e 2 não é jacquard), como no Verificar.
+// Cores que são fio no jacquard. Nunca contam o 0, as marcas (13 largura do guia, 16 sem seleção, 99) e a
+// transferência (60/70), nem a ourela (cores só nas duas agulhas de cada ponta). No corpo de um painel, como no
+// Verificar, também ficam de fora os códigos de ponto (uma ribana de 1 e 2 não é jacquard) e as cores com menos
+// de 1% dos pontos (códigos soltos); numa seleção conta toda cor, mesmo pouca, como os pontos de um motivo.
 const NAO_FIO = RESERVADAS_FIO;
-const REGRA_FIO_VERIFICAR = { minimo: 0.05, semCodigosDePonto: true };
-function coresDeFio(cores, r, { minimo = 0, semCodigosDePonto = false } = {}) {
-  return new Set(cores.filter((c) => !NAO_FIO.has(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor))).map((c) => c.cor));
+const REGRA_FIO_VERIFICAR = { minimo: 0.01, semCodigosDePonto: true };
+function coresDeFio(d, r, cores, { minimo = 0, semCodigosDePonto = false } = {}) {
+  const ourela = RM.coresSoNaOurela(d.pixels, d.largura, r);
+  return new Set(
+    cores
+      .filter((c) => !NAO_FIO.has(c.cor) && !ourela.has(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor)))
+      .map((c) => c.cor),
+  );
 }
 
 // regraDoVerificar: quem vem de um item do Verificar analisa com a mesma regra de fio dele.
@@ -1862,23 +1890,23 @@ function abrirJacquard(regraDoVerificar = null) {
   if (!a) return;
   fixarFlutuante(a);
   let { r, texto } = areaDeAnalise(a, "analisando");
-  // Na seleção também ficam de fora as cores com menos de 5% dos pontos (ourela, marcas), como antes.
-  let regra = regraDoVerificar || { minimo: 0.05 };
+  // Na seleção conta toda cor que não é marca nem ourela.
+  let regra = regraDoVerificar || {};
   if (!a.selecao) {
     // Sem seleção: o corpo do painel que está na tela, com a mesma regra de fio do Verificar.
     const corpo = corpoVisivel(a);
     if (corpo) {
       r = corpo.r;
-      regra = { minimo: 0.05, semCodigosDePonto: true };
-      texto = `Sem seleção: analisando o corpo do painel ${corpo.p.numero} (carreiras ${corpo.trecho.de}–${corpo.trecho.ate}, agulhas ${r.x + 1}–${r.x + r.w}). Contam como fio as cores com pelo menos 5% dos pontos que não são códigos de ponto. Para ver outra parte, selecione-a antes de abrir.`;
-    } else regra = { minimo: 0.05 };
+      regra = REGRA_FIO_VERIFICAR;
+      texto = `Sem seleção: analisando o corpo do painel ${corpo.p.numero} (carreiras ${corpo.trecho.de}–${corpo.trecho.ate}, agulhas ${r.x + 1}–${r.x + r.w}). Contam como fio as cores com pelo menos ${REGRA_FIO_VERIFICAR.minimo * 100}% dos pontos que não são códigos de ponto nem ficam só na ourela. Para ver outra parte, selecione-a antes de abrir.`;
+    }
   }
   if (r.w * r.h > LIMITE_JACQUARD) {
     return avisar(`A área tem ${(r.w * r.h).toLocaleString("pt-BR")} pontos. Selecione o motivo (até ${LIMITE_JACQUARD.toLocaleString("pt-BR")} pontos) e abra de novo.`, true);
   }
   const d = a.doc;
   const cores = RM.coresDaArea(d.pixels, d.largura, r);
-  const fios = coresDeFio(cores, r, regra);
+  const fios = coresDeFio(d, r, cores, regra);
   jacquard = { a, r, cores, fios, automatico: !a.selecao, intarsia: RM.guiasIntarsia(d.pixels, d.largura, r, fios) };
   $("jacquard-area").textContent = texto;
   abrirJanela("dlg-jacquard");
@@ -1907,7 +1935,7 @@ function analisarJacquard() {
   const form = $("dlg-jacquard").querySelector("form");
   const estrutura = form.estrutura.value;
   const escada = inteiro(form.escada.value, 4, 2, 12);
-  const maximo = inteiro(form.maximo.value, 5, 1, 99);
+  const maximo = inteiro(form.maximo.value, 5, 1, 500);
   form.escada.disabled = estrutura !== "escada";
   const fl = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada, fios);
   const longas = fl.lista.filter((f) => f.comprimento > maximo);
@@ -2171,7 +2199,7 @@ function itensDoVerificar(a, maximo) {
 }
 
 // Jacquard e intarsia no corpo de cada painel: fios soltos longos com o avesso escolhido no Jacquard e guia-fios
-// da intarsia. Só contam as cores com pelo menos 5% dos pontos (ourela e marcas ficam de fora).
+// da intarsia. Contam as cores de fio com pelo menos 1% dos pontos (ourela, marcas e códigos de ponto ficam de fora).
 function itensDeCor(a, maximo) {
   const d = a.doc;
   const itens = [];
@@ -2188,7 +2216,7 @@ function itensDeCor(a, maximo) {
     const r = { x: m.x0, y: d.altura - corpo.ate, w: m.x1 - m.x0 + 1, h: corpo.ate - corpo.de + 1 };
     if (r.w * r.h > LIMITE_JACQUARD) continue;
     // Uma ribana (1 e 2) ou a forma (0 em volta) não são jacquard: códigos de ponto e o 0 não contam como fio.
-    const principais = coresDeFio(RM.coresDaArea(d.pixels, d.largura, r), r, REGRA_FIO_VERIFICAR);
+    const principais = coresDeFio(d, r, RM.coresDaArea(d.pixels, d.largura, r), REGRA_FIO_VERIFICAR);
     if (principais.size < 2) continue;
     const nome = ` (painel ${p.numero})`;
     const longas = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada, principais).lista.filter((f) => f.comprimento > maximo);
@@ -2307,6 +2335,8 @@ function abrirFerramentaDoItem(item) {
   } else if (item.regra === "sem-ponto") abrirProcessar(RM.PASSOS_PROCESSAMENTO.findIndex((s) => s.id === "ponto"));
   else if (item.regra === "jacquard" || item.regra === "intarsia") {
     selecionarNoDesenho(a, item.area);
+    // O mesmo limite de fio solto do Verificar, para o Jacquard achar as mesmas flutuações longas.
+    $("dlg-jacquard").querySelector("form").maximo.value = inteiro($("dlg-verificar").querySelector("form").maximo.value, 5, 1, 500);
     abrirJacquard(REGRA_FIO_VERIFICAR);
     if (item.regra === "intarsia" && jacquard) {
       $("dlg-jacquard").querySelector("form").vista.value = "guias";
@@ -3820,7 +3850,7 @@ function guiasDoDesenho(a) {
 const baseDoNome = (nome) => RM.semAcento(trocarExtensao(nome, ""));
 
 // Dois arquivos da mesma pasta: os dois da pasta conectada, ou abertos juntos do computador.
-const daMesmaPasta = (a, x) => (a.origem === "pasta" && x.origem === "pasta") || (a.lote != null && a.lote === x.lote);
+const daMesmaPasta = (a, x) => (a.origem === "pasta" && x.origem === "pasta") || (a.lotes || []).some((l) => (x.lotes || []).includes(l));
 
 // Os .000 e .QFD abertos que andam com o desenho: os de mesmo nome e, se não houver, os da mesma pasta (na
 // pasta da máquina eles costumam ter outro nome, como 00_C_P.000 e 00_M_P.QFD).
@@ -3856,7 +3886,7 @@ function infoDoArquivoDoPrograma(x, lista) {
   if (par) {
     let dif = 0;
     for (let k = 0; k < ab.bytes.length; k++) if (ab.bytes[k] !== par.aberto.bytes[k]) dif++;
-    info += dif ? `; difere de ${par.nome} em ${dif.toLocaleString("pt-BR")} byte${dif === 1 ? "" : "s"}` : `; igual a ${par.nome}`;
+    info += dif ? `; difere de ${rotuloDaAba(par)} em ${dif.toLocaleString("pt-BR")} byte${dif === 1 ? "" : "s"}` : `; igual a ${rotuloDaAba(par)}`;
   }
   return info;
 }
@@ -3867,7 +3897,7 @@ function htmlArquivosDoPrograma(a) {
     return `<p class="suave pequeno">Nenhum .000 ou .QFD aberto com este desenho. Para ver aqui o que já está na pasta da máquina, abra a pasta inteira (ou os arquivos dela juntos).</p>`;
   return `<h3 class="sub">Na pasta hoje</h3><p class="suave pequeno">Arquivos abertos ${como}. O KnitPaint troca estes arquivos quando processa de novo.</p>
     <ul class="arquivos-programa">${lista
-      .map((x) => `<li><span class="etiqueta-arquivo tipo-${x.tipo}">${x.tipo === "programa" ? "PROGRAMA" : "AJUSTES"}</span><span class="mono">${esc(x.nome)}</span><span class="suave pequeno">${esc(infoDoArquivoDoPrograma(x, lista))}</span></li>`)
+      .map((x) => `<li><span class="etiqueta-arquivo tipo-${x.tipo}">${x.tipo === "programa" ? "PROGRAMA" : "AJUSTES"}</span><span class="mono">${esc(rotuloDaAba(x))}</span><span class="suave pequeno">${esc(infoDoArquivoDoPrograma(x, lista))}</span></li>`)
       .join("")}</ul>`;
 }
 
@@ -4017,10 +4047,9 @@ function desenharArquivosFicha() {
   $("ficha-arquivos").innerHTML = estado.abas
     .map((x) => {
       const marcado = x === a || juntos.has(x) || baseDoNome(x.nome) === base;
-      // O desenho vai como está agora: o tamanho é o do arquivo que seria gravado.
-      const bytes = x.tipo === "dat" ? bytesDoDesenho(x).length : x.tamanho;
-      const tamanho = `${bytes.toLocaleString("pt-BR")} bytes`;
-      return `<li><label><input type="checkbox" data-arquivo="${x.id}"${marcado ? " checked" : ""}><span class="nome-arquivo">${esc(x.nome)}${
+      const bytes = x.tipo === "dat" && x.modificado ? tamanhoAoGravar(x) : x.tamanho;
+      const tamanho = bytes === null ? "não deu para gravar" : `${bytes.toLocaleString("pt-BR")} bytes`;
+      return `<li><label><input type="checkbox" data-arquivo="${x.id}"${marcado ? " checked" : ""}><span class="nome-arquivo">${esc(rotuloDaAba(x))}${
         x.modificado ? ' <span class="suave">(alterado)</span>' : ""
       }</span><span class="suave mono">${esc(TIPOS_ARQUIVO[x.tipo] || x.tipo)} · ${tamanho}</span></label></li>`;
     })
@@ -4028,7 +4057,15 @@ function desenharArquivosFicha() {
   atualizarBotoesEnviar();
 }
 
-// Junta os arquivos escolhidos (o desenho como está agora) e, se pedido, a ficha e o resumo do processamento.
+// O desenho alterado vai como está agora: o tamanho é o do arquivo que seria gravado (o .zip confere de novo).
+function tamanhoAoGravar(x) {
+  try {
+    return ShimaDat.gravar(x.doc).length;
+  } catch (erro) {
+    return null;
+  }
+}
+
 // Os arquivos escolhidos para levar à máquina (o desenho como está agora) e, se pedido, a ficha e o resumo do
 // processamento. Devolve [{ nome, bytes }] ou null (com o aviso dado).
 async function arquivosDaFicha() {

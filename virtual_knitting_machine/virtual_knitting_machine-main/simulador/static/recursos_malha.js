@@ -611,6 +611,17 @@
     return [...conta].map(([cor, n]) => ({ cor, n })).sort((a, b) => b.n - a.n || a.cor - b.cor);
   }
 
+  // Cores que só aparecem nas duas agulhas de cada ponta da área: a ourela, não um fio do desenho.
+  function coresSoNaOurela(px, W, ret, largura = 2) {
+    if (ret.w <= largura * 2) return new Set();
+    const dentro = new Set(), borda = new Set();
+    for (let y = ret.y; y < ret.y + ret.h; y++) for (let x = ret.x; x < ret.x + ret.w; x++) {
+      const naBorda = x < ret.x + largura || x >= ret.x + ret.w - largura;
+      (naBorda ? borda : dentro).add(px[y * W + x]);
+    }
+    return new Set([...borda].filter((c) => !dentro.has(c)));
+  }
+
   // Onde o fio de índice i (entre k cores) prende atrás, em cada estrutura de avesso do jacquard.
   function prende(estrutura, x, y, i, k, escada) {
     if (estrutura === "tubular") return true;
@@ -1661,12 +1672,12 @@
   const api = {
     ESTILOS, calcularModelo, distribuir, distribuirReto, resumoEventos, planoForma, pixelsDaForma,
     trechosDificeis, BIBLIOTECA, repetirMotivo,
-    coresDaArea, flutuacoes, guiasIntarsia, gerarListras, gerarLosango,
+    coresDaArea, coresSoNaOurela, flutuacoes, guiasIntarsia, gerarListras, gerarLosango,
     paineis, colunaDoValor, valoresDaLinha, faixasDaLinha, pintarValorNaLinha, desenvolvimento, desenharDesenvolvido,
     trechosDoPainel, areaDeMalha, desenvolverComPacotes, resumoDoTrecho, valoresNasCarreiras, listrasPorCarreira, gerarOnca, quantizarLuminancia,
     PASSOS_PROCESSAMENTO, MAQUINAS, FINURAS, maquinaDaPasta, usoDoProcessamento, faltasDoProcessamento, linhasDoProcessamento,
     TECE, verificarDesenho, intervalos,
-    tempoTecimento, tipoDePonto, semAcento, CAMPOS_FICHA, linhasDaFicha, FONTE, textoEmPixels,
+    tempoTecimento, tipoDePonto, semAcento, listaComE, CAMPOS_FICHA, linhasDaFicha, FONTE, textoEmPixels,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.RecursosMalha = api;

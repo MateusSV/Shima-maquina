@@ -75,10 +75,10 @@
   function lerCabecalhoPrograma(bytes) {
     const campos = [];
     const fimTexto = Math.min(bytes.length, 0x200);
-    const bruto = texto(bytes, 0, fimTexto);
-    const fim = bruto.indexOf("END");
-    const linhas = bruto.slice(0, fim < 0 ? 0 : fim).split("\r");
-    for (const linha of linhas) {
+    // O cabeçalho vai até a linha END (um nome como F=LEGEND.000 também tem "END"); sem ela, não há campos.
+    const linhas = texto(bytes, 0, fimTexto).split(/\r\n?|\n/);
+    const fim = linhas.findIndex((linha) => linha.trim() === "END");
+    for (const linha of linhas.slice(0, Math.max(0, fim))) {
       const igual = linha.indexOf("=");
       if (igual > 0) campos.push({ chave: linha.slice(0, igual), valor: linha.slice(igual + 1).replace(/\t/g, "") });
     }

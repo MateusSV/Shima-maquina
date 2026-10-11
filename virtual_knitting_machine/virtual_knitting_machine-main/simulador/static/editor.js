@@ -307,16 +307,32 @@ function abaDat() {
   return a && a.tipo === "dat" ? a : null;
 }
 
+// Tamanho e CRC dos bytes: reconhece o mesmo arquivo aberto de novo.
+const impressaoDosBytes = (bytes) => `${bytes.byteLength}:${crc32(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)).toString(16)}`;
+
+// O nome da aba; com outra aberta de mesmo nome, junto com a pasta (ou um número) para distinguir as duas.
+function rotuloDaAba(a) {
+  const iguais = estado.abas.filter((x) => x.nome === a.nome);
+  if (iguais.length < 2) return a.nome;
+  const pastaUnica = a.pastaNome && iguais.filter((x) => x.pastaNome === a.pastaNome).length === 1;
+  return `${a.nome} (${pastaUnica ? a.pastaNome : iguais.indexOf(a) + 1})`;
+}
+
 // extra: { lote, pastaNome } para saber que arquivos vieram da mesma pasta.
 function abrirBuffer(nome, buffer, origem, extra = {}) {
   if (!buffer.byteLength) {
     avisar(`${nome} está vazio (0 bytes).`, true);
     return null;
   }
-  const existente = estado.abas.find((a) => a.nome === nome && a.origem === origem);
+  // O mesmo arquivo aberto de novo (mesmo nome e mesmo conteúdo) volta para a aba dele. Um de mesmo nome e
+  // outro conteúdo, como o 00_C_P.000 de outra pasta, abre numa aba própria.
+  const { lote, ...resto } = extra;
+  const impressao = impressaoDosBytes(buffer);
+  const existente = estado.abas.find((a) => a.nome === nome && a.origem === origem && a.impressao === impressao);
   if (existente) {
-    // Aberta de novo junto com a pasta: passa a ser desta pasta (para achar os .000 e .QFD dela).
-    Object.assign(existente, extra);
+    // Aberto de novo junto com uma pasta: passa a andar também com os .000 e .QFD dela.
+    if (lote != null && !existente.lotes.includes(lote)) existente.lotes.push(lote);
+    if (resto.pastaNome && !existente.pastaNome) existente.pastaNome = resto.pastaNome;
     mostrarAba(existente);
     return existente;
   }
@@ -331,7 +347,10 @@ function abrirBuffer(nome, buffer, origem, extra = {}) {
     avisar(`Não foi possível abrir ${nome}: ${erro.message}`, true);
     return null;
   }
-  const aba = { id: ++contadorAbas, nome, origem, tipo: aberto.tipo, aberto, modificado: false, tamanho: buffer.byteLength, ...extra };
+  const aba = {
+    id: ++contadorAbas, nome, origem, tipo: aberto.tipo, aberto, modificado: false, tamanho: buffer.byteLength,
+    impressao, lotes: lote != null ? [lote] : [], ...resto,
+  };
   if (aba.tipo === "dat") {
     Object.assign(aba, { doc: aberto.doc, hist: [], refazer: [], selecao: null, flutuante: null, zoom: null, rolagem: null });
     aba.original = retrato(aba); // para "Voltar ao original"
@@ -368,6 +387,11 @@ async function fecharAba(id) {
   const aba = estado.abas.find((a) => a.id === id);
   if (!aba) return;
   if (aba.modificado && !(await perguntar(`${aba.nome} tem alterações não salvas. Fechar mesmo assim?`, "Fechar sem salvar"))) return;
+  tirarAba(aba);
+}
+
+function tirarAba(aba) {
+  const id = aba.id;
   if (aba.tipo === "imagem") {
     if (estado.imagemImportar && estado.imagemImportar.url === aba.aberto.url) estado.imagemImportar = null;
     URL.revokeObjectURL(aba.aberto.url);
@@ -389,9 +413,9 @@ function desenharAbas() {
       (a) => `<div class="aba${a.id === estado.atual ? " ativa" : ""}">
         <button type="button" class="aba-nome" data-aba="${a.id}" aria-current="${a.id === estado.atual}">
           <span class="tipo tipo-${a.tipo}">${TIPOS[a.tipo]}</span>
-          <span class="mono">${esc(a.nome)}</span>${a.modificado ? '<span class="modificado" title="Não salvo">●</span>' : ""}
+          <span class="mono">${esc(rotuloDaAba(a))}</span>${a.modificado ? '<span class="modificado" title="Não salvo">●</span>' : ""}
         </button>
-        <button type="button" class="aba-fechar" data-fechar="${a.id}" aria-label="Fechar ${esc(a.nome)}">×</button>
+        <button type="button" class="aba-fechar" data-fechar="${a.id}" aria-label="Fechar ${esc(rotuloDaAba(a))}">×</button>
       </div>`,
     )
     .join("");
@@ -1274,7 +1298,11 @@ tela.addEventListener("pointermove", (e) => {
       renderizar();
     } else if (gesto.tipo === "selecionar") {
       const q = prender(p, d);
-      if (Math.hypot(e.clientX - gesto.telaX, e.clientY - gesto.telaY) >= 6) gesto.moveu = true;
+      // Arrastou quando saiu do ponto de partida e andou mais que um tremido de clique (o dedo e a caneta tremem
+      // mais que o mouse). Com zoom baixo, poucos pixels já são várias agulhas: o limite não pode ser maior.
+      const tremido = e.pointerType === "mouse" ? 4 : 8;
+      const saiu = q.x !== gesto.inicio.x || q.y !== gesto.inicio.y;
+      if (saiu && Math.hypot(e.clientX - gesto.telaX, e.clientY - gesto.telaY) >= tremido) gesto.moveu = true;
       a.selecao = retanguloEntre(gesto.inicio, q);
       posicionarCaixas();
     } else if (gesto.tipo === "mover" && a.flutuante) {
@@ -1817,10 +1845,14 @@ async function salvarNaPasta(a, nome) {
       dados = await resposta.json();
       if (!resposta.ok) throw new Error(dados.erro || resposta.status);
     }
+    // A aba que estava aberta com este arquivo da pasta ficou velha: sai, para não gravar por cima dele depois.
+    const velha = outraAbaDaPasta(a, nome);
+    if (velha) tirarAba(velha);
     a.nome = nome;
     a.origem = "pasta";
     a.modificado = false;
     a.tamanho = bytes.length;
+    a.impressao = impressaoDosBytes(bytes);
     desenharAbas();
     await carregarPasta();
     atualizarPainel();
@@ -1841,17 +1873,29 @@ async function baixarDat(a, nome = a.nome) {
   if (!entregue) return;
   if (a.origem !== "pasta") {
     a.modificado = false;
+    a.tamanho = bytes.length;
+    // Aberto de novo depois de baixado, o arquivo volta para esta aba.
+    if (entregue === nome) a.impressao = impressaoDosBytes(bytes);
     desenharAbas();
   }
   if (entregue === nome) avisar(`${nome} foi baixado (normalmente vai para a pasta Downloads). Copie-o para a pasta dos desenhos.`);
   else avisar(`${entregue} foi baixado. Dentro dele está ${nome}: extraia e copie para a pasta dos desenhos.`);
 }
 
+// A outra aba aberta com este arquivo da pasta (gravar com o nome dele substitui o arquivo dela).
+const outraAbaDaPasta = (a, nome) => estado.abas.find((x) => x !== a && x.origem === "pasta" && x.nome === nome) || null;
+
 // Só não pergunta quando o arquivo da pasta é o mesmo que foi aberto dela.
 async function podeGravarNaPasta(a, nome) {
+  if (a.origem === "pasta" && a.nome === nome) return true;
   const existe = estado.arquivosPasta.some((x) => x.nome === nome);
-  if (!existe || (a.origem === "pasta" && a.nome === nome)) return true;
-  return perguntar(`${nome} já existe na pasta. Substituir pelo desenho desta aba? Se ainda não houver ${nome}.bak, o arquivo atual fica guardado nele.`, "Substituir");
+  const outra = outraAbaDaPasta(a, nome);
+  if (!existe && !outra) return true;
+  const fecha = outra ? ` A aba aberta de ${nome} será fechada${outra.modificado ? ", sem salvar as alterações dela" : ""}.` : "";
+  const pergunta = existe
+    ? `${nome} já existe na pasta. Substituir pelo desenho desta aba? Se ainda não houver ${nome}.bak, o arquivo atual fica guardado nele.`
+    : `${nome} está aberto em outra aba. Gravar o desenho desta aba com esse nome?`;
+  return perguntar(pergunta + fecha, "Substituir");
 }
 
 async function salvar() {
@@ -2086,10 +2130,11 @@ function desenharOpcoes() {
     return;
   }
   $("titulo-opcoes").textContent = `carreira ${d.altura - y}`;
+  const paineis = RM.paineis(blocos); // numerados como no resto do editor (um bloco sem par também é painel)
   el.innerHTML = naFaixa
     .map((b) => {
       const valores = ShimaDat.valoresDasLinhas(d, b, y);
-      const painel = Math.floor(blocos.indexOf(b) / 2) + 1;
+      const painel = paineis.find((p) => p.L === b || p.R === b).numero;
       const linhas = valores.length
         ? valores
             .map(
@@ -2434,8 +2479,11 @@ document.addEventListener("keydown", (e) => {
   else if (ctrl && k === "a") ACOES["selecionar-tudo"](a);
   else if (ctrl) return;
   else if (k === "delete" || k === "backspace") ACOES.apagar(a);
-  else if (k === "enter") fixarFlutuante(a);
-  else if (k === "escape") {
+  else if (k === "enter") {
+    // Sem colagem para fixar, o Enter fica com o botão, o link ou o resumo que está com o foco.
+    if (!a.flutuante) return;
+    fixarFlutuante(a);
+  } else if (k === "escape") {
     if (a.flutuante) {
       desfazer();
       posicionarCaixas();

@@ -510,8 +510,8 @@
           <label class="campo">Carreiras <input type="number" name="altura" min="1" max="8000"></label>
         </div>
         <div class="campos-gerar" data-para="listras">
-          <label class="campo">Listras de baixo para cima, como cor:carreiras ou cor:carreiras:guia <input type="text" name="listras" value="1:6, 2:2, 3:4, 2:2" autocomplete="off"></label>
-          <p class="suave pequeno">Exemplo: 1:6, 2:2 faz 6 carreiras da cor 1 e 2 da cor 2, repetindo até a altura. Com 1:6:3, a listra usa o guia-fio 3.</p>
+          <label class="campo">Listras de baixo para cima, como cor:carreiras ou cor:carreiras:guia <input type="text" name="listras" value="4:6, 5:2, 6:4, 5:2" autocomplete="off"></label>
+          <p class="suave pequeno">Exemplo: 4:6, 5:2 faz 6 carreiras da cor 4 e 2 da cor 5, repetindo até a altura. Com 4:6:3, a listra usa o guia-fio 3.</p>
           <label class="campo-check"><input type="checkbox" name="listrasR3"> Escrever o guia-fio de cada listra na R3</label>
           <p class="suave pequeno" id="gerar-listras-r3"></p>
         </div>
@@ -521,8 +521,8 @@
             <label class="campo">Altura do losango <input type="number" name="dh" min="2" max="400" value="30"></label>
           </div>
           <div class="linha-campos">
-            <label class="campo">Cor do losango <input type="number" name="corA" min="0" max="255" value="1"></label>
-            <label class="campo">Cor de fundo <input type="number" name="corB" min="0" max="255" value="2"></label>
+            <label class="campo">Cor do losango <input type="number" name="corA" min="0" max="255" value="5"></label>
+            <label class="campo">Cor de fundo <input type="number" name="corB" min="0" max="255" value="4"></label>
             <label class="campo">Cor das linhas <input type="number" name="corC" min="0" max="255" placeholder="sem linhas"></label>
           </div>
         </div>
@@ -532,9 +532,9 @@
             <label class="campo">Altura do módulo <input type="number" name="oh" min="15" max="240" value="60"></label>
           </div>
           <div class="linha-campos">
-            <label class="campo">Cor do fundo <input type="number" name="oncaA" min="0" max="255" value="1"></label>
-            <label class="campo">Cor da roseta <input type="number" name="oncaB" min="0" max="255" value="2"></label>
-            <label class="campo">Cor do centro <input type="number" name="oncaC" min="0" max="255" value="3"></label>
+            <label class="campo">Cor do fundo <input type="number" name="oncaA" min="0" max="255" value="4"></label>
+            <label class="campo">Cor da roseta <input type="number" name="oncaB" min="0" max="255" value="5"></label>
+            <label class="campo">Cor do centro <input type="number" name="oncaC" min="0" max="255" value="6"></label>
           </div>
           <button type="button" class="botao" id="gerar-sortear">Sortear outras rosetas</button>
           <p class="suave pequeno">O módulo se repete sem emenda até encher a largura e a altura.</p>
@@ -548,10 +548,10 @@
             <label class="campo">Fios <select name="logoK"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
           </div>
           <div class="linha-campos">
-            <label class="campo" data-fio="0"><span>Fio A (fundo) <span class="amostra" data-media="0" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC0" min="0" max="255" value="0"></label>
-            <label class="campo" data-fio="1"><span>Fio B <span class="amostra" data-media="1" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC1" min="0" max="255" value="1"></label>
-            <label class="campo" data-fio="2"><span>Fio C <span class="amostra" data-media="2" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC2" min="0" max="255" value="2"></label>
-            <label class="campo" data-fio="3"><span>Fio D <span class="amostra" data-media="3" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC3" min="0" max="255" value="3"></label>
+            <label class="campo" data-fio="0"><span>Fio A (fundo) <span class="amostra" data-media="0" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC0" min="0" max="255" value="4"></label>
+            <label class="campo" data-fio="1"><span>Fio B <span class="amostra" data-media="1" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC1" min="0" max="255" value="5"></label>
+            <label class="campo" data-fio="2"><span>Fio C <span class="amostra" data-media="2" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC2" min="0" max="255" value="6"></label>
+            <label class="campo" data-fio="3"><span>Fio D <span class="amostra" data-media="3" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC3" min="0" max="255" value="7"></label>
           </div>
           <button type="button" class="botao" id="gerar-logo-cores" title="Escolhe para cada fio a cor da paleta mais parecida com a cor dele na imagem">Usar as cores da imagem</button>
           <p class="suave pequeno">A altura sai da proporção da imagem e da densidade da amostra no Modelo, para o logo não ficar achatado na malha.</p>
@@ -559,8 +559,8 @@
         <div class="campos-gerar" data-para="texto">
           <label class="campo">Texto (uma linha por linha) <textarea name="texto" rows="3">ONCA</textarea></label>
           <div class="linha-campos">
-            <label class="campo">Cor do texto <input type="number" name="corTexto" min="0" max="255" value="1"></label>
-            <label class="campo">Cor de fundo <input type="number" name="corFundo" min="0" max="255" value="0"></label>
+            <label class="campo">Cor do texto <input type="number" name="corTexto" min="0" max="255" value="5"></label>
+            <label class="campo">Cor de fundo <input type="number" name="corFundo" min="0" max="255" value="4"></label>
             <label class="campo">Tamanho <select name="escala"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
           </div>
           <p class="suave pequeno">Letras de 5 × 7 pontos, sem acentos: A–Z, 0–9 e = : . , - / ( ) + % * # ? _</p>
@@ -569,6 +569,7 @@
       <div class="coluna">
         <div class="quadro"><canvas id="gerar-previa" role="img" aria-label="Prévia do padrão"></canvas></div>
         <p class="suave pequeno" id="gerar-info"></p>
+        <p class="pequeno alerta" id="gerar-aviso-cores" hidden></p>
       </div>
     </div>
     <div class="botoes-dialogo">
@@ -595,7 +596,7 @@
             </select>
           </label>
           <label class="campo">N da escada <input type="number" name="escada" min="2" max="12" value="4"></label>
-          <label class="campo">Fio solto máximo <input type="number" name="maximo" min="1" max="99" value="5"></label>
+          <label class="campo">Fio solto máximo <input type="number" name="maximo" min="1" max="500" value="5"></label>
         </div>
         <div id="jacquard-resultado"></div>
         <h3 class="sub">Intarsia: guia-fios</h3>

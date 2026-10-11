@@ -88,6 +88,18 @@ test("abre o programa .000: cabeçalho, seções e linhas", semPasta, () => {
   for (const linha of compactadas[1].linhas) assert.deepEqual(linha.map((s) => s[0]), [0x81, 0x82, 0x83]);
 });
 
+test("cabeçalho do .000 vai até a linha END, mesmo com END no nome do arquivo", () => {
+  const bytesDe = (texto) => {
+    const b = new Uint8Array(0x200);
+    for (let j = 0; j < texto.length; j++) b[j] = texto.charCodeAt(j);
+    return b.buffer;
+  };
+  const p = ShimaArquivos.lerPrograma(bytesDe("START\rF=LEGEND.000\t\rS=*\t\rI=0\t\rEND\r\r"));
+  assert.deepEqual(p.campos.map((c) => `${c.chave}=${c.valor}`), ["F=LEGEND.000", "S=*", "I=0"]);
+  // Sem a linha END não há cabeçalho.
+  assert.deepEqual(ShimaArquivos.lerPrograma(bytesDe("START\rF=X.000\t\r")).campos, []);
+});
+
 test("abre os ajustes .QFD: registros encadeados até o fim", semPasta, () => {
   const q = ShimaArquivos.abrir("00_C_P.QFD", ler("00_C_P.QFD"));
   assert.match(q.titulo, /AUTOMATIC SETTINGS/);
@@ -211,6 +223,16 @@ test("jacquard: fios soltos no avesso conforme a estrutura", () => {
   assert.ok(Recursos.flutuacoes(linha, 10, r, "birdseye").lista.every((f) => f.comprimento <= 1));
   assert.ok(Recursos.flutuacoes(linha, 10, r, "escada", 3).lista.every((f) => f.comprimento <= 2));
   assert.deepEqual(Recursos.flutuacoes(linha, 10, r, "tubular").lista, []);
+});
+
+test("jacquard: a ourela, só nas duas agulhas de cada ponta, não é fio", () => {
+  // 2 na ponta esquerda e 16 na direita; o desenho de 4 e 5 também chega às pontas.
+  const px = Uint8Array.from([
+    2, 4, 5, 4, 5, 16,
+    2, 5, 4, 5, 4, 5,
+  ]);
+  assert.deepEqual([...Recursos.coresSoNaOurela(px, 6, { x: 0, y: 0, w: 6, h: 2 })].sort((a, b) => a - b), [2, 16]);
+  assert.deepEqual([...Recursos.coresSoNaOurela(px, 6, { x: 0, y: 0, w: 4, h: 2 })], []); // estreita demais
 });
 
 test("intarsia: um guia-fio por trecho de cor, reaproveitado quando a área acaba", () => {
