@@ -130,6 +130,7 @@
         <canvas class="simbolos" id="simbolos" hidden></canvas>
         <div class="caixa-selecao" id="caixa-selecao" hidden></div>
         <div class="caixa-flutuante" id="caixa-flutuante" hidden></div>
+        <div class="contorno-linha" id="contorno-linha" hidden></div>
       </div>
     </div>
 
@@ -277,6 +278,7 @@
       <button type="button" class="botao" data-acao="substituir">Substituir cor…</button>
       <button type="button" class="botao" data-acao="importar">Importar imagem…</button>
       <button type="button" class="botao" data-acao="redimensionar">Redimensionar…</button>
+      <button type="button" class="botao" data-acao="voltar-original" title="Volta o desenho a como ele foi aberto (dá para desfazer com Ctrl+Z)">Voltar ao original</button>
     </div>
     <dl class="info" id="info-dat"></dl>
   </section>
@@ -396,6 +398,7 @@
           <label class="campo">Máquina <select name="maquina"></select></label>
           <label class="campo">Finura <select name="finura"></select></label>
         </div>
+        <p class="suave pequeno" id="modelo-passo"></p>
         <p class="suave pequeno">Meça a amostra lavada e passada, na finura e no fio do modelo.</p>
         <h3 class="sub">Medidas em cm</h3>
         <div class="medidas" id="modelo-medidas"></div>
@@ -408,6 +411,7 @@
           <div id="modelo-esquema"></div>
           <figcaption class="suave pequeno" id="modelo-esquema-legenda"></figcaption>
         </figure>
+        <p class="nota-arquivo" id="modelo-arquivo" hidden></p>
         <p class="suave pequeno">Conta: cm × colunas ÷ 10 = agulhas, cm × carreiras ÷ 10 = carreiras. Lave e passe a amostra antes de medir a densidade.</p>
       </div>
     </div>
@@ -421,6 +425,11 @@
     <div class="colunas-dialogo">
       <div class="coluna">
         <label class="campo">Peça <select name="peca"></select></label>
+        <h3 class="sub">Ajuste em agulhas e carreiras</h3>
+        <p class="suave pequeno" id="forma-origem"></p>
+        <div class="campos-forma" id="forma-ajustes"></div>
+        <button type="button" class="botao pequeno" id="forma-voltar" hidden>Voltar aos números do Modelo</button>
+        <h3 class="sub">Como diminuir</h3>
         <div class="linha-campos">
           <label class="campo">Agulhas por diminuição
             <select name="porVez"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
@@ -443,7 +452,17 @@
       </div>
       <div class="coluna">
         <p id="forma-resumo"></p>
+        <div class="controles">
+          <div class="chips" id="forma-vista" role="group" aria-label="Proporção da grade">
+            <button type="button" class="chip" data-vista="real" aria-pressed="true">Proporção da malha</button>
+            <button type="button" class="chip" data-vista="grade" aria-pressed="false">Grade quadrada</button>
+          </div>
+          <button type="button" class="botao" data-zoom-forma="-1" aria-label="Pontos menores na grade">−</button>
+          <span class="mono pequeno" id="forma-zoom"></span>
+          <button type="button" class="botao" data-zoom-forma="1" aria-label="Pontos maiores na grade">+</button>
+        </div>
         <div class="quadro"><canvas id="forma-previa" role="img" aria-label="Forma da peça"></canvas></div>
+        <p class="mono pequeno" id="forma-status" aria-live="polite">Passe o mouse na grade.</p>
         <ul class="legenda" id="forma-legenda"></ul>
       </div>
     </div>
@@ -508,15 +527,16 @@
           <label class="campo">Ou uma imagem (PNG ou JPG) <input type="file" name="logoImagem" accept="image/*"></label>
           <p class="pequeno mono" id="gerar-logo-origem"></p>
           <div class="linha-campos">
-            <label class="campo">Largura (agulhas) <input type="number" name="logoW" min="8" max="2000" value="60"></label>
+            <label class="campo">Largura (cm) <input type="number" name="logoCm" min="1" max="300" step="0.5" value="20"></label>
             <label class="campo">Fios <select name="logoK"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
           </div>
           <div class="linha-campos">
-            <label class="campo" data-fio="0">Fio A (fundo) <input type="number" name="logoC0" min="0" max="255" value="0"></label>
-            <label class="campo" data-fio="1">Fio B <input type="number" name="logoC1" min="0" max="255" value="1"></label>
-            <label class="campo" data-fio="2">Fio C <input type="number" name="logoC2" min="0" max="255" value="2"></label>
-            <label class="campo" data-fio="3">Fio D <input type="number" name="logoC3" min="0" max="255" value="3"></label>
+            <label class="campo" data-fio="0"><span>Fio A (fundo) <span class="amostra" data-media="0" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC0" min="0" max="255" value="0"></label>
+            <label class="campo" data-fio="1"><span>Fio B <span class="amostra" data-media="1" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC1" min="0" max="255" value="1"></label>
+            <label class="campo" data-fio="2"><span>Fio C <span class="amostra" data-media="2" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC2" min="0" max="255" value="2"></label>
+            <label class="campo" data-fio="3"><span>Fio D <span class="amostra" data-media="3" title="Cor deste fio na imagem"></span></span> <input type="number" name="logoC3" min="0" max="255" value="3"></label>
           </div>
+          <button type="button" class="botao" id="gerar-logo-cores" title="Escolhe para cada fio a cor da paleta mais parecida com a cor dele na imagem">Usar as cores da imagem</button>
           <p class="suave pequeno">A altura sai da proporção da imagem e da densidade da amostra no Modelo, para o logo não ficar achatado na malha.</p>
         </div>
         <div class="campos-gerar" data-para="texto">
@@ -575,6 +595,7 @@
           </select>
         </label>
         <div class="quadro"><canvas id="jacquard-mapa" role="img" aria-label="Mapa da área analisada"></canvas></div>
+        <p class="mono pequeno" id="jacquard-status" aria-live="polite">Passe o mouse no mapa.</p>
         <p class="suave pequeno" id="jacquard-legenda"></p>
       </div>
     </div>
@@ -623,7 +644,8 @@
     <div class="colunas-dialogo">
       <div class="coluna">
         <label class="campo campo-curto">Painel <select name="painel"></select></label>
-        <ul class="legenda" id="desenvolver-trechos" aria-label="Trechos do painel"></ul>
+        <div class="lista-trechos" id="desenvolver-trechos" role="group" aria-label="Trechos do painel: clique para destacar na prévia"></div>
+        <button type="button" class="botao pequeno" id="desenvolver-ver" hidden>Selecionar o trecho no desenho</button>
         <div class="linha-campos">
           <label class="campo">Início
             <select name="inicio"><option value="arquivo">como no arquivo</option><option value="desperdicio">com fio de desperdício antes</option></select>

@@ -154,6 +154,7 @@ function criarDesenhoNovo(nome, img, ref = referenciaParaNovo()) {
     id: ++contadorAbas, nome: final, origem: "novo", tipo: "dat", aberto: { tipo: "dat", doc }, modificado: true, tamanho: 0,
     doc, hist: [], refazer: [], selecao: null, flutuante: null, zoom: null, rolagem: null,
   };
+  aba.original = retrato(aba);
   estado.abas.push(aba);
   mostrarAba(aba);
   return aba;
@@ -440,22 +441,103 @@ function carimbarMotivo(d, p, m) {
   }
 }
 
+// Repete o motivo na seleção ou, sem seleção, no corpo do painel que está na janela (só nas agulhas que tecem).
 function repetirMotivoNaSelecao(a) {
-  fixarFlutuante(a);
-  if (!exigirSelecao(a)) return;
+  fixarFlutuante(a); // uma colagem solta vira a seleção
   const m = estado.motivo;
   if (!m) return avisar("Escolha um motivo na Biblioteca de pontos.");
+  let area = a.selecao, onde = "na seleção";
+  if (!area) {
+    const corpo = corpoVisivel(a);
+    if (!corpo) return avisar("Selecione onde repetir: este desenho não tem um corpo reconhecido pelas linhas de opção (R5 e R6).", true);
+    area = corpo.r;
+    onde = `no corpo do painel ${corpo.p.numero} (carreiras ${corpo.trecho.de}–${corpo.trecho.ate}, agulhas ${area.x + 1}–${area.x + area.w})`;
+  }
   const degraus = $("tipo-repeticao").value === "degraus";
   const deslocamento = degraus ? inteiro($("deslocamento-repeticao").value, 1, -99, 99) : 0;
+  const d = a.doc;
+  const antes = d.pixels.slice();
+  const blocos = blocosDeOpcao(a); // antes de pintar: depois o motivo pode ter apagado as linhas
   salvarHistorico(a);
-  RM.repetirMotivo(a.doc.pixels, a.doc.largura, a.selecao, m, deslocamento);
+  RM.repetirMotivo(d.pixels, d.largura, area, m, deslocamento);
+  // No corpo, o que não tece (fora da forma, sem seleção) fica como estava; e o motivo nunca entra nas colunas
+  // das linhas de opção.
+  if (!a.selecao) {
+    for (let y = area.y; y < area.y + area.h; y++) {
+      for (let x = area.x; x < area.x + area.w; x++) if (!RM.TECE.has(antes[y * d.largura + x])) d.pixels[y * d.largura + x] = antes[y * d.largura + x];
+    }
+  }
+  // As colunas das linhas de opção ficam inteiras como estavam (o editor acha as linhas pela cor de cada coluna).
+  for (const b of blocos) {
+    for (let y = 0; y < d.altura; y++) d.pixels.set(antes.subarray(y * d.largura + b.xMin, y * d.largura + b.xMax + 1), y * d.largura + b.xMin);
+  }
+  a.opcoes = null;
   renderizar();
   atualizarPainel();
   const passo = Math.abs(deslocamento) === 1 ? "agulha" : "agulhas";
-  avisar(`${m.nome} repetido na seleção${degraus ? `, andando ${deslocamento} ${passo} a cada fileira` : ""}.`);
+  avisar(`${m.nome} repetido ${onde}${degraus ? `, andando ${deslocamento} ${passo} a cada fileira` : ""}.`);
+}
+
+// ------------------------------------------------------------------ trechos do desenho
+
+const trechosPorBlocos = new WeakMap(); // blocos de linhas de opção → painéis com os trechos de cada um
+
+// Painéis com linhas de opção e os trechos de cada um (início, barra, corpo...), refeitos quando o desenho muda.
+function paineisComTrechos(a) {
+  const blocos = blocosDeOpcao(a);
+  let lista = trechosPorBlocos.get(blocos);
+  if (!lista) {
+    lista = RM.paineis(blocos)
+      .filter((p) => p.R)
+      .map((p) => ({ p, trechos: RM.trechosDoPainel(a.doc, p) }));
+    trechosPorBlocos.set(blocos, lista);
+  }
+  return lista;
+}
+
+// Trecho do ponto x, y (para a barra de status): "Corpo do painel 1".
+function trechoNoPonto(a, x, y) {
+  const c = a.doc.altura - y;
+  for (const { p, trechos } of paineisComTrechos(a)) {
+    if (x < (p.L || p.R).xMin || x > p.R.xMax || y < p.y0 || y > p.y1) continue;
+    const t = trechos.find((q) => c >= q.de && c <= q.ate);
+    return t ? `${t.nome} do painel ${p.numero}` : "";
+  }
+  return "";
+}
+
+// Corpo do painel que está no meio da janela (ou o mais perto dele): agulhas que tecem × carreiras do corpo.
+function corpoVisivel(a) {
+  const lista = paineisComTrechos(a).filter(({ p, trechos }) => RM.areaDeMalha(a.doc, p) && trechos.some((t) => t.id === "corpo"));
+  if (!lista.length) return null;
+  const j = $("janela"), folha = $("folha");
+  const v0 = (j.scrollLeft - folha.offsetLeft) / a.zoom, v1 = v0 + j.clientWidth / a.zoom;
+  const visivel = ({ p }) => Math.max(0, Math.min(v1, p.x1 + 1) - Math.max(v0, p.x0));
+  const { p, trechos } = lista.reduce((melhor, item) => (visivel(item) > visivel(melhor) ? item : melhor));
+  const trecho = trechos.find((t) => t.id === "corpo");
+  const m = RM.areaDeMalha(a.doc, p);
+  const H = a.doc.altura;
+  return { p, trecho, r: { x: m.x0, y: H - trecho.ate, w: m.x1 - m.x0 + 1, h: trecho.ate - trecho.de + 1 } };
 }
 
 // ------------------------------------------------------------------ uma linha de opção
+
+// Contorno da linha escolhida no desenho, depois que ela foi escolhida (não aparece sozinho ao abrir).
+function contornoDaLinha(a) {
+  if (!a.linhaMarcada) return null;
+  const atual = linhaAtual(a);
+  const cols = atual && atual.bloco && atual.bloco.colunas[atual.k];
+  if (!cols) return null;
+  const b = atual.bloco;
+  return { x: Math.min(...cols), y: b.carreiraInicio, w: Math.abs(cols[1] - cols[0]) + 1, h: b.carreiraFim - b.carreiraInicio + 1 };
+}
+
+// Escolha feita por quem usa: a linha ganha o contorno no desenho.
+function marcarLinha(a) {
+  a.linhaMarcada = true;
+  atualizarLinhaEscolhida(a);
+  posicionarCaixas();
+}
 
 function linhaAtual(a) {
   const lista = RM.paineis(blocosDeOpcao(a));
@@ -573,7 +655,7 @@ function escolherLinhaDeOpcao(a, linha) {
   const i = lista.findIndex((p) => p.L === linha.bloco || p.R === linha.bloco);
   if (i < 0) return;
   a.linhaOpcao = { painel: i, linha: `${linha.lado}${linha.numero}` };
-  atualizarLinhaEscolhida(a);
+  marcarLinha(a);
   $("uma-linha").scrollIntoView({ block: "nearest" });
 }
 
@@ -581,14 +663,14 @@ $("opcao-painel").addEventListener("change", (e) => {
   const a = abaDat();
   if (!a) return;
   a.linhaOpcao = { ...(a.linhaOpcao || { linha: "R3" }), painel: Number(e.target.value) };
-  atualizarLinhaEscolhida(a);
+  marcarLinha(a);
 });
 
 $("opcao-linha").addEventListener("change", (e) => {
   const a = abaDat();
   if (!a) return;
   a.linhaOpcao = { ...(a.linhaOpcao || { painel: 0 }), linha: e.target.value };
-  atualizarLinhaEscolhida(a);
+  marcarLinha(a);
 });
 
 $("opcao-todas").addEventListener("click", (e) => {
@@ -596,7 +678,17 @@ $("opcao-todas").addEventListener("click", (e) => {
   const a = abaDat();
   if (!b || b.disabled || !a) return;
   a.linhaOpcao = { ...(a.linhaOpcao || { painel: 0 }), linha: b.dataset.linhaOp };
-  atualizarLinhaEscolhida(a);
+  marcarLinha(a);
+});
+
+// Na tabela da carreira (Linhas de opção), clicar no nome da linha a escolhe em Uma linha.
+$("lista-opcoes").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-escolher-linha]");
+  const a = abaDat();
+  if (!b || !a) return;
+  const bloco = blocosDeOpcao(a)[Number(b.dataset.bloco)];
+  const id = b.dataset.escolherLinha;
+  if (bloco) escolherLinhaDeOpcao(a, { bloco, lado: id[0], numero: Number(id.slice(1)) });
 });
 
 $("escurecer-desenho").addEventListener("change", (e) => {
@@ -752,7 +844,7 @@ function desenharPecas(r = calcularModeloAtual()) {
     <tbody>${r.pecas
       .map(
         (p, i) => `<tr><td><strong>${esc(p.nome)}</strong>${p.qtd > 1 ? ` <span class="suave">× ${p.qtd}</span>` : ""}</td>
-        <td class="mono">${p.agulhas} × ${p.carreiras}</td><td>${esc(p.detalhe)}</td>
+        <td class="mono">${p.agulhas} × ${p.carreiras}</td><td>${esc(p.detalhe)}${formaOpcoes.ajustes[chaveAjuste(r, p)] ? ' <strong class="ok-texto">Ajustada na Forma.</strong>' : ""}</td>
         <td><button type="button" class="botao pequeno" data-forma="${i}">Forma…</button></td></tr>`,
       )
       .join("")}</tbody></table></div>`;
@@ -761,6 +853,41 @@ function desenharPecas(r = calcularModeloAtual()) {
   trocarHtml(escolha, r.pecas.map((p, i) => `<option value="${i}">${esc(p.nome)}</option>`).join(""));
   escolha.value = String(esquemaPeca);
   desenharEsquema(r);
+  atualizarTextosModelo();
+}
+
+// A distância entre agulhas pela finura e o desenho aberto medido em cm com a amostra.
+function atualizarTextosModelo() {
+  const f = Number(modelo.finura) || 7;
+  $("modelo-passo").textContent = `Na finura ${f}G a distância entre agulhas é de ${(25.4 / f).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mm (25,4 ÷ ${f}).`;
+  const el = $("modelo-arquivo");
+  const texto = textoDoArquivoAberto();
+  el.hidden = !texto;
+  el.innerHTML = texto;
+}
+
+function textoDoArquivoAberto() {
+  const a = abaDat();
+  if (!a) return "";
+  const lista = RM.paineis(blocosDeOpcao(a)).filter((p) => p.R && p.x0 !== null);
+  if (!lista.length) return `<strong>No seu arquivo:</strong> ${esc(a.nome)} não tem painéis com as linhas de opção.`;
+  const col = Math.max(0.1, decimal(modelo.colunas, 30)), car = Math.max(0.1, decimal(modelo.carreiras, 40));
+  const paineis = lista.map((p) => {
+    const m = RM.areaDeMalha(a.doc, p);
+    return { p, agulhas: m.x1 - m.x0 + 1, carreiras: p.y1 - p.y0 + 1 };
+  });
+  const primeiro = paineis[0];
+  const alt = alturaDesenvolvida(a);
+  const desenvolvido = alt && alt.carreiras !== alt.compactadas ? ` Desenvolvido (${alt.carreiras} carreiras, com os pacotes e as repetições escolhidos), fica com ${cm1((alt.carreiras * 10) / car)} cm de altura.` : "";
+  const r2 = RM.usoDoProcessamento(a.doc, blocosDeOpcao(a)).blocosR2;
+  const blocos = r2.length
+    ? ` A altura final depende de quantas vezes ${r2.length === 1 ? "o bloco" : "os blocos"} da R2 se ${r2.length === 1 ? "repete" : "repetem"}: ${r2
+        .map((b) => `carreiras ${b.de}–${b.ate} com R2 = ${esc(b.valor)} no painel ${b.painel}`)
+        .join("; ")}.`
+    : "";
+  return `<strong>No seu arquivo:</strong> ${esc(a.nome)} tem ${paineis
+    .map((x) => `o painel ${x.p.numero} com ${x.agulhas} agulhas e ${x.carreiras} carreiras`)
+    .join(", ")} (compactados). Com a amostra acima, o painel ${primeiro.p.numero} dá ${cm1((primeiro.agulhas * 10) / col)} cm de largura e ${cm1((primeiro.carreiras * 10) / car)} cm de altura.${desenvolvido}${blocos}`;
 }
 
 // ------------------------------------------------------------------ esquema da peça
@@ -833,7 +960,7 @@ function contornoDaForma(ocup, X, Y) {
 }
 
 // Esquema da peça em cm, com a proporção certa dos pontos (largura pelas colunas, altura pelas carreiras).
-function esquemaSvg(peca, plano, densidade) {
+function esquemaSvg(peca, f, plano, densidade) {
   const cmX = 10 / Math.max(0.1, decimal(densidade.colunas, 30)), cmY = 10 / Math.max(0.1, decimal(densidade.carreiras, 40));
   const { W, H } = plano;
   const k = Math.min(300 / (W * cmX), 320 / (H * cmY));
@@ -842,7 +969,6 @@ function esquemaSvg(peca, plano, densidade) {
   const X = (x) => mx + x * sx, Y = (c) => mt + (H - c) * sy;
   const vbW = Math.round(mx + W * sx + mr), vbH = Math.round(mt + H * sy + mb);
   const ocup = ocupacaoDaForma(plano);
-  const f = peca.forma;
   const partes = [`<path class="contorno" d="${contornoDaForma(ocup, X, Y)}"/>`];
   const linha = (x1, y1, x2, y2, classe = "cota") => partes.push(`<line class="${classe}" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`);
   const texto = (x, y, t, extra = "") => partes.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}"${extra}>${esc(t)}</text>`);
@@ -891,17 +1017,19 @@ function esquemaSvg(peca, plano, densidade) {
 
 function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
   const peca = r.pecas[limitar(esquemaPeca, 0, r.pecas.length - 1)];
+  const forma = formaDaPeca(peca, r);
   const el = $("modelo-esquema");
   const legenda = $("modelo-esquema-legenda");
-  if (!(peca.forma.W > 0 && peca.forma.H > 0) || peca.forma.W > 8000 || peca.forma.H > 8000) {
+  if (!(forma.W > 0 && forma.H > 0) || forma.W > 8000 || forma.H > 8000) {
     el.innerHTML = "";
-    legenda.textContent = `${peca.nome} ficaria com ${peca.forma.W} agulhas × ${peca.forma.H} carreiras: confira as medidas e a densidade.`;
+    legenda.textContent = `${peca.nome} ficaria com ${forma.W} agulhas × ${forma.H} carreiras: confira as medidas e a densidade.`;
     return;
   }
-  const plano = RM.planoForma(peca.forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca });
-  el.innerHTML = esquemaSvg(peca, plano, modelo);
+  const plano = RM.planoForma(forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca });
+  el.innerHTML = esquemaSvg(peca, forma, plano, modelo);
   const qtd = peca.qtd > 1 ? ` (${peca.qtd} peças)` : "";
-  legenda.textContent = `${peca.nome}${qtd}: ${plano.W} agulhas × ${plano.H} carreiras, desenhada ponto a ponto pela forma e pela densidade da amostra.`;
+  const ajustada = formaOpcoes.ajustes[chaveAjuste(r, peca)] ? ", com os ajustes feitos na Forma" : "";
+  legenda.textContent = `${peca.nome}${qtd}: ${plano.W} agulhas × ${plano.H} carreiras, desenhada ponto a ponto pela forma e pela densidade da amostra${ajustada}.`;
 }
 
 {
@@ -927,6 +1055,7 @@ function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
   form.finura.addEventListener("change", () => {
     modelo.finura = Number(form.finura.value);
     gravarArmazenado(CHAVE_MODELO, modelo);
+    atualizarTextosModelo();
   });
   form.esquema.addEventListener("change", () => {
     esquemaPeca = Number(form.esquema.value);
@@ -952,12 +1081,13 @@ function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
 
 const CHAVE_FORMA = "editor-shima-forma";
 const CODIGOS_FORMA = { malha: 1, fora: 0, arremate: 16, parcial: 16, marcaEsq: 71, marcaDir: 61 };
-const formaOpcoes = Object.assign({ porVez: 1, marca: 3 }, lerArmazenado(CHAVE_FORMA, {}));
+const formaOpcoes = Object.assign({ porVez: 1, marca: 3, vista: "real", zoom: 0, ajustes: {} }, lerArmazenado(CHAVE_FORMA, {}));
 formaOpcoes.codigos = { ...CODIGOS_FORMA, ...(formaOpcoes.codigos || {}) };
+if (!formaOpcoes.ajustes || typeof formaOpcoes.ajustes !== "object") formaOpcoes.ajustes = {};
 let formaPeca = 0;
-let formaDestaque = null; // passo da forma destacado na prévia
-// Cores só da prévia (no desenho entram os códigos acima): 0 fora, 1 malha, 2 barra, 3 arremate,
-// 4 malha parcial, 5 diminuição, 6 aumento.
+let formaDestaque = null; // passo da forma destacado na grade
+let formaGrade = null; // medidas da última grade desenhada (para ler o ponto debaixo do mouse)
+// Cores da grade (no desenho entram os códigos acima).
 const CORES_FORMA = [
   ["#CDBB9A", "malha"],
   ["#8C7B55", "barra"],
@@ -966,6 +1096,48 @@ const CORES_FORMA = [
   ["#F0A73A", "diminuição"],
   ["#7FC98C", "aumento"],
 ];
+const COR_FORMA = Object.fromEntries(CORES_FORMA.map(([cor, nome]) => [nome, cor]));
+const ZOOMS_FORMA = [0, 2, 3, 4, 6, 8, 12]; // agulha em pixels na grade; 0 = caber no quadro
+const MARGEM_FORMA = { esq: 44, topo: 10, dir: 10, base: 26 };
+// Números de cada tipo de forma que dá para ajustar à mão: [campo, nome, unidade].
+const CAMPOS_AJUSTE = {
+  corpo: [
+    ["W", "Largura", "agulhas"],
+    ["H", "Altura", "carreiras"],
+    ["barra", "Barra", "carreiras"],
+    ["cava", "Altura da cava", "carreiras"],
+    ["recuo", "Cava: tirar por lado", "agulhas"],
+    ["arremCava", "Cava: arremate inicial", "agulhas"],
+    ["gola", "Largura da gola", "agulhas"],
+    ["golaP", "Fundo da gola", "carreiras"],
+    ["arremGola", "Gola: arremate central", "agulhas"],
+    ["degraus", "Ombro: degraus", "malha parcial, 1 a cada 2 carreiras"],
+  ],
+  manga: [
+    ["punho", "Punho", "agulhas"],
+    ["W", "Largura na cava", "agulhas"],
+    ["H", "Altura", "carreiras"],
+    ["barra", "Barra do punho", "carreiras"],
+    ["copa", "Altura da copa", "carreiras"],
+    ["arremCopa", "Copa: arremate inicial", "agulhas"],
+    ["topo", "Topo da copa", "agulhas"],
+  ],
+  painel: [
+    ["W", "Largura", "agulhas"],
+    ["H", "Altura", "carreiras"],
+    ["barra", "Barra", "carreiras"],
+  ],
+};
+
+const chaveAjuste = (r, peca) => `${r.estilo.id}|${peca.nome}`;
+
+// Forma da peça com os números ajustados à mão na Forma (o resto vem das medidas do Modelo).
+function formaDaPeca(peca, r = ultimoModelo || calcularModeloAtual()) {
+  const ajustes = formaOpcoes.ajustes[chaveAjuste(r, peca)] || {};
+  const forma = { ...peca.forma };
+  for (const [k, v] of Object.entries(ajustes)) if (k in forma && Number.isFinite(Number(v))) forma[k] = Number(v);
+  return forma;
+}
 
 function abrirForma(indice = formaPeca) {
   const r = ultimoModelo || calcularModeloAtual();
@@ -979,45 +1151,137 @@ function abrirForma(indice = formaPeca) {
   for (const k of Object.keys(CODIGOS_FORMA)) form[k].value = formaOpcoes.codigos[k];
   $("dlg-forma-titulo").textContent = `Forma da peça · ${r.estilo.nome}`;
   $("forma-legenda").innerHTML = CORES_FORMA.map(([cor, nome]) => `<li><span class="amostra" style="background:${cor}"></span>${nome}</li>`).join("");
+  desenharAjustesForma();
   abrirJanela("dlg-forma");
   desenharFormaDialogo();
+}
+
+// Campos com os números da peça: mostram o número em uso; os mudados à mão ficam marcados.
+function desenharAjustesForma() {
+  const r = ultimoModelo || calcularModeloAtual();
+  const peca = r.pecas[limitar(formaPeca, 0, r.pecas.length - 1)];
+  const ajustes = formaOpcoes.ajustes[chaveAjuste(r, peca)] || {};
+  const forma = formaDaPeca(peca, r);
+  $("forma-origem").textContent = `Números do Modelo (${r.estilo.nome}, amostra ${modelo.colunas} × ${modelo.carreiras} em 10 cm). Mude aqui para ajustar em agulhas e carreiras.`;
+  $("forma-ajustes").innerHTML = (CAMPOS_AJUSTE[peca.forma.tipo] || [])
+    .map(
+      ([k, nome, unidade]) => `<label class="campo${k in ajustes ? " ajustado" : ""}">${esc(nome)}
+        <input type="number" min="0" max="8000" step="1" data-ajuste="${k}" value="${esc(forma[k])}" title="Do Modelo: ${esc(peca.forma[k])}">
+        <span class="unidade">${esc(unidade)}${k in ajustes ? ` · Modelo: ${esc(peca.forma[k])}` : ""}</span></label>`,
+    )
+    .join("");
+  $("forma-voltar").hidden = !Object.keys(ajustes).length;
 }
 
 function planoAtual() {
   const r = ultimoModelo || calcularModeloAtual();
   const peca = r.pecas[limitar(formaPeca, 0, r.pecas.length - 1)];
-  if (peca.forma.W > 8000 || peca.forma.H > 8000) return { peca, plano: null };
-  return { peca, plano: RM.planoForma(peca.forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca }) };
+  const forma = formaDaPeca(peca, r);
+  if (forma.W > 8000 || forma.H > 8000) return { peca, forma, plano: null };
+  return { peca, forma, plano: RM.planoForma(forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca }) };
+}
+
+// O que acontece na agulha x de uma carreira do plano.
+function estadoNaForma(row, x) {
+  const dentro = (lista) => lista.some(([a, b]) => x >= a && x <= b);
+  if (row.marcas.some((m) => m.x === x)) return "marca de diminuição";
+  if (row.aumentos.some((m) => m.x === x)) return "aumento";
+  if (dentro(row.arrem)) return "arremate";
+  if (dentro(row.parcial)) return "malha parcial (agulha parada)";
+  if (dentro(row.segs)) return row.barra ? "barra" : "malha";
+  return "fora da peça";
+}
+
+// De quantos em quantos numerar um eixo para os números não se encostarem.
+const passoDoEixo = (tamanho, minimo) => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find((p) => p * tamanho >= minimo) || 5000;
+
+// Grade da peça: cada agulha um quadrinho, na proporção da malha (pela amostra) ou quadrada, com os números
+// das carreiras e das agulhas nos eixos e o passo escolhido marcado.
+function desenharGradeForma(plano, passo) {
+  const cv = $("forma-previa");
+  const M = MARGEM_FORMA;
+  const razao = formaOpcoes.vista === "grade" ? 1 : Math.max(0.1, decimal(modelo.colunas, 30)) / Math.max(0.1, decimal(modelo.carreiras, 40));
+  const caber = Math.min((larguraUtil(cv, 440) - M.esq - M.dir) / plano.W, 460 / (plano.H * razao));
+  const dprTela = Math.min(2, window.devicePixelRatio || 1);
+  const maximo = 4096 / dprTela; // o canvas não passa de 4.096 pixels da tela de cada lado
+  let cw = ZOOMS_FORMA[formaOpcoes.zoom] || caber;
+  cw = Math.max(0.05, Math.min(cw, (maximo - M.esq - M.dir) / plano.W, (maximo - M.topo - M.base) / (plano.H * razao)));
+  const ch = cw * razao;
+  const w = M.esq + plano.W * cw + M.dir, h = M.topo + plano.H * ch + M.base;
+  const g = ajustarTela(cv, w, h);
+  g.fillStyle = "#0D0F13";
+  g.fillRect(0, 0, w, h);
+  const yDe = (c) => M.topo + (plano.H - c) * ch;
+  // Bordas arredondadas para os pixels da tela: sem isso, com zoom quebrado, aparecem frestas entre as carreiras.
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const px = (v) => Math.round(v * dpr) / dpr;
+  const faixa = (x0, x1, c, cor) => {
+    const xa = px(M.esq + x0 * cw), xb = px(M.esq + (x1 + 1) * cw), ya = px(yDe(c)), yb = px(yDe(c) + ch);
+    g.fillStyle = cor;
+    g.fillRect(xa, ya, Math.max(1 / dpr, xb - xa), Math.max(1 / dpr, yb - ya));
+  };
+  plano.linhas.forEach((row, i) => {
+    const c = i + 1;
+    row.segs.forEach(([a, b]) => faixa(a, b, c, row.barra ? COR_FORMA.barra : COR_FORMA.malha));
+    row.parcial.forEach(([a, b]) => faixa(a, b, c, COR_FORMA["malha parcial"]));
+    row.arrem.forEach(([a, b]) => faixa(a, b, c, COR_FORMA.arremate));
+    row.marcas.forEach((m) => faixa(m.x, m.x, c, COR_FORMA["diminuição"]));
+    row.aumentos.forEach((m) => faixa(m.x, m.x, c, COR_FORMA.aumento));
+  });
+  if (cw >= 4) {
+    g.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    g.lineWidth = 1;
+    g.beginPath();
+    for (let x = 0; x <= plano.W; x += 10) {
+      g.moveTo(M.esq + x * cw + 0.5, M.topo);
+      g.lineTo(M.esq + x * cw + 0.5, M.topo + plano.H * ch);
+    }
+    for (let c = 0; c <= plano.H; c += 10) {
+      const y = M.topo + (plano.H - c) * ch + 0.5;
+      g.moveTo(M.esq, y);
+      g.lineTo(M.esq + plano.W * cw, y);
+    }
+    g.stroke();
+  }
+  g.fillStyle = "#9AA1AE";
+  g.font = '11px "IBM Plex Mono", monospace';
+  g.textAlign = "right";
+  g.textBaseline = "middle";
+  const passoC = passoDoEixo(ch, 16), passoX = passoDoEixo(cw, 34);
+  for (let c = passoC; c <= plano.H; c += passoC) g.fillText(String(c), M.esq - 6, yDe(c) + ch / 2);
+  g.textAlign = "center";
+  g.textBaseline = "top";
+  for (let x = passoX; x <= plano.W; x += passoX) g.fillText(String(x), M.esq + (x - 0.5) * cw, M.topo + plano.H * ch + 6);
+  if (passo) {
+    const y0 = yDe(passo.ate), y1 = yDe(passo.de) + ch;
+    g.fillStyle = "rgba(240, 167, 58, 0.14)";
+    g.fillRect(M.esq - 2, y0 - 2, plano.W * cw + 4, y1 - y0 + 4);
+    g.strokeStyle = "#F0A73A";
+    g.lineWidth = 2;
+    g.strokeRect(M.esq - 2, y0 - 2, plano.W * cw + 4, y1 - y0 + 4);
+  }
+  formaGrade = { plano, cw, ch, caber };
+  return { yDe, ch };
 }
 
 function desenharFormaDialogo() {
-  const { peca, plano } = planoAtual();
+  const { peca, forma, plano } = planoAtual();
   $("forma-novo").disabled = $("forma-colar").disabled = !plano;
   $("forma-previa").hidden = !plano;
+  formaGrade = null;
   if (!plano) {
-    $("forma-resumo").textContent = `${peca.nome} ficaria com ${peca.forma.W} agulhas × ${peca.forma.H} carreiras; o limite do editor é 8.000. Confira as medidas e a densidade no Modelo.`;
+    $("forma-resumo").textContent = `${peca.nome} ficaria com ${forma.W} agulhas × ${forma.H} carreiras; o limite do editor é 8.000. Confira as medidas, a densidade e os ajustes.`;
     $("forma-passos").innerHTML = "";
     return;
   }
-  const img = RM.pixelsDaForma(plano, { malha: 1, fora: 0, barra: 2, arremate: 3, parcial: 4, marcaEsq: 5, marcaDir: 5, aumento: 6 });
-  const cores = [[43, 40, 36], ...CORES_FORMA.map(([cor]) => rgbDeHex(cor))];
-  // Com um passo escolhido, as outras carreiras ficam apagadas (cores 7 a 13, misturadas com o fundo).
   if (formaDestaque !== null && !(plano.passos[formaDestaque] && plano.passos[formaDestaque].de !== undefined)) formaDestaque = null;
   const passo = formaDestaque !== null ? plano.passos[formaDestaque] : null;
-  if (passo) {
-    for (let y = 0; y < img.h; y++) {
-      const c = img.h - y;
-      if (c >= passo.de && c <= passo.ate) continue;
-      for (let x = 0; x < img.w; x++) img.px[y * img.w + x] += cores.length;
-    }
-  }
-  const apagadas = cores.map((rgb) => rgb.map((v, i) => Math.round(v * 0.3 + cores[0][i] * 0.7)));
-  const todas = [...cores, ...apagadas];
   const cv = $("forma-previa");
-  const z = zoomQueCabeEm(img.w, img.h, larguraUtil(cv, 440), 460, 6);
-  pintarPixels(cv, img, (v) => todas[v], z);
-  cv.setAttribute("aria-label", `Forma: ${plano.resumo}${passo ? ` Destaque: ${passo.nome}.` : ""}`);
-  $("forma-resumo").textContent = plano.resumo;
+  const { yDe, ch } = desenharGradeForma(plano, passo);
+  cv.setAttribute("aria-label", `Grade da peça ${peca.nome} com ${plano.W} agulhas e ${plano.H} carreiras. ${plano.resumo}${passo ? ` Destaque: ${passo.nome}.` : ""}`);
+  $("forma-zoom").textContent = formaOpcoes.zoom ? `${ZOOMS_FORMA[formaOpcoes.zoom]} px` : "caber";
+  $("forma-vista").querySelectorAll("[data-vista]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.vista === formaOpcoes.vista)));
+  $("forma-resumo").textContent = `${peca.nome} · ${plano.W} agulhas × ${plano.H} carreiras. ${plano.resumo}`;
   $("forma-passos").innerHTML = plano.passos
     .map((s, i) => {
       const onde = s.de !== undefined ? ` <span class="onde">${s.de === s.ate ? `carreira ${s.de}` : `carreiras ${s.de}–${s.ate}`}</span>` : "";
@@ -1027,9 +1291,9 @@ function desenharFormaDialogo() {
     })
     .join("");
   if (passo) {
-    // Rola a prévia até as carreiras do passo.
+    // Rola a grade até as carreiras do passo.
     const quadro = cv.parentElement;
-    const meio = (img.h - (passo.de + passo.ate) / 2) * z;
+    const meio = (yDe(passo.ate) + yDe(passo.de) + ch) / 2;
     quadro.scrollTop = Math.max(0, meio + 10 - quadro.clientHeight / 2);
   }
 }
@@ -1038,6 +1302,16 @@ function desenharFormaDialogo() {
 function imagemDaForma() {
   const { peca, plano } = planoAtual();
   return { peca, img: plano ? RM.pixelsDaForma(plano, { ...formaOpcoes.codigos }) : null };
+}
+
+// Carreira, agulha e estado do ponto debaixo do mouse (ou do dedo) na grade.
+function lerPontoDaForma(e) {
+  const el = $("forma-status");
+  if (!formaGrade) return;
+  const { plano, cw, ch } = formaGrade;
+  const x = Math.floor((e.offsetX - MARGEM_FORMA.esq) / cw);
+  const c = plano.H - Math.floor((e.offsetY - MARGEM_FORMA.topo) / ch);
+  el.textContent = x >= 0 && x < plano.W && c >= 1 && c <= plano.H ? `Carreira ${c} · agulha ${x + 1} · ${estadoNaForma(plano.linhas[c - 1], x)}` : "Passe o mouse na grade.";
 }
 
 {
@@ -1051,11 +1325,58 @@ function imagemDaForma() {
     const novo = $("forma-passos").querySelector(`[data-passo-forma="${i}"]`);
     if (novo) novo.focus();
   });
+  $("forma-previa").addEventListener("pointermove", lerPontoDaForma);
+  $("forma-previa").addEventListener("pointerdown", lerPontoDaForma);
+  $("forma-previa").addEventListener("pointerleave", () => ($("forma-status").textContent = "Passe o mouse na grade."));
+  $("forma-vista").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-vista]");
+    if (!b) return;
+    formaOpcoes.vista = b.dataset.vista;
+    gravarArmazenado(CHAVE_FORMA, formaOpcoes);
+    desenharFormaDialogo();
+  });
+  form.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-zoom-forma]");
+    if (!b) return;
+    const passo = Number(b.dataset.zoomForma);
+    if (formaOpcoes.zoom === 0 && passo > 0) {
+      // Do "caber" para o primeiro tamanho maior que o de agora (não para um menor).
+      const atual = formaGrade ? formaGrade.caber : 0;
+      const i = ZOOMS_FORMA.findIndex((z, k) => k > 0 && z > atual);
+      if (i < 0) return;
+      formaOpcoes.zoom = i;
+    } else formaOpcoes.zoom = limitar(formaOpcoes.zoom + passo, 0, ZOOMS_FORMA.length - 1);
+    gravarArmazenado(CHAVE_FORMA, formaOpcoes);
+    desenharFormaDialogo();
+  });
+  $("forma-voltar").addEventListener("click", () => {
+    const r = ultimoModelo || calcularModeloAtual();
+    delete formaOpcoes.ajustes[chaveAjuste(r, r.pecas[limitar(formaPeca, 0, r.pecas.length - 1)])];
+    gravarArmazenado(CHAVE_FORMA, formaOpcoes);
+    desenharAjustesForma();
+    desenharFormaDialogo();
+  });
   form.addEventListener("input", (e) => {
     const alvo = e.target;
-    if (alvo.name === "peca") {
+    if (alvo.dataset.ajuste) {
+      // Vazio ou igual ao do Modelo: volta a seguir o Modelo.
+      const r = ultimoModelo || calcularModeloAtual();
+      const peca = r.pecas[limitar(formaPeca, 0, r.pecas.length - 1)];
+      const chave = chaveAjuste(r, peca), k = alvo.dataset.ajuste;
+      const ajustes = { ...(formaOpcoes.ajustes[chave] || {}) };
+      const v = String(alvo.value).trim();
+      if (v === "" || inteiro(v, peca.forma[k], 0, 8000) === peca.forma[k]) delete ajustes[k];
+      else ajustes[k] = inteiro(v, peca.forma[k], 0, 8000);
+      if (Object.keys(ajustes).length) formaOpcoes.ajustes[chave] = ajustes;
+      else delete formaOpcoes.ajustes[chave];
+      const campo = alvo.closest(".campo");
+      campo.classList.toggle("ajustado", k in ajustes);
+      campo.querySelector(".unidade").textContent = `${CAMPOS_AJUSTE[peca.forma.tipo].find((c) => c[0] === k)[2]}${k in ajustes ? ` · Modelo: ${peca.forma[k]}` : ""}`;
+      $("forma-voltar").hidden = !Object.keys(ajustes).length;
+    } else if (alvo.name === "peca") {
       formaPeca = Number(alvo.value);
       formaDestaque = null;
+      desenharAjustesForma();
     } else if (alvo.name === "porVez") formaOpcoes.porVez = Number(alvo.value);
     else if (alvo.name === "marca") formaOpcoes.marca = inteiro(alvo.value, 3, 1, 8);
     else if (alvo.name in CODIGOS_FORMA) formaOpcoes.codigos[alvo.name] = inteiro(alvo.value, CODIGOS_FORMA[alvo.name], 0, 255);
@@ -1166,7 +1487,8 @@ function textoDoLogo(texto) {
 // Logo em pontos: a imagem (ou o texto) reduzida à largura pedida e separada em 2 a 4 fios pela claridade.
 function imagemDoLogo(form) {
   const k = limitar(Number(form.logoK.value) || 2, 2, 4);
-  const w = inteiro(form.logoW.value, 60, 8, 2000);
+  // Largura em cm vira agulhas pela densidade da amostra no Modelo.
+  const w = limitar(Math.round((decimal(form.logoCm.value, 20) * Math.max(0.1, decimal(modelo.colunas, 30))) / 10), 8, 2000);
   const fonte = logoImagem || textoDoLogo(form.logoTexto.value);
   if (!fonte) return null;
   // Um ponto tem 10/colunas cm de largura e 10/carreiras cm de altura: sem isso o logo sai achatado na malha.
@@ -1189,7 +1511,34 @@ function imagemDoLogo(form) {
   const q = cacheLogo.q;
   const px = new Uint8Array(w * h);
   for (let i = 0; i < px.length; i++) px[i] = cores[q.px[i]];
-  return { w, h, px, fonte };
+  return { w, h, px, fonte, medias: q.medias };
+}
+
+const RESERVADAS_FIO = new Set([0, 13, 16]); // sem malha, largura do guia e sem seleção não são cor de fio
+
+// Para cada fio, a cor da paleta mais parecida com a cor dele na imagem (sem repetir a mesma cor).
+function coresDaImagemNosFios(form) {
+  const a = abaDat();
+  const img = imagemDoLogo(form);
+  if (!a || !img) return;
+  const paleta = a.doc.paleta;
+  const usadas = new Set();
+  const escolhidas = img.medias.map((m) => {
+    if (!m) return null;
+    let melhor = -1, menor = Infinity;
+    paleta.forEach((c, i) => {
+      if (usadas.has(i) || RESERVADAS_FIO.has(i)) return;
+      const dist = (c[0] - m[0]) ** 2 + (c[1] - m[1]) ** 2 + (c[2] - m[2]) ** 2;
+      if (dist < menor) [melhor, menor] = [i, dist];
+    });
+    usadas.add(melhor);
+    return melhor;
+  });
+  escolhidas.forEach((v, i) => {
+    if (v !== null && v >= 0) form[`logoC${i}`].value = v;
+  });
+  desenharGerar();
+  avisar(`Fios com as cores da paleta mais parecidas com a imagem: ${escolhidas.filter((v) => v !== null).join(", ")}.`);
 }
 
 function carregarImagem(arquivo) {
@@ -1273,7 +1622,16 @@ function desenharGerar() {
   const img = imagemGerada(form);
   if (tipo === "logo") {
     const fonte = img ? img.fonte : logoImagem || textoDoLogo(form.logoTexto.value);
-    $("gerar-logo-origem").textContent = fonte ? `Origem: ${fonte.nome}${logoImagem ? ` (${fonte.w} × ${fonte.h} pixels)` : ""}` : "Escreva o texto ou escolha uma imagem.";
+    $("gerar-logo-origem").textContent = fonte
+      ? `Origem: ${fonte.nome}${logoImagem ? ` (${fonte.w} × ${fonte.h} pixels)` : ""}${img ? ` · ${decimal(form.logoCm.value, 20).toLocaleString("pt-BR")} cm = ${img.w} agulhas na amostra de ${modelo.colunas} colunas` : ""}`
+      : "Escreva o texto ou escolha uma imagem.";
+    // A cor de cada fio na imagem, ao lado do número da cor que ele vai usar.
+    form.querySelectorAll("[data-media]").forEach((el) => {
+      const m = img && img.medias[Number(el.dataset.media)];
+      if (m) el.style.background = `rgb(${m.join(",")})`;
+      else el.removeAttribute("style");
+    });
+    $("gerar-logo-cores").disabled = !img;
   }
   const cv = $("gerar-previa");
   $("gerar-colar").disabled = !img;
@@ -1350,6 +1708,7 @@ function aplicarListrasComR3(a, form) {
     }
     if ($("dlg-gerar").open) desenharGerar();
   });
+  $("gerar-logo-cores").addEventListener("click", () => coresDaImagemNosFios(form));
   $("gerar-sortear").addEventListener("click", () => {
     sementeOnca = (Math.random() * 4294967296) >>> 0 || 1;
     desenharGerar();
@@ -1412,6 +1771,10 @@ function analisarJacquard() {
     cores.length > mostrar.length ? `<span class="suave">+${cores.length - mostrar.length}</span>` : ""
   }</div>`;
   html += `<p>${cores.length} ${cores.length === 1 ? "cor" : "cores"} na área. ${EXPLICA_AVESSO[estrutura](escada)}</p>`;
+  const k = cores.filter((c) => c.cor !== 0 && c.n >= 0.05 * r.w * r.h).length; // ourela e marcas não contam
+  if (k > 1) {
+    html += `<p>${k} fios · ${r.h.toLocaleString("pt-BR")} carreiras de desenho = <strong>${(k * r.h).toLocaleString("pt-BR")} carreiras na máquina</strong> (uma por fio).</p>`;
+  }
   if (cores.length > 1 && estrutura !== "tubular") {
     html += longas.length
       ? `<p class="alerta">${longas.length.toLocaleString("pt-BR")} fios soltos com mais de ${maximo} agulhas.</p>`
@@ -1427,10 +1790,14 @@ function analisarJacquard() {
   const porCor = new Map();
   intarsia.guias.forEach((g) => porCor.set(g.cor, (porCor.get(g.cor) || 0) + 1));
   const n = intarsia.guias.length;
+  const pequenas = intarsia.areas.filter((ar) => ar.n < 12).length;
   $("intarsia-resultado").innerHTML = `<div class="resultado">
     <p class="${n > disponiveis ? "alerta" : "ok-texto"}">Precisa de ${n} guia-fio${n === 1 ? "" : "s"}${n > disponiveis ? `, mais que os ${disponiveis} da máquina` : ""}.</p>
     <div class="cores-area">${[...porCor].slice(0, 24).map(([cor, k]) => `<span>${amostraCor(d, cor)} <span class="suave">${k} guia${k === 1 ? "" : "s"}</span></span>`).join("")}</div>
-    <p class="suave pequeno">Cada trecho seguido de uma cor numa carreira precisa do seu guia; um guia volta a servir quando a área dele acaba. ${intarsia.areas.length === 1 ? "É 1 área de cor" : `São ${intarsia.areas.length.toLocaleString("pt-BR")} áreas de cor`}.</p></div>`;
+    <p>${intarsia.areas.length === 1 ? "1 área de cor" : `${intarsia.areas.length.toLocaleString("pt-BR")} áreas de cor`}${
+      pequenas ? `, ${pequenas.toLocaleString("pt-BR")} delas com menos de 12 pontos` : ""
+    }. ${n <= disponiveis ? `Dá para fazer em intarsia com ${n} guia${n === 1 ? "" : "s"}, sem fio correndo por trás.` : `Passa dos ${disponiveis} guias da máquina: faça em jacquard ou simplifique o desenho.`}</p>
+    <p class="suave pequeno">Cada trecho seguido de uma cor numa carreira precisa do seu guia; um guia volta a servir quando a área dele acaba.</p></div>`;
   // Tabela dos guias: carreiras contadas de baixo, a partir da primeira carreira da área.
   const base = H - (r.y + r.h - 1);
   const mostrados = intarsia.guias.slice(0, 200);
@@ -1491,6 +1858,7 @@ function desenharMapaJacquard() {
   const guias = vista === "guias";
   const cv = $("jacquard-mapa");
   const z = limitar(Math.floor(Math.min(larguraUtil(cv, 480) / r.w, 460 / r.h)), 1, 12);
+  jacquard.z = z;
   $("jacquard-legenda").textContent = (LEGENDA_JACQUARD[vista] || LEGENDA_JACQUARD.flutuacoes)(jacquard);
   const g = ajustarTela(cv, r.w * z, r.h * z);
   g.imageSmoothingEnabled = false;
@@ -1544,6 +1912,27 @@ function desenharMapaJacquard() {
 }
 
 $("dlg-jacquard").querySelector("form").addEventListener("input", () => jacquard && analisarJacquard());
+
+// Agulha, carreira, cor, área e guia da intarsia do ponto debaixo do mouse no mapa (o avesso é espelhado).
+function lerPontoDoJacquard(e) {
+  const el = $("jacquard-status");
+  if (!jacquard || !jacquard.z) return;
+  const { a, r, intarsia, z } = jacquard;
+  let x = Math.floor(e.offsetX / z);
+  const y = Math.floor(e.offsetY / z);
+  if (x < 0 || y < 0 || x >= r.w || y >= r.h) {
+    el.textContent = "Passe o mouse no mapa.";
+    return;
+  }
+  if ($("dlg-jacquard").querySelector("form").vista.value === "avesso") x = r.w - 1 - x;
+  const d = a.doc, i = y * r.w + x;
+  const cor = d.pixels[(r.y + y) * d.largura + r.x + x];
+  const nome = nomeDaCor(cor);
+  el.textContent = `Agulha ${r.x + x + 1} · carreira ${d.altura - (r.y + y)} · cor ${cor}${nome ? ` (${nome})` : ""} · área ${intarsia.areaDe[i] + 1} (guia ${intarsia.guiaDe[i]} na intarsia)`;
+}
+$("jacquard-mapa").addEventListener("pointermove", lerPontoDoJacquard);
+$("jacquard-mapa").addEventListener("pointerdown", lerPontoDoJacquard);
+$("jacquard-mapa").addEventListener("pointerleave", () => ($("jacquard-status").textContent = "Passe o mouse no mapa."));
 $("jacquard-resultado").addEventListener("click", (e) => {
   if (!e.target.closest('[data-jacquard="maior"]') || !mesmaAba(jacquard) || !jacquard.maior) return;
   const { a, maior } = jacquard;
@@ -1579,8 +1968,137 @@ function abrirVerificar() {
 
 function rodarVerificacao() {
   const form = $("dlg-verificar").querySelector("form");
-  verif.itens = RM.verificarDesenho(verif.a.doc, blocosDeOpcao(verif.a), { flutuacaoMaxima: inteiro(form.maximo.value, 5, 1, 500) });
+  verif.itens = itensDoVerificar(verif.a, inteiro(form.maximo.value, 5, 1, 500));
   desenharItensVerif();
+}
+
+// Tudo o que o Verificar mostra (as regras do desenho, as de cor e os trechos difíceis do Modelo, que são só
+// informação); a Ficha conta os avisos daqui.
+function itensDoVerificar(a, maximo) {
+  const itens = RM.verificarDesenho(a.doc, blocosDeOpcao(a), { flutuacaoMaxima: maximo });
+  const cor = itensDeCor(a, maximo);
+  // "Nenhum problema" só vale se as regras de cor também passaram.
+  return (cor.length ? itens.filter((i) => i.regra !== "nenhum") : itens).concat(cor, itensDaForma());
+}
+
+// Jacquard e intarsia no corpo de cada painel: fios soltos longos com o avesso em flutuação e guia-fios da
+// intarsia. Só contam as cores com pelo menos 5% dos pontos (ourela e marcas ficam de fora).
+function itensDeCor(a, maximo) {
+  const d = a.doc;
+  const itens = [];
+  const disponiveis = inteiro($("dlg-jacquard").querySelector("form").guias.value, 8, 1, 64);
+  for (const { p, trechos } of paineisComTrechos(a)) {
+    const corpo = trechos.find((t) => t.id === "corpo");
+    if (p.x0 === null || !corpo) continue;
+    const m = RM.areaDeMalha(d, p);
+    if (!m) continue;
+    const r = { x: m.x0, y: d.altura - corpo.ate, w: m.x1 - m.x0 + 1, h: corpo.ate - corpo.de + 1 };
+    if (r.w * r.h > LIMITE_JACQUARD) continue;
+    // Uma ribana (1 e 2) ou a forma (0 em volta) não são jacquard: códigos de ponto e o 0 não contam como fio.
+    const principais = new Set(
+      RM.coresDaArea(d.pixels, d.largura, r)
+        .filter((c) => c.cor !== 0 && !RM.tipoDePonto(c.cor) && c.n >= 0.05 * r.w * r.h)
+        .map((c) => c.cor),
+    );
+    if (principais.size < 2) continue;
+    const nome = ` (painel ${p.numero})`;
+    const longas = RM.flutuacoes(d.pixels, d.largura, r, "flutuacao").lista.filter((f) => principais.has(f.cor) && f.comprimento > maximo);
+    if (longas.length) {
+      const maior = longas.reduce((x, f) => (f.comprimento > x.comprimento ? f : x));
+      itens.push({
+        nivel: "aviso",
+        regra: "jacquard",
+        painel: p.numero,
+        area: r,
+        titulo: `Flutuações longas no jacquard${nome}`,
+        texto: `Com o avesso em flutuação, ${longas.length.toLocaleString("pt-BR")} fios soltos passam de ${maximo} agulhas no corpo; o maior tem ${maior.comprimento} agulhas (cor ${maior.cor}). Em birdseye ou escada eles ficam curtos.`,
+        carreiras: String(d.altura - maior.y),
+        y: maior.y,
+        x0: maior.x0,
+        x1: maior.x1,
+      });
+    }
+    const guias = RM.guiasIntarsia(d.pixels, d.largura, r).guias.filter((g) => principais.has(g.cor)).length;
+    if (guias > disponiveis) {
+      itens.push({
+        nivel: "aviso",
+        regra: "intarsia",
+        painel: p.numero,
+        area: r,
+        titulo: `Intarsia passa do limite de guias${nome}`,
+        texto: `Em intarsia o corpo precisaria de ${guias} guia-fios, mais que os ${disponiveis} da máquina. Faça em jacquard ou simplifique o desenho.`,
+      });
+    }
+  }
+  return itens;
+}
+
+const ONDE_NA_FORMA = { Cava: "na cava", Gola: "na gola", Copa: "na copa", Aumentos: "nos aumentos" };
+
+// Trechos difíceis nas peças do Modelo (com os ajustes da Forma): diminuições ou aumentos fortes seguidos.
+function itensDaForma() {
+  const r = ultimoModelo || calcularModeloAtual();
+  const itens = [];
+  r.pecas.forEach((peca, indice) => {
+    const forma = formaDaPeca(peca, r);
+    if (!(forma.W > 0 && forma.H > 0) || forma.W > 8000 || forma.H > 8000) return;
+    const plano = RM.planoForma(forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca });
+    for (const t of RM.trechosDificeis(plano)) {
+      const parte = t.passo.split(":")[0];
+      const tipo = parte === "Aumentos" ? "aumentos" : "diminuições";
+      itens.push({
+        nivel: "info",
+        regra: "forma",
+        peca: indice,
+        passo: plano.passos.findIndex((x) => x.nome === t.passo),
+        titulo: `Trecho difícil ${ONDE_NA_FORMA[parte] || `em ${parte.toLowerCase()}`} (${peca.nome} do Modelo)`,
+        texto: `${peca.nome} · ${parte}: começa com ${t.vezes} ${tipo} de ${t.n} agulhas a cada ${t.intervalo} carreiras (carreiras ${t.de}–${t.ate} da peça). Use velocidade menor e confira o puxador nesse trecho.`,
+      });
+    }
+  });
+  return itens;
+}
+
+// Ferramenta que resolve cada tipo de item do Verificar.
+const FERRAMENTAS_VERIF = {
+  "sem-guia": "Abrir a linha R3",
+  "sem-ponto": "Abrir o ponto no Processar",
+  "cancela-com-guia": "Abrir a linha R5",
+  "cancela-coerente": "Abrir a linha R5",
+  "paineis-diferentes": "Ver a R2",
+  jacquard: "Abrir jacquard",
+  intarsia: "Abrir intarsia",
+  forma: "Abrir forma",
+};
+const LINHA_DO_ITEM = { "sem-guia": "R3", "cancela-com-guia": "R5", "cancela-coerente": "R5", "paineis-diferentes": "R2" };
+
+function abrirFerramentaDoItem(item) {
+  const a = verif.a;
+  if (!mesmaAba(verif)) return;
+  $("dlg-verificar").close();
+  const linha = LINHA_DO_ITEM[item.regra];
+  if (linha) {
+    const lista = RM.paineis(blocosDeOpcao(a));
+    const i = Math.max(0, lista.findIndex((p) => p.numero === (item.painel || 1)));
+    a.linhaOpcao = { painel: i, linha };
+    marcarLinha(a);
+    $("uma-linha").scrollIntoView({ block: "center" });
+    const atual = linhaAtual(a);
+    if (atual && atual.bloco.colunas[atual.k]) mostrarNoDesenho(a, { x: Math.min(...atual.bloco.colunas[atual.k]), y: item.y ?? atual.bloco.carreiraInicio, w: 2, h: 1 });
+    avisar(`Linha ${linha} do painel ${lista[i].numero} escolhida em Linhas de opção, no painel à direita.`);
+  } else if (item.regra === "sem-ponto") abrirProcessar(RM.PASSOS_PROCESSAMENTO.findIndex((s) => s.id === "ponto"));
+  else if (item.regra === "jacquard" || item.regra === "intarsia") {
+    selecionarNoDesenho(a, item.area);
+    abrirJacquard();
+    if (item.regra === "intarsia" && jacquard) {
+      $("dlg-jacquard").querySelector("form").vista.value = "guias";
+      analisarJacquard();
+    }
+  } else if (item.regra === "forma") {
+    abrirForma(item.peca);
+    formaDestaque = item.passo >= 0 ? item.passo : null;
+    desenharFormaDialogo();
+  }
 }
 
 function desenharItensVerif() {
@@ -1600,7 +2118,15 @@ function desenharItensVerif() {
       return `<li class="item-verificacao nivel-${item.nivel}">
         <span class="nivel">${NIVEIS[item.nivel]}</span><strong>${esc(item.titulo)}</strong><p>${esc(item.texto)}</p>
         ${comCarreiras ? `<p class="onde">carreiras ${esc(item.carreiras)}</p>` : ""}
-        ${comCarreiras ? `<div class="controles"><button type="button" class="botao pequeno" data-ver-desenho="${i}">Ver no desenho</button><button type="button" class="botao pequeno" data-ver-agulhas="${i}">Ver nas agulhas</button></div>` : ""}
+        ${
+          comCarreiras || FERRAMENTAS_VERIF[item.regra]
+            ? `<div class="controles">${
+                comCarreiras
+                  ? `<button type="button" class="botao pequeno" data-ver-desenho="${i}">Ver no desenho</button><button type="button" class="botao pequeno" data-ver-agulhas="${i}">Ver nas agulhas</button>`
+                  : ""
+              }${FERRAMENTAS_VERIF[item.regra] ? `<button type="button" class="botao pequeno" data-ferramenta="${i}">${FERRAMENTAS_VERIF[item.regra]}</button>` : ""}</div>`
+            : ""
+        }
       </li>`;
     })
     .join("");
@@ -1893,6 +2419,12 @@ function desenharAgulhas() {
     desenharItensVerif();
   });
   $("verificar-itens").addEventListener("click", (e) => {
+    const ferramenta = e.target.closest("[data-ferramenta]");
+    if (ferramenta && verif) {
+      const item = verif.itens[Number(ferramenta.dataset.ferramenta)];
+      if (item) abrirFerramentaDoItem(item);
+      return;
+    }
     const noDesenho = e.target.closest("[data-ver-desenho]");
     const nasAgulhas = e.target.closest("[data-ver-agulhas]");
     if (!verif || (!noDesenho && !nasAgulhas)) return;
@@ -1977,7 +2509,7 @@ function abrirDesenvolver() {
   const todos = RM.paineis(blocosDeOpcao(a));
   const lista = todos.filter((p) => p.R);
   if (!lista.length) return avisar("Este desenho não tem as linhas de opção R1–R20: não dá para achar os trechos nem os blocos de repetição (R2).", true);
-  desenv = { a, lista, todos, painel: 0, dev: null, res: null };
+  desenv = { a, lista, todos, painel: 0, dev: null, res: null, trechos: [], trecho: null };
   const form = $("dlg-desenvolver").querySelector("form");
   form.painel.innerHTML = lista
     .map((p, i) => `<option value="${i}">Painel ${p.numero}${p.x0 !== null ? ` · agulhas ${p.x0 + 1}–${p.x1 + 1}` : ""}</option>`)
@@ -2003,9 +2535,16 @@ function desenharDesenvolver() {
   const p = lista[desenv.painel];
   const form = $("dlg-desenvolver").querySelector("form");
   const trechos = RM.trechosDoPainel(a.doc, p);
+  desenv.trechos = trechos;
+  if (desenv.trecho !== null && !trechos[desenv.trecho]) desenv.trecho = null;
   $("desenvolver-trechos").innerHTML = trechos
-    .map((t) => `<li><span class="amostra" style="background:${corDaParte(t.nome)}"></span>${esc(t.nome)} <span class="mono">${t.de === t.ate ? t.de : `${t.de}–${t.ate}`}</span></li>`)
+    .map(
+      (t, i) => `<button type="button" class="trecho" data-trecho="${i}" aria-pressed="${i === desenv.trecho}"><span class="amostra" style="background:${corDaParte(t.nome)}"></span>
+        <span class="titulo-trecho"><span>${esc(t.nome)}</span><span class="mono">${t.de === t.ate ? `carreira ${t.de}` : `carreiras ${t.de}–${t.ate}`}</span></span>
+        <span class="codigos-trecho">${esc(textoDoTrecho(RM.resumoDoTrecho(a.doc, p, t)))}</span></button>`,
+    )
     .join("");
+  $("desenvolver-ver").hidden = desenv.trecho === null || !RM.areaDeMalha(a.doc, p);
   desenv.temBarra = trechos.some((t) => t.id === "barra");
   estadoCamposPacotes(form, desenv.temBarra);
   const dev = RM.desenvolvimento(a.doc, p, repeticoesDe(a)[p.numero] || {});
@@ -2045,6 +2584,25 @@ function atualizarTotalDesenvolver() {
 }
 
 // Prévia do painel desenvolvido, com uma faixa à esquerda na cor de cada parte (os valores 256 em diante).
+// O resumo de um trecho em uma linha: "51 e 52 alternando (tubular provável) · guia 4 · ponto 14 e 17".
+function textoDoTrecho(r) {
+  const partes = [];
+  if (r.alterna) {
+    const tubular = r.alterna.map((v) => RM.tipoDePonto(v)).sort().join() === "frente,tras";
+    partes.push(`${r.alterna[0]} e ${r.alterna[1]} alternando${tubular ? " (tubular provável)" : ""}`);
+  } else partes.push(`${r.codigos.length === 1 ? "código" : "códigos"} ${r.codigos.slice(0, 3).map((c) => c.cor).join(", ")}`);
+  partes.push(r.guias.length ? `guia ${r.guias.join(", ")}` : "sem guia-fio");
+  if (r.pontos.length) partes.push(`ponto ${r.pontos.join(" e ")}`);
+  if (r.cancela) partes.push("cancelar malha (R5)");
+  if (r.economizador.length) partes.push(`R2 = ${r.economizador.join(", ")}`);
+  return partes.join(" · ");
+}
+
+// Partes do desenho desenvolvido que vêm do trecho escolhido (a barra trocada por um pacote também conta).
+function partesDoTrecho(res, t) {
+  return res.partes.filter((x) => x.nome === t.nome || (t.id === "barra" && x.gerada && x.nome.startsWith("Barra")));
+}
+
 function desenharPreviaDesenvolvida(p, res) {
   const cv = $("desenvolver-previa");
   cv.hidden = !res.px;
@@ -2069,10 +2627,31 @@ function desenharPreviaDesenvolvida(p, res) {
     const y = res.painel.ate - c, origem = (res.h - c) * res.w;
     px.set(res.px.subarray(origem + x0, origem + x1 + 1), y * w + faixa + 1);
   }
+  // Com um trecho escolhido, as outras carreiras ficam apagadas (valores somados de 1000).
+  const t = desenv.trecho !== null ? desenv.trechos[desenv.trecho] : null;
+  if (t) {
+    const marcadas = partesDoTrecho(res, t);
+    for (let c = res.painel.de; c <= res.painel.ate; c++) {
+      if (marcadas.some((x) => c >= x.de && c <= x.ate)) continue;
+      const y = res.painel.ate - c;
+      for (let i = y * w; i < (y + 1) * w; i++) px[i] += 1000;
+    }
+  }
   const fundo = [43, 40, 36];
-  const cor = (v) => (v < 256 ? d.paleta[v] : v === 256 ? fundo : cores[v - 257]);
-  pintarPixels(cv, { w, h, px }, cor, zoomQueCabeEm(w, h, larguraUtil(cv, 360), 460, 4));
-  cv.setAttribute("aria-label", `Painel ${p.numero} desenvolvido: ${h} carreiras, com as partes marcadas à esquerda`);
+  const base = (v) => (v < 256 ? d.paleta[v] : v === 256 ? fundo : cores[v - 257]);
+  const cor = (v) => (v < 1000 ? base(v) : base(v - 1000).map((c, i) => Math.round(c * 0.3 + fundo[i] * 0.7)));
+  const z = zoomQueCabeEm(w, h, larguraUtil(cv, 360), 460, 4);
+  pintarPixels(cv, { w, h, px }, cor, z);
+  cv.setAttribute("aria-label", `Painel ${p.numero} desenvolvido: ${h} carreiras, com as partes marcadas à esquerda${t ? ` e o trecho ${t.nome} destacado` : ""}`);
+  if (t) {
+    // Rola a prévia até o trecho.
+    const marcadas = partesDoTrecho(res, t);
+    if (marcadas.length) {
+      const quadro = cv.parentElement;
+      const meio = (res.painel.ate - (marcadas[0].de + marcadas[marcadas.length - 1].ate) / 2) * z;
+      quadro.scrollTop = Math.max(0, meio - quadro.clientHeight / 2);
+    }
+  }
 }
 
 {
@@ -2084,6 +2663,7 @@ function desenharPreviaDesenvolvida(p, res) {
     const p = lista[desenv.painel];
     if (alvo.name === "painel") {
       desenv.painel = Number(alvo.value);
+      desenv.trecho = null;
       desenharDesenvolver();
       return;
     }
@@ -2105,6 +2685,25 @@ function desenharPreviaDesenvolvida(p, res) {
     gravarArmazenado(CHAVE_PACOTES + a.nome, pk);
     estadoCamposPacotes(form, desenv.temBarra);
     atualizarTotalDesenvolver();
+  });
+  $("desenvolver-trechos").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-trecho]");
+    if (!b || !desenv) return;
+    const i = Number(b.dataset.trecho);
+    desenv.trecho = desenv.trecho === i ? null : i;
+    $("desenvolver-trechos").querySelectorAll("[data-trecho]").forEach((x) => x.setAttribute("aria-pressed", String(Number(x.dataset.trecho) === desenv.trecho)));
+    $("desenvolver-ver").hidden = desenv.trecho === null || !RM.areaDeMalha(desenv.a.doc, desenv.lista[desenv.painel]);
+    desenharPreviaDesenvolvida(desenv.lista[desenv.painel], desenv.res);
+  });
+  $("desenvolver-ver").addEventListener("click", () => {
+    if (!mesmaAba(desenv) || desenv.trecho === null) return;
+    const { a, lista } = desenv;
+    const p = lista[desenv.painel], t = desenv.trechos[desenv.trecho];
+    const m = RM.areaDeMalha(a.doc, p);
+    if (!m) return;
+    $("dlg-desenvolver").close();
+    selecionarNoDesenho(a, { x: m.x0, y: a.doc.altura - t.ate, w: m.x1 - m.x0 + 1, h: t.ate - t.de + 1 });
+    avisar(`${t.nome} do painel ${p.numero} selecionado: carreiras ${t.de}–${t.ate}, agulhas ${m.x0 + 1}–${m.x1 + 1}.`);
   });
   $("desenvolver-criar").addEventListener("click", () => {
     if (!mesmaAba(desenv)) return;
@@ -2278,15 +2877,16 @@ function desenharPecaSimular() {
   const form = $("dlg-simular").querySelector("form");
   const r = ultimoModelo || calcularModeloAtual();
   const peca = r.pecas[limitar(Number(form.peca.value) || 0, 0, r.pecas.length - 1)];
+  const forma = formaDaPeca(peca, r);
   const cv = $("simular-peca");
   const info = $("simular-peca-info");
-  if (!(peca.forma.W > 0 && peca.forma.H > 0) || peca.forma.W > 2000 || peca.forma.H > 4000) {
+  if (!(forma.W > 0 && forma.H > 0) || forma.W > 2000 || forma.H > 4000) {
     cv.hidden = true;
-    info.textContent = `${peca.nome} ficaria com ${peca.forma.W} × ${peca.forma.H} pontos: confira as medidas no Modelo.`;
+    info.textContent = `${peca.nome} ficaria com ${forma.W} × ${forma.H} pontos: confira as medidas no Modelo e na Forma.`;
     return;
   }
-  const plano = RM.planoForma(peca.forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca });
-  const forma = RM.pixelsDaForma(plano, { malha: 1, fora: 0, arremate: 1, parcial: 1, marcaEsq: 1, marcaDir: 1 });
+  const plano = RM.planoForma(forma, { porVez: formaOpcoes.porVez, marca: formaOpcoes.marca });
+  const dentro = RM.pixelsDaForma(plano, { malha: 1, fora: 0, arremate: 1, parcial: 1, marcaEsq: 1, marcaDir: 1 }).px;
   const { W, H } = plano;
   const m = simul.motivo, d = simul.a.doc;
   const porGuia = porGuiaNaSimulacao();
@@ -2318,7 +2918,7 @@ function desenharPecaSimular() {
     const corLinha = porGuia ? corDoGuiaSim(simul.guiaDaLinha.get(my) || null) : 0;
     for (let x = 0; x < W; x++) {
       const i = y * W + x;
-      if (!forma.px[i]) px32[i] = fundo;
+      if (!dentro[i]) px32[i] = fundo;
       else px32[i] = porGuia ? corLinha : corDoCodigo(d.pixels[my * d.largura + m.x + (x % m.w)]);
     }
   }
@@ -2665,9 +3265,9 @@ function conteudoEconomizador() {
   const { a, uso } = proc;
   if (!uso.blocosR2.length) return `<p class="suave">A R2 não marca blocos de repetição.</p>`;
   const reps = repeticoesDe(a);
-  return `<div class="tabela-rolavel"><table class="tabela"><thead><tr><th>Painel</th><th>Carreiras</th><th>R2</th><th>Repete (vezes)</th></tr></thead><tbody>${uso.blocosR2
+  return `<div class="tabela-rolavel"><table class="tabela"><thead><tr><th>Painel</th><th>Carreiras</th><th>R1 · dentro</th><th>R2 · fora</th><th>Repete (vezes)</th></tr></thead><tbody>${uso.blocosR2
     .map(
-      (b) => `<tr><td class="mono">${b.painel}</td><td class="mono">${b.de}–${b.ate}</td><td class="mono">${esc(b.valor)}</td>
+      (b) => `<tr><td class="mono">${b.painel}</td><td class="mono">${b.de}–${b.ate}</td><td class="mono">${b.dentro.length ? b.dentro.join("/") : "—"}</td><td class="mono">${esc(b.valor)}</td>
       <td><input type="number" min="1" max="9999" data-rep-painel="${b.painel}" data-rep-chave="${b.chave}" value="${esc((reps[b.painel] || {})[b.chave] ?? "")}" placeholder="vezes" aria-label="Vezes que as carreiras ${b.de} a ${b.ate} do painel ${b.painel} se repetem"></td></tr>`,
     )
     .join("")}</tbody></table></div>
@@ -2893,7 +3493,8 @@ const baseDoNome = (nome) => RM.semAcento(trocarExtensao(nome, ""));
 function fichaGuardada(a) {
   const salvo = lerArmazenado(CHAVE_FICHA + a.nome, {});
   const { corTexto, corFundo, escala } = salvo;
-  if (salvo.proprios) return { corTexto, corFundo, escala, proprios: { campos: { ...(salvo.proprios.campos || {}) }, tempo: { ...(salvo.proprios.tempo || {}) } } };
+  const conferidos = { ...(salvo.conferidos || {}) }; // itens de "Antes de tecer" marcados à mão
+  if (salvo.proprios) return { corTexto, corFundo, escala, conferidos, proprios: { campos: { ...(salvo.proprios.campos || {}) }, tempo: { ...(salvo.proprios.tempo || {}) } } };
   // Formato antigo, que guardava tudo junto: ficam os campos escritos e os números que não são contas.
   const t = salvo.tempo || {};
   const escrito = (v) => String(v ?? "").trim() !== "";
@@ -2903,7 +3504,7 @@ function fichaGuardada(a) {
   if (escrito(t.velocidade)) tempo.velocidade = t.velocidade;
   if (escrito(t.finura) && Number(t.finura) !== 7) tempo.finura = t.finura;
   const campos = Object.fromEntries(Object.entries(salvo.campos || {}).filter(([, v]) => escrito(v)));
-  return { corTexto, corFundo, escala, proprios: { campos, tempo } };
+  return { corTexto, corFundo, escala, conferidos, proprios: { campos, tempo } };
 }
 
 function abrirFicha() {
@@ -2944,6 +3545,7 @@ function abrirFicha() {
     guias: guiasDoDesenho(a),
     avisos: null,
     proprios,
+    conferidos: salvo.conferidos,
     dados: {
       corTexto: salvo.corTexto ?? padrao.corTexto,
       corFundo: salvo.corFundo ?? padrao.corFundo,
@@ -3011,8 +3613,8 @@ function desenharFicha() {
 }
 
 function gravarFicha() {
-  const { a, dados, proprios } = ficha;
-  gravarArmazenado(CHAVE_FICHA + a.nome, { corTexto: dados.corTexto, corFundo: dados.corFundo, escala: dados.escala, proprios });
+  const { a, dados, proprios, conferidos } = ficha;
+  gravarArmazenado(CHAVE_FICHA + a.nome, { corTexto: dados.corTexto, corFundo: dados.corFundo, escala: dados.escala, proprios, conferidos });
 }
 
 // Arquivos abertos que podem ir no .zip; já vêm marcados o desenho e os que têm o mesmo nome (.000, .QFD...).
@@ -3074,7 +3676,7 @@ function itensAntesDeTecer() {
   if (ficha.avisos === null) {
     // O Verificar dá avisos (não erros): conta todos, com o mesmo limite de fio solto do diálogo dele.
     const maximo = inteiro($("dlg-verificar").querySelector("form").maximo.value, 5, 1, 500);
-    ficha.avisos = RM.verificarDesenho(a.doc, blocos, { flutuacaoMaxima: maximo }).filter((i) => i.nivel !== "info").length;
+    ficha.avisos = itensDoVerificar(a, maximo).filter((i) => i.nivel !== "info").length;
   }
   const uso = RM.usoDoProcessamento(a.doc, blocos);
   const pd = completarGuias(processamentoDe(a), uso);
@@ -3087,25 +3689,47 @@ function itensAntesDeTecer() {
   const junto = (tipo) => estado.abas.some((x) => x.tipo === tipo && baseDoNome(x.nome) === base);
   const programas = junto("programa") && junto("ajustes");
   const avisos = ficha.avisos;
-  return [
+  const itens = [
     {
+      id: "verificar",
       ok: !avisos,
       titulo: "Verificar sem avisos",
       detalhe: avisos ? `${avisos} aviso${avisos === 1 ? "" : "s"} no Verificar: confira se são esperados` : "nenhum aviso nas regras do Verificar",
       ir: "verificar",
       botao: "Verificar…",
     },
-    { ok: !total, titulo: "Processamento completo", detalhe: total ? `faltam ${total} valores` : "todos os passos preenchidos", ir: "processar", botao: "Processar…" },
-    { ok: !semFio.length, titulo: "Fio de cada guia-fio", detalhe: semFio.length ? `sem fio: R3 ${semFio.join(", ")} (preencha nesta ficha)` : uso.guias.length ? "todos os guias com fio" : "a R3 não usa guias" },
-    { ok: !vazios.length, titulo: "Ficha preenchida", detalhe: vazios.length ? `falta: ${vazios.join(", ")}` : "código, descrição, máquina e fio" },
-    { ok: preenchido(c.tempo), titulo: "Tempo de tecimento", detalhe: preenchido(c.tempo) ? c.tempo : "calcule aqui e use no campo TEMPO TEC" },
-    { ok: !a.modificado, titulo: "Desenho salvo", detalhe: a.modificado ? "há alterações sem salvar" : "sem alterações pendentes", ir: "salvar", botao: "Salvar" },
+    { id: "processamento", ok: !total, titulo: "Processamento completo", detalhe: total ? `faltam ${total} valores` : "todos os passos preenchidos", ir: "processar", botao: "Processar…" },
+    { id: "fios", ok: !semFio.length, titulo: "Fio de cada guia-fio", detalhe: semFio.length ? `sem fio: R3 ${semFio.join(", ")} (preencha nesta ficha)` : uso.guias.length ? "todos os guias com fio" : "a R3 não usa guias" },
+    { id: "ficha", ok: !vazios.length, titulo: "Ficha preenchida", detalhe: vazios.length ? `falta: ${vazios.join(", ")}` : "código, descrição, máquina e fio" },
+    { id: "tempo", ok: preenchido(c.tempo), titulo: "Tempo de tecimento", detalhe: preenchido(c.tempo) ? c.tempo : "calcule aqui e use no campo TEMPO TEC" },
+    { id: "salvo", ok: !a.modificado, titulo: "Desenho salvo", detalhe: a.modificado ? "há alterações sem salvar" : "sem alterações pendentes", ir: "salvar", botao: "Salvar" },
     {
+      id: "programa",
       ok: programas,
       titulo: "Programa (.000) e ajustes (.QFD)",
       detalhe: programas ? "abertos, com o mesmo nome do desenho" : "gere no KnitPaint com estes valores, ou abra os da pasta para irem no .zip",
     },
+    { id: "amostra", manual: true, ok: false, titulo: "Amostra tecida e aprovada", detalhe: "marque depois de tecer a amostra e conferir medidas, ponto e cores" },
   ];
+  // Os avisos esperados, o programa feito fora daqui e a amostra podem ser marcados à mão. A marca vale para o
+  // desenho como ele estava ao marcar: mudou o desenho (ou é outro arquivo com o mesmo nome), ela cai.
+  const impressao = impressaoDoDesenho(a);
+  for (const i of itens) {
+    i.marcavel = MARCAVEIS.has(i.id);
+    if (i.ok || !i.marcavel || ficha.conferidos[i.id] !== impressao) continue;
+    i.ok = true;
+    i.aMao = true;
+    i.detalhe = i.manual ? "marcado à mão" : `marcado à mão (${i.detalhe})`;
+  }
+  return itens;
+}
+
+const MARCAVEIS = new Set(["verificar", "programa", "amostra"]);
+
+// Resumo do desenho (tamanho e soma dos pontos) que muda quando o desenho muda.
+function impressaoDoDesenho(a) {
+  const d = a.doc;
+  return `${d.largura}x${d.altura}:${crc32(d.pixels).toString(16)}`;
 }
 
 function desenharChecklist() {
@@ -3115,7 +3739,13 @@ function desenharChecklist() {
     .map(
       (i) => `<li class="${i.ok ? "ok" : "pendente"}"><span class="marca-check" aria-hidden="true">${i.ok ? "✓" : "!"}</span><span><span class="escondido">${
         i.ok ? "Feito:" : "Pendente:"
-      } </span>${esc(i.titulo)}<small>${esc(i.detalhe)}</small></span>${!i.ok && i.ir ? `<button type="button" class="botao pequeno" data-ir="${i.ir}">${esc(i.botao)}</button>` : "<span></span>"}</li>`,
+      } </span>${esc(i.titulo)}<small>${esc(i.detalhe)}</small></span><span class="acoes-check">${
+        !i.ok && i.ir ? `<button type="button" class="botao pequeno" data-ir="${i.ir}">${esc(i.botao)}</button>` : ""
+      }${
+        i.marcavel && (!i.ok || i.aMao)
+          ? `<label class="marca-manual"><input type="checkbox" data-conferido="${i.id}"${i.aMao ? " checked" : ""}> ${i.manual ? "feito" : "conferido"}</label>`
+          : ""
+      }</span></li>`,
     )
     .join("");
 }
@@ -3156,6 +3786,16 @@ function desenharChecklist() {
     baixar(new Blob([linhas.join("\r\n") + "\r\n"], { type: "text/plain" }), trocarExtensao(ficha.a.nome, "_FICHA.txt"));
   });
   $("ficha-zip").addEventListener("click", baixarZipDaFicha);
+  $("ficha-checklist").addEventListener("change", (e) => {
+    const id = e.target.dataset.conferido;
+    if (!id || !ficha) return;
+    if (e.target.checked) ficha.conferidos[id] = impressaoDoDesenho(ficha.a);
+    else delete ficha.conferidos[id];
+    gravarFicha();
+    desenharChecklist();
+    const novo = $("ficha-checklist").querySelector(`[data-conferido="${id}"]`);
+    if (novo) novo.focus();
+  });
   $("ficha-checklist").addEventListener("click", (e) => {
     const b = e.target.closest("[data-ir]");
     if (!b || !mesmaAba(ficha)) return;

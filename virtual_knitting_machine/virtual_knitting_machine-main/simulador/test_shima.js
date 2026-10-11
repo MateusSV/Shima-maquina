@@ -399,7 +399,8 @@ test("processamento: o que o exemplo usa, o que falta e o resumo", semPasta, () 
   const texto = Recursos.linhasDoProcessamento("ONCA.dat", dados, uso, repeticoes).join("\n");
   assert.match(texto, /Máquina: SSG122SV · finura 7G/);
   assert.match(texto, /R3 4 → guia 4 · fio lã 2\/28 · cor #2B2A33 · entra pela direita \(painel 1: 191–200, 203–364; painel 2: 191–200, 203–364\)/);
-  assert.match(texto, /Painel 2, carreiras 216–223 \(R2 = 30\): repete 30 vez\(es\)/);
+  assert.match(texto, /Painel 2, carreiras 216–223 \(R2 = 30, R1 = 1\): repete 30 vez\(es\)/);
+  assert.deepEqual(uso.blocosR2.map((b) => b.dentro), [[1], [1]]); // a R1 guarda 1 dentro do bloco (a guia tem 6/7)
   assert.match(texto, /R6 17 → frente 36 · atrás 36/);
   assert.match(texto, /Corpo \(carreiras 203–359\): puxador 40 · velocidade 0.6/);
 });
@@ -467,4 +468,53 @@ test("pacotes: muitas repetições só contam as carreiras, sem montar a imagem"
   const res = Recursos.desenvolverComPacotes(doc, painel, { repeticoes: { "216-223": 9999 }, limite: 8000 });
   assert.deepEqual([res.h, res.px, res.painel.carreiras], [590 + 9998 * 8, null, 179 + 9998 * 8]);
   assert.ok(Date.now() - inicio < 1000, "contar não pode depender do número de repetições");
+});
+
+test("trechos: resumo dos códigos e das linhas de opção de cada trecho do exemplo", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const painel = Recursos.paineis(ShimaDat.linhasDeOpcao(doc))[0];
+  const resumo = Object.fromEntries(Recursos.trechosDoPainel(doc, painel).map((t) => [t.id, Recursos.resumoDoTrecho(doc, painel, t)]));
+  assert.deepEqual(resumo.barra.alterna, [51, 52]); // tubular: frente e atrás alternando
+  assert.deepEqual([resumo.barra.guias, resumo.barra.pontos], [[4], [14, 17]]);
+  assert.deepEqual([resumo.transferencia.guias, resumo.transferencia.cancela], [[], true]);
+  assert.deepEqual([resumo.corpo.codigos[0].cor, resumo.corpo.pontos, resumo.corpo.economizador], [1, [5], [55]]);
+  assert.deepEqual(resumo.inicio.guias, [1]);
+  assert.deepEqual(Recursos.valoresNasCarreiras(doc, painel.R, 6, 191, 200), [14, 17]);
+});
+
+test("forma: trechos difíceis com diminuições fortes seguidas", () => {
+  const pecas = Recursos.calcularModelo("careca", {}, { colunas: 30, carreiras: 40 }).pecas;
+  const frente = Recursos.planoForma(pecas[0].forma, {});
+  const gola = frente.passos.find((s) => s.nome === "Gola: diminuições");
+  assert.deepEqual(gola.eventos.slice(0, 5).map((e) => [e.carreira, e.n, e.intervalo]), [[211, 2, 2], [213, 2, 2], [215, 2, 2], [217, 2, 2], [219, 1, 2]]);
+  assert.deepEqual(Recursos.trechosDificeis(frente), [{ passo: "Gola: diminuições", de: 211, ate: 217, vezes: 4, n: 2, intervalo: 2 }]);
+  // Uma diminuição por vez, bem espalhada, não é difícil.
+  const painel = Recursos.planoForma({ tipo: "painel", W: 40, H: 60, barra: 4 }, {});
+  assert.deepEqual(Recursos.trechosDificeis(painel), []);
+});
+
+test("forma: números que não cabem viram aviso e não há passo sem carreiras", () => {
+  const pecas = Recursos.calcularModelo("careca", {}, { colunas: 30, carreiras: 40 }).pecas;
+  const passos = (forma) => Recursos.planoForma(forma, {}).passos;
+  // Com os números do Modelo, nenhum aviso.
+  for (const p of pecas) assert.ok(!passos(p.forma).some((s) => s.aviso), p.nome);
+  const curto = passos({ ...pecas[0].forma, H: 86, barra: 125 });
+  assert.match(curto[0].texto, /barra 125 → 84/);
+  for (const s of [...curto, ...passos({ ...pecas[0].forma, H: 9, degraus: 6 }), ...passos({ ...pecas[2].forma, barra: 0 })]) {
+    if (s.de !== undefined) assert.ok(s.de >= 1 && s.ate >= s.de, `${s.nome} ${s.de}–${s.ate}`);
+  }
+  // Manga baixa: os aumentos param antes da copa (a peça não volta a crescer).
+  const baixa = Recursos.planoForma({ ...pecas[2].forma, H: 8, barra: 4 }, {});
+  assert.ok(baixa.passos.some((s) => s.nome === "Confira a copa"));
+  const larguras = baixa.linhas.map((l) => l.segs.concat(l.arrem).reduce((t, [a, b]) => t + b - a + 1, 0));
+  const copa0 = baixa.passos.find((s) => s.nome === "Copa: arremate").de;
+  assert.ok(larguras.slice(copa0).every((w, i, lista) => i === 0 || w <= lista[i - 1]), `larguras ${larguras}`);
+});
+
+test("painel sem área de desenho (L e R encostados) não quebra os trechos", () => {
+  const painel = { numero: 1, L: null, R: null, x0: 10, x1: 9, y0: 0, y1: 4 };
+  const doc = ShimaDat.novo(20, 5, null);
+  assert.equal(Recursos.areaDeMalha(doc, painel), null);
+  const r = Recursos.resumoDoTrecho(doc, painel, { id: "corpo", nome: "Corpo", de: 1, ate: 5 });
+  assert.deepEqual([r.codigos, r.alterna, r.guias], [[], null, []]);
 });
