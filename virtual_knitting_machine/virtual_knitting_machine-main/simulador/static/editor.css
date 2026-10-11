@@ -264,11 +264,13 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--destaque
 .campo-barra { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--suave); }
 .separador { width: 1px; height: 24px; background: var(--linha); margin: 0 4px; }
 
-.area-janela { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 18px; background: var(--faixa); }
+.area-janela { position: relative; flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 18px; background: var(--faixa); }
 .janela { position: relative; grid-column: 2; grid-row: 1; min-height: 0; min-width: 0; overflow: auto; background: var(--mesa); }
-.regua { display: block; width: 100%; height: 100%; }
-.regua-carreiras { grid-column: 1; grid-row: 1; border-right: 1px solid var(--linha); }
-.regua-agulhas { grid-column: 2; grid-row: 2; border-top: 1px solid var(--linha); }
+/* As réguas ficam por cima da área delas (posição absoluta) para o tamanho do canvas não mexer no da grade:
+   no celular, com a altura automática, uma régua alta não deixava a área do desenho diminuir. */
+.regua { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.regua-carreiras { grid-area: 1 / 1 / 2 / 2; border-right: 1px solid var(--linha); }
+.regua-agulhas { grid-area: 2 / 2 / 3 / 3; border-top: 1px solid var(--linha); }
 .regua-canto { grid-column: 1; grid-row: 2; }
 .folha { position: relative; margin: 24px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 24px rgba(0, 0, 0, 0.35); }
 .folha::after { content: ""; position: absolute; right: -24px; bottom: -24px; width: 1px; height: 1px; }
@@ -563,8 +565,7 @@ details > summary { cursor: pointer; }
 .log-processamento .ok-texto, .log-processamento .alerta { font-weight: 500; }
 #processar-conteudo .falta { border-color: var(--alerta); box-shadow: inset 0 0 0 1px var(--alerta); }
 .barra-progresso { height: 8px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 4px; overflow: hidden; }
-.barra-progresso span { display: block; height: 100%; background: var(--destaque); transition: width 0.15s linear; }
-@media (prefers-reduced-motion: reduce) { .barra-progresso span { transition: none; } }
+.barra-progresso span { display: block; height: 100%; background: var(--destaque); }
 .onde-usado { display: inline-block; white-space: nowrap; }
 
 .todas-linhas { display: flex; flex-direction: column; gap: 3px; }

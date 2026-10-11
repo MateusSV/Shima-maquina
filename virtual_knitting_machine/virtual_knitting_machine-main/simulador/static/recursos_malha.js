@@ -375,7 +375,9 @@
         nome: "Gola V: divisão no centro",
         de: gola0,
         ate: gola0,
-        texto: arremG ? `${arremG} agulha arrematada no centro. Daqui para cima os dois lados seguem separados.` : "A frente se divide no centro, sem arremate. Daqui para cima os dois lados seguem separados.",
+        texto: arremG
+          ? `${arremG} agulha${arremG > 1 ? "s arrematadas" : " arrematada"} no centro. Daqui para cima os dois lados seguem separados.`
+          : "A frente se divide no centro, sem arremate. Daqui para cima os dois lados seguem separados.",
       });
       if (evGola.length) passos.push({ nome: "Gola V: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `${resumoReto(evGola, "−", "de cada lado")}.`, eventos: eventos(evGola, gola0) });
     } else {
@@ -388,7 +390,7 @@
     passos.sort((s, t) => s.de - t.de);
     if (meia) passos.push({ nome: "A outra frente", texto: "Esta frente tem a abertura na borda da direita (o meio, com a vista dos botões). A outra frente é o espelho: abertura na borda da esquerda." });
     const resumo = meia
-      ? `Uma das frentes: começa com ${W} agulhas, fica com ${W - recuo} depois da cava e termina num ombro de ${Math.max(0, ombro)} agulhas. São ${recuo} agulhas tiradas na borda da cava e ${gola} na borda do meio (gola em V).`
+      ? `Uma das frentes: começa com ${W} agulhas e termina num ombro de ${Math.max(0, ombro)} agulhas. São ${recuo} agulhas tiradas na borda da cava e ${gola} na borda do meio (gola em V).`
       : `Começa com ${W} agulhas, fica com ${W - 2 * recuo} depois da cava e termina em 2 ombros de ${Math.max(0, ombro)} agulhas com uma gola ${emV ? "em V " : ""}de ${abertura}. São ${recuo} agulhas tiradas de cada lado na cava e ${ladoGola} de cada lado da gola.`;
     return { W, H, linhas, passos: [...avisos, ...passos], resumo };
   }
@@ -1402,7 +1404,7 @@
         continue;
       }
       const semGuia = [], semPonto = [], cancelaComGuia = [], cancela = [], semLargura = [], soltos = [];
-      const transfere = [], transfereComFio = [];
+      const transfere = [], transfereComGuia = [], transfereTecendo = [], transfereSemR5 = [];
       let esquerda = Infinity, direita = -Infinity;
       for (let y = p.y0; y <= p.y1; y++) {
         let tece = false, tem13 = false, transf = false, seguidos = 0, maior = 0;
@@ -1423,9 +1425,13 @@
         if (tece && !tem(3)) semGuia.push(c);
         if (tece && !tem(6)) semPonto.push(c);
         // Na carreira de transferência (60/70) a R5 cancela a malha e a R3 fica vazia: o carro só passa os
-        // pontos de uma frontura para a outra. Ela entra só nesta regra, não na de cancelar malha.
-        if (transf) (tem(3) || !tem(5) ? transfereComFio : transfere).push(c);
-        else if (tem(5)) (tem(3) ? cancelaComGuia : cancela).push(c);
+        // pontos de uma frontura para a outra. Ela entra só nestas regras, não nas de cancelar malha.
+        if (transf) {
+          const r3 = tem(3), r5 = tem(5);
+          if (r3) transfereComGuia.push(c);
+          if (!r5) (tece ? transfereTecendo : transfereSemR5).push(c);
+          if (!r3 && r5) transfere.push(c);
+        } else if (tem(5)) (tem(3) ? cancelaComGuia : cancela).push(c);
         if (tece && !tem13) semLargura.push(c);
         if (maior > limite) soltos.push(c);
       }
@@ -1433,15 +1439,32 @@
       const nome = lista.length > 1 ? ` (painel ${p.numero})` : "";
       if (semGuia.length) itens.push({ nivel: "aviso", regra: "sem-guia", titulo: `Carreiras com malha e sem guia-fio (R3)${nome}`, texto: "Estas carreiras têm códigos de malha, mas a linha R3 está vazia. Pode ser que usem o guia da carreira anterior; confira no KnitPaint.", ...onde(semGuia) });
       if (semPonto.length) itens.push({ nivel: "aviso", regra: "sem-ponto", titulo: `Carreiras com malha e sem número de ponto (R6)${nome}`, texto: "Sem R6 a carreira usa o ponto padrão da máquina. Confira se é isso que você quer.", ...onde(semPonto) });
-      if (transfereComFio.length)
+      if (transfereComGuia.length)
         itens.push({
           nivel: "erro",
-          regra: "transferencia-com-fio",
-          titulo: `Transferência com fio${nome}`,
-          texto: "Há transferência (60/70) em carreira que também tricota ou leva guia-fio. Na carreira de transferência a R5 cancela a malha e a R3 fica vazia: as agulhas só passam os pontos de uma frontura para a outra.",
-          ...onde(transfereComFio),
+          regra: "transferencia-com-guia",
+          titulo: `Transferência com guia-fio (R3)${nome}`,
+          texto: "Há transferência (60/70) em carreira com guia-fio na R3. Na carreira de transferência a R3 fica vazia: as agulhas só passam os pontos de uma frontura para a outra.",
+          ...onde(transfereComGuia),
         });
-      else if (transfere.length) itens.push({ nivel: "info", regra: "transferencia-coerente", titulo: `Transferência sem fio: coerente${nome}`, texto: "Nas carreiras de transferência (60/70) a R5 cancela a malha e a R3 está vazia: as agulhas só passam os pontos de uma frontura para a outra.", ...onde(transfere) });
+      if (transfereTecendo.length)
+        itens.push({
+          nivel: "erro",
+          regra: "transferencia-tecendo",
+          titulo: `Transferência em carreira que tricota${nome}`,
+          texto: "Há transferência (60/70) em carreira que também tem códigos de malha e não tem R5. Na carreira de transferência a R5 cancela a malha.",
+          ...onde(transfereTecendo),
+        });
+      if (transfereSemR5.length)
+        itens.push({
+          nivel: "aviso",
+          regra: "transferencia-sem-r5",
+          titulo: `Transferência sem cancelar malha (R5)${nome}`,
+          texto: "Estas carreiras só transferem (60/70), mas não têm R5. Normalmente a R5 cancela a malha na carreira de transferência; confira no KnitPaint.",
+          ...onde(transfereSemR5),
+        });
+      if (transfere.length && !transfereComGuia.length && !transfereTecendo.length && !transfereSemR5.length)
+        itens.push({ nivel: "info", regra: "transferencia-coerente", titulo: `Transferência sem fio: coerente${nome}`, texto: "Nas carreiras de transferência (60/70) a R5 cancela a malha e a R3 está vazia: as agulhas só passam os pontos de uma frontura para a outra.", ...onde(transfere) });
       if (cancelaComGuia.length) itens.push({ nivel: "aviso", regra: "cancela-com-guia", titulo: `Cancelar malha (R5) com guia-fio (R3)${nome}`, texto: "A carreira não tece, mas tem guia-fio. Confira se o guia deve passar nessa carreira.", ...onde(cancelaComGuia) });
       else if (cancela.length) itens.push({ nivel: "info", regra: "cancela-coerente", titulo: `Cancelar malha sem guia-fio: coerente${nome}`, texto: "Nas carreiras com R5 a malha é cancelada e a R3 está vazia: as agulhas só transferem ou esperam.", ...onde(cancela) });
       if (semLargura.length) itens.push({ nivel: "aviso", regra: "sem-largura", titulo: `Carreiras com malha sem a largura do guia-fio (13)${nome}`, texto: "O código 13 marca até onde o guia-fio vai. Estas carreiras tecem, mas não têm a marca na área do painel.", ...onde(semLargura) });

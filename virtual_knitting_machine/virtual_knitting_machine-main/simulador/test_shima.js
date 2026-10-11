@@ -392,13 +392,21 @@ test("verificar: transferência com fio é erro", semPasta, () => {
   Recursos.pintarValorNaLinha(doc, p.R, 3, y201, y201, 4);
   Recursos.pintarValorNaLinha(doc, p.R, 5, y202, y202, 0);
   const itens = Recursos.verificarDesenho(doc, ShimaDat.linhasDeOpcao(doc), { flutuacaoMaxima: 5 });
-  const erro = itens.find((i) => i.regra === "transferencia-com-fio");
-  assert.deepEqual([erro.nivel, erro.titulo, erro.carreiras], ["erro", "Transferência com fio (painel 1)", "201–202"]);
+  const regra = (r) => itens.filter((i) => i.regra === r).map((i) => [i.nivel, i.titulo, i.carreiras]);
+  assert.deepEqual(regra("transferencia-com-guia"), [["erro", "Transferência com guia-fio (R3) (painel 1)", "201"]]);
+  // A 202 só transfere e ficou sem a R5: aviso, não erro (não tricota nem leva guia).
+  assert.deepEqual(regra("transferencia-sem-r5"), [["aviso", "Transferência sem cancelar malha (R5) (painel 1)", "202"]]);
+  assert.deepEqual(regra("transferencia-tecendo"), []);
   // A carreira de transferência não aparece também como "cancelar malha com guia-fio".
   assert.ok(!itens.some((i) => i.regra === "cancela-com-guia" && i.painel === 1));
   assert.ok(!itens.some((i) => i.regra === "nenhum"));
   // O painel 2 continua coerente.
-  assert.equal(itens.find((i) => i.regra === "transferencia-coerente").painel, 2);
+  assert.deepEqual(itens.filter((i) => i.regra === "transferencia-coerente").map((i) => i.painel), [2]);
+  // Código de malha na carreira de transferência sem R5: erro.
+  const y = doc.altura - 202;
+  doc.pixels[y * doc.largura + p.x0 + 10] = 1;
+  const tecendo = Recursos.verificarDesenho(doc, ShimaDat.linhasDeOpcao(doc), { flutuacaoMaxima: 5 }).find((i) => i.regra === "transferencia-tecendo");
+  assert.deepEqual([tecendo.nivel, tecendo.carreiras], ["erro", "202"]);
 });
 
 test("pacotes: trechos do exemplo, desperdício, ribana, arremate e sem barra", semPasta, () => {

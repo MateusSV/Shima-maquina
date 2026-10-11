@@ -99,8 +99,9 @@ cada diálogo diz em que etapa está e tem o botão **Próximo**:
   **Escurecer o desenho** deixa só as linhas de opção em destaque.
 - **Verificar**: procura carreiras com malha sem guia-fio (R3) ou sem ponto (R6), cancelar malha (R5) com
   guia-fio, falta da largura do guia (13), flutuações longas (16), painéis diferentes e trechos difíceis na
-  forma das peças do Modelo. Marca como **ERRO** a transferência (60/70) em carreira que tricota ou leva
-  guia-fio, os fios soltos longos no jacquard do corpo e a intarsia com mais guias do que a máquina tem. Cada
+  forma das peças do Modelo. Marca como **ERRO** a transferência (60/70) com guia-fio na R3 ou em carreira que
+  tricota sem a R5, e o corpo que não dá para tecer nem em jacquard (fios soltos longos com o avesso escolhido
+  no Jacquard) nem em intarsia (mais guias do que a máquina tem); quando só um dos dois não serve, é aviso. Cada
   item tem um botão para a ferramenta que resolve (a linha de opção, o ponto no Processar, o jacquard, a
   forma). Mostra as agulhas das duas fronturas com o carro passando, carreira a carreira.
 - **Pacotes e altura**: o painel dividido em trechos (início, barra, transferência, corpo, final) pelas linhas

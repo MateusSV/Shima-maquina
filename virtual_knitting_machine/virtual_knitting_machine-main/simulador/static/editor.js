@@ -312,6 +312,8 @@ function abrirBuffer(nome, buffer, origem, extra = {}) {
   }
   const existente = estado.abas.find((a) => a.nome === nome && a.origem === origem);
   if (existente) {
+    // Aberta de novo junto com a pasta: passa a ser desta pasta (para achar os .000 e .QFD dela).
+    Object.assign(existente, extra);
     mostrarAba(existente);
     return existente;
   }

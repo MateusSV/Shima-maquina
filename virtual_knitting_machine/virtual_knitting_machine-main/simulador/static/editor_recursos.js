@@ -360,7 +360,7 @@ function desenharBiblioteca() {
     el.innerHTML = cat.motivos
       .map(
         (m, i) => `<div class="item-motivo"><button type="button" class="motivo" data-motivo="${i}" aria-pressed="${estado.motivo === m}" title="${esc(m.nome)}: ${m.w} × ${m.h} pontos, códigos ${codigosDoMotivo(m)}">
-          <canvas aria-hidden="true"></canvas><span class="nome-motivo">${esc(m.nome)}</span><span class="tamanho-motivo mono">${m.w} × ${m.h} · ${codigosDoMotivo(m)}</span></button>${
+          <canvas aria-hidden="true"></canvas><span class="nome-motivo">${esc(m.nome)}</span><span class="tamanho-motivo mono">${m.w} × ${m.h} · ${codigosDoMotivo(m, 6)}</span></button>${
           cat.meus ? `<button type="button" class="apagar-motivo" data-apagar-motivo="${i}" aria-label="Apagar ${esc(m.nome)}" title="Apagar">×</button>` : ""
         }</div>`,
       )
@@ -373,8 +373,11 @@ function desenharBiblioteca() {
     : `<span class="suave">Escolha um motivo para o carimbo.</span>`;
 }
 
-// Códigos que o motivo usa, em ordem: "1, 2, 61, 71".
-const codigosDoMotivo = (m) => [...new Set(m.px)].sort((x, y) => x - y).join(", ");
+// Códigos que o motivo usa, em ordem: "1, 2, 61, 71". No cartão vão no máximo `maximo` (o resto é contado).
+function codigosDoMotivo(m, maximo = Infinity) {
+  const lista = [...new Set(m.px)].sort((x, y) => x - y);
+  return lista.length > maximo ? `${lista.slice(0, maximo).join(", ")} e mais ${lista.length - maximo}` : lista.join(", ");
+}
 
 // Prévia do motivo repetido (pelo menos 8 × 8 pontos), a partir do canto de baixo à esquerda.
 function desenharMotivo(cv, m, paleta) {
@@ -1094,6 +1097,7 @@ function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
   form.maquina.addEventListener("change", () => {
     modelo.maquina = form.maquina.value;
     gravarArmazenado(CHAVE_MODELO, modelo);
+    atualizarTextosModelo();
   });
   form.finura.addEventListener("change", () => {
     modelo.finura = Number(form.finura.value);
@@ -1112,6 +1116,7 @@ function desenharEsquema(r = ultimoModelo || calcularModeloAtual()) {
     if (pasta.finura) modelo.finura = pasta.finura;
     gravarArmazenado(CHAVE_MODELO, modelo);
     abrirModelo();
+    form.maquina.focus(); // o botão sumiu com a nota nova
   });
   $("modelo-medidas").addEventListener("input", (e) => {
     const id = e.target.dataset.medida;
@@ -1137,7 +1142,7 @@ const formaOpcoes = Object.assign({ porVez: 1, marca: 3, vista: "real", zoom: 0,
 formaOpcoes.codigos = { ...CODIGOS_FORMA, ...(formaOpcoes.codigos || {}) };
 if (!formaOpcoes.ajustes || typeof formaOpcoes.ajustes !== "object") formaOpcoes.ajustes = {};
 let formaPeca = 0;
-let formaDestaque = null; // passo da forma destacado na grade
+let formaDestaque = null; // nome do passo da forma destacado na grade
 let formaGrade = null; // medidas da última grade desenhada (para ler o ponto debaixo do mouse)
 // Cores da grade (no desenho entram os códigos acima).
 const CORES_FORMA = [
@@ -1343,8 +1348,9 @@ function desenharFormaDialogo() {
     $("forma-passos").innerHTML = "";
     return;
   }
-  if (formaDestaque !== null && !(plano.passos[formaDestaque] && plano.passos[formaDestaque].de !== undefined)) formaDestaque = null;
-  const passo = formaDestaque !== null ? plano.passos[formaDestaque] : null;
+  const iDestaque = formaDestaque === null ? -1 : plano.passos.findIndex((s) => s.nome === formaDestaque && s.de !== undefined);
+  if (iDestaque < 0) formaDestaque = null;
+  const passo = iDestaque >= 0 ? plano.passos[iDestaque] : null;
   const cv = $("forma-previa");
   const { yDe, ch } = desenharGradeForma(plano, passo);
   cv.setAttribute("aria-label", `Grade da peça ${peca.nome} com ${plano.W} agulhas e ${plano.H} carreiras. ${plano.resumo}${passo ? ` Destaque: ${passo.nome}.` : ""}`);
@@ -1356,7 +1362,7 @@ function desenharFormaDialogo() {
       const onde = s.de !== undefined ? ` <span class="onde">${s.de === s.ate ? `carreira ${s.de}` : `carreiras ${s.de}–${s.ate}`}</span>` : "";
       const corpo = `<strong>${esc(s.nome)}</strong>${onde}<br>${esc(s.texto)}`;
       if (s.aviso || s.de === undefined) return `<li${s.aviso ? ' class="passo-aviso"' : ""}>${corpo}</li>`;
-      return `<li><button type="button" class="passo-forma" data-passo-forma="${i}" aria-pressed="${i === formaDestaque}">${corpo}</button></li>`;
+      return `<li><button type="button" class="passo-forma" data-passo-forma="${i}" aria-pressed="${i === iDestaque}">${corpo}</button></li>`;
     })
     .join("");
   if (passo) {
@@ -1389,7 +1395,9 @@ function lerPontoDaForma(e) {
     const b = e.target.closest("[data-passo-forma]");
     if (!b) return;
     const i = Number(b.dataset.passoForma);
-    formaDestaque = formaDestaque === i ? null : i;
+    const { plano } = planoAtual();
+    const nome = plano && plano.passos[i] ? plano.passos[i].nome : null;
+    formaDestaque = formaDestaque === nome ? null : nome;
     desenharFormaDialogo();
     const novo = $("forma-passos").querySelector(`[data-passo-forma="${i}"]`);
     if (novo) novo.focus();
@@ -2081,12 +2089,16 @@ function itensDoVerificar(a, maximo) {
   return (cor.length ? itens.filter((i) => i.regra !== "nenhum") : itens).concat(cor, itensDaForma());
 }
 
-// Jacquard e intarsia no corpo de cada painel: fios soltos longos com o avesso em flutuação e guia-fios da
-// intarsia. Só contam as cores com pelo menos 5% dos pontos (ourela e marcas ficam de fora).
+// Jacquard e intarsia no corpo de cada painel: fios soltos longos com o avesso escolhido no Jacquard e guia-fios
+// da intarsia. Só contam as cores com pelo menos 5% dos pontos (ourela e marcas ficam de fora).
 function itensDeCor(a, maximo) {
   const d = a.doc;
   const itens = [];
-  const disponiveis = inteiro($("dlg-jacquard").querySelector("form").guias.value, 8, 1, 64);
+  // O avesso e os guias da máquina são os escolhidos no Jacquard (o avesso decide quanto fio fica solto).
+  const formJ = $("dlg-jacquard").querySelector("form");
+  const disponiveis = inteiro(formJ.guias.value, 8, 1, 64);
+  const estrutura = formJ.estrutura.value || "flutuacao";
+  const escada = inteiro(formJ.escada.value, 4, 2, 12);
   for (const { p, trechos } of paineisComTrechos(a)) {
     const corpo = trechos.find((t) => t.id === "corpo");
     if (p.x0 === null || !corpo) continue;
@@ -2102,36 +2114,48 @@ function itensDeCor(a, maximo) {
     );
     if (principais.size < 2) continue;
     const nome = ` (painel ${p.numero})`;
-    const longas = RM.flutuacoes(d.pixels, d.largura, r, "flutuacao").lista.filter((f) => principais.has(f.cor) && f.comprimento > maximo);
-    if (longas.length) {
+    const longas = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada).lista.filter((f) => principais.has(f.cor) && f.comprimento > maximo);
+    const guias = RM.guiasIntarsia(d.pixels, d.largura, r).guias.filter((g) => principais.has(g.cor)).length;
+    // Jacquard e intarsia são dois jeitos de tecer o mesmo desenho: só é erro quando nenhum dos dois serve.
+    const semJacquard = longas.length > 0, semIntarsia = guias > disponiveis;
+    const nivel = semJacquard && semIntarsia ? "erro" : "aviso";
+    const avesso = NOME_AVESSO[estrutura] || estrutura;
+    if (semJacquard) {
       const maior = longas.reduce((x, f) => (f.comprimento > x.comprimento ? f : x));
       itens.push({
-        nivel: "erro",
+        nivel,
         regra: "jacquard",
         painel: p.numero,
         area: r,
         titulo: `Flutuações longas no jacquard${nome}`,
-        texto: `Com o avesso em flutuação, ${longas.length.toLocaleString("pt-BR")} fios soltos passam de ${maximo} agulhas no corpo; o maior tem ${maior.comprimento} agulhas (cor ${maior.cor}). Em birdseye ou escada eles ficam curtos.`,
+        texto: `Com o avesso ${avesso}, ${longas.length.toLocaleString("pt-BR")} fios soltos passam de ${maximo} agulhas no corpo; o maior tem ${maior.comprimento} agulhas (cor ${maior.cor}).${
+          estrutura === "flutuacao" ? " Em birdseye ou escada eles ficam curtos." : ""
+        }${semIntarsia ? "" : ` Em intarsia o corpo cabe em ${guias} guia-fio${guias === 1 ? "" : "s"}.`}`,
         carreiras: String(d.altura - maior.y),
         y: maior.y,
         x0: maior.x0,
         x1: maior.x1,
       });
     }
-    const guias = RM.guiasIntarsia(d.pixels, d.largura, r).guias.filter((g) => principais.has(g.cor)).length;
-    if (guias > disponiveis) {
+    if (semIntarsia) {
       itens.push({
-        nivel: "erro",
+        nivel,
         regra: "intarsia",
         painel: p.numero,
         area: r,
         titulo: `Intarsia passa do limite de guias${nome}`,
-        texto: `Em intarsia o corpo precisaria de ${guias} guia-fios, mais que os ${disponiveis} da máquina. Faça em jacquard ou simplifique o desenho.`,
+        texto: `Em intarsia o corpo precisaria de ${guias} guia-fios, mais que os ${disponiveis} da máquina.${
+          semJacquard
+            ? " E em jacquard com este avesso sobram fios soltos longos: simplifique o desenho ou mude o avesso no Jacquard."
+            : ` Em jacquard (avesso ${avesso}) os fios soltos ficam curtos: faça em jacquard.`
+        }`,
       });
     }
   }
   return itens;
 }
+
+const NOME_AVESSO = { flutuacao: "em flutuação", birdseye: "em birdseye", escada: "em escada", tubular: "tubular" };
 
 const ONDE_NA_FORMA = { Cava: "na cava", Gola: "na gola", "Gola V": "na gola V", Copa: "na copa", Aumentos: "nos aumentos" };
 
@@ -2150,7 +2174,7 @@ function itensDaForma() {
         nivel: "info",
         regra: "forma",
         peca: indice,
-        passo: plano.passos.findIndex((x) => x.nome === t.passo),
+        passo: t.passo,
         titulo: `Trecho difícil ${ONDE_NA_FORMA[parte] || `em ${parte.toLowerCase()}`} (${peca.nome} do Modelo)`,
         texto: `${peca.nome} · ${parte}: começa com ${t.vezes} ${tipo} de ${t.n} agulhas a cada ${t.intervalo} carreiras (carreiras ${t.de}–${t.ate} da peça). Use velocidade menor e confira o puxador nesse trecho.`,
       });
@@ -2165,14 +2189,25 @@ const FERRAMENTAS_VERIF = {
   "sem-ponto": "Abrir o ponto no Processar",
   "cancela-com-guia": "Abrir a linha R5",
   "cancela-coerente": "Abrir a linha R5",
-  "transferencia-com-fio": "Abrir a linha R5",
+  "transferencia-com-guia": "Abrir a linha R3",
+  "transferencia-tecendo": "Abrir a linha R5",
+  "transferencia-sem-r5": "Abrir a linha R5",
   "transferencia-coerente": "Abrir a linha R5",
   "paineis-diferentes": "Ver a R2",
   jacquard: "Abrir jacquard",
   intarsia: "Abrir intarsia",
   forma: "Abrir forma",
 };
-const LINHA_DO_ITEM = { "sem-guia": "R3", "cancela-com-guia": "R5", "cancela-coerente": "R5", "transferencia-com-fio": "R5", "transferencia-coerente": "R5", "paineis-diferentes": "R2" };
+const LINHA_DO_ITEM = {
+  "sem-guia": "R3",
+  "cancela-com-guia": "R5",
+  "cancela-coerente": "R5",
+  "transferencia-com-guia": "R3",
+  "transferencia-tecendo": "R5",
+  "transferencia-sem-r5": "R5",
+  "transferencia-coerente": "R5",
+  "paineis-diferentes": "R2",
+};
 
 function abrirFerramentaDoItem(item) {
   const a = verif.a;
@@ -2198,7 +2233,7 @@ function abrirFerramentaDoItem(item) {
     }
   } else if (item.regra === "forma") {
     abrirForma(item.peca);
-    formaDestaque = item.passo >= 0 ? item.passo : null;
+    formaDestaque = item.passo || null;
     desenharFormaDialogo();
   }
 }
@@ -3457,7 +3492,16 @@ function desenharProcessar() {
 
 // Os campos que o processamento precisa ficam com a borda amarela enquanto estão vazios (como o passo que falta).
 function marcarVazios() {
-  $("processar-conteudo").querySelectorAll("[data-obrigatorio]").forEach((el) => el.classList.toggle("falta", String(el.value).trim() === ""));
+  $("processar-conteudo").querySelectorAll("[data-obrigatorio]").forEach(marcarCampo);
+}
+
+// Campo que falta: borda amarela e, para o leitor de tela, obrigatório e inválido enquanto vazio.
+function marcarCampo(el) {
+  const vazio = String(el.value).trim() === "";
+  el.classList.toggle("falta", vazio);
+  el.setAttribute("aria-required", "true");
+  if (vazio) el.setAttribute("aria-invalid", "true");
+  else el.removeAttribute("aria-invalid");
 }
 
 // Confere passo a passo, como a máquina leria, e mostra as linhas uma a uma (de uma vez com menos movimento).
@@ -3529,7 +3573,7 @@ function rodarProcessamento() {
     } else return;
     if (!t.dataset.repChave) gravarProcessamento(proc.a);
     proc.log = null; // o que foi processado antes já não vale
-    if (t.dataset.obrigatorio !== undefined) t.classList.toggle("falta", String(t.value).trim() === "");
+    if (t.dataset.obrigatorio !== undefined) marcarCampo(t);
     desenharPassosProc();
   });
   $("processar-conteudo").addEventListener("click", (e) => {
@@ -3616,7 +3660,13 @@ function arquivosDoPrograma(a) {
   let lista = candidatos.filter((x) => baseDoNome(x.nome) === base);
   let como = "com o mesmo nome do desenho";
   if (!lista.length) {
-    lista = candidatos.filter((x) => daMesmaPasta(a, x));
+    // Os que têm o nome de outro desenho (aberto ou na lista da pasta) são daquele desenho, não deste.
+    const outros = new Set([
+      ...estado.abas.filter((x) => x.tipo === "dat").map((x) => baseDoNome(x.nome)),
+      ...(a.origem === "pasta" ? (estado.arquivosPasta || []).filter((f) => /\.dat$/i.test(f.nome)).map((f) => baseDoNome(f.nome)) : []),
+    ]);
+    outros.delete(base);
+    lista = candidatos.filter((x) => daMesmaPasta(a, x) && !outros.has(baseDoNome(x.nome)));
     como = "da mesma pasta do desenho";
   }
   lista.sort((x, y) => (x.tipo === y.tipo ? x.nome.localeCompare(y.nome) : x.tipo === "programa" ? -1 : 1));
