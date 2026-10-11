@@ -1003,7 +1003,7 @@ details > summary { cursor: pointer; }
       <label class="campo">pela cor nº <input type="number" name="para" min="0" max="255" required></label>
     </div>
     <label class="campo-check"><input type="checkbox" name="so-selecao"> Só dentro da seleção</label>
-    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Substituir</button></div>
+    <div class="botoes-dialogo"><button type="button" class="botao" value="cancelar">Cancelar</button><button class="botao principal" value="ok">Substituir</button></div>
   </form>
 </dialog>
 
@@ -1022,7 +1022,7 @@ details > summary { cursor: pointer; }
         <option value="centro">no centro</option>
       </select>
     </label>
-    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Redimensionar</button></div>
+    <div class="botoes-dialogo"><button type="button" class="botao" value="cancelar">Cancelar</button><button class="botao principal" value="ok">Redimensionar</button></div>
   </form>
 </dialog>
 
@@ -1036,7 +1036,7 @@ details > summary { cursor: pointer; }
       <label class="campo">Carreiras (altura) <input type="number" name="altura" min="1" max="8000" required></label>
       <label class="campo">Cor de fundo <input type="number" name="fundo" min="0" max="255" required></label>
     </div>
-    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Criar</button></div>
+    <div class="botoes-dialogo"><button type="button" class="botao" value="cancelar">Cancelar</button><button class="botao principal" value="ok">Criar</button></div>
   </form>
 </dialog>
 
@@ -1059,7 +1059,7 @@ details > summary { cursor: pointer; }
       <label class="campo">Largura <input type="number" name="largura" min="1" max="8000"></label>
       <label class="campo">Altura <input type="number" name="altura" min="1" max="8000"></label>
     </div>
-    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Importar</button></div>
+    <div class="botoes-dialogo"><button type="button" class="botao" value="cancelar">Cancelar</button><button class="botao principal" value="ok">Importar</button></div>
   </form>
 </dialog>
 
@@ -1072,14 +1072,14 @@ details > summary { cursor: pointer; }
       <label class="campo">Carreiras (altura) <input type="number" name="altura" min="1" max="8000" required></label>
     </div>
     <label class="campo-check"><input type="checkbox" name="proporcao" checked> Manter a proporção</label>
-    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Aplicar</button></div>
+    <div class="botoes-dialogo"><button type="button" class="botao" value="cancelar">Cancelar</button><button class="botao principal" value="ok">Aplicar</button></div>
   </form>
 </dialog>
 
 <dialog id="dlg-confirmar" aria-labelledby="confirmar-texto">
   <form method="dialog" class="dialogo">
     <p id="confirmar-texto" class="texto-dialogo"></p>
-    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok" id="confirmar-ok">Continuar</button></div>
+    <div class="botoes-dialogo"><button type="button" class="botao" value="cancelar">Cancelar</button><button class="botao principal" value="ok" id="confirmar-ok">Continuar</button></div>
   </form>
 </dialog>
 
@@ -1087,7 +1087,7 @@ details > summary { cursor: pointer; }
   <form method="dialog" class="dialogo">
     <h2 id="dlg-nome-titulo">Salvar como</h2>
     <label class="campo"><span id="dlg-nome-rotulo">Nome do arquivo</span> <input type="text" name="nome" id="campo-nome-arquivo" required></label>
-    <div class="botoes-dialogo"><button class="botao" value="cancelar" formnovalidate>Cancelar</button><button class="botao principal" value="ok">Salvar</button></div>
+    <div class="botoes-dialogo"><button type="button" class="botao" value="cancelar">Cancelar</button><button class="botao principal" value="ok">Salvar</button></div>
   </form>
 </dialog>
 
@@ -3990,6 +3990,13 @@ function abrirDialogo(id) {
   dlg.showModal();
 }
 
+// O "Cancelar" dos diálogos pequenos é type="button", para o Enter num campo usar o botão de confirmar (o primeiro
+// botão de envio do formulário); o clique nele fecha o diálogo como cancelado.
+document.addEventListener("click", (e) => {
+  const cancelar = e.target.closest('dialog button[type="button"][value="cancelar"]');
+  if (cancelar) cancelar.closest("dialog").close("cancelar");
+});
+
 function trocarExtensao(nome, ext) {
   return nome.replace(/\.[^.]*$/, "") + ext;
 }
@@ -4120,6 +4127,7 @@ function desenharAbas() {
 }
 
 function marcarModificado(aba) {
+  aba.versao = (aba.versao || 0) + 1; // cada mudança: o Salvar sabe se o desenho mudou enquanto gravava
   if (!aba.modificado) {
     aba.modificado = true;
     desenharAbas();
@@ -4207,8 +4215,10 @@ async function permissaoDaPasta(pasta, pedir) {
 }
 
 async function conectarPasta(pasta, lembrar = true) {
-  // Abas abertas de outra pasta passam a ser arquivos avulsos: o "Salvar" delas não vai para a pasta nova.
-  for (const aba of estado.abas) if (aba.origem === "pasta") aba.origem = "local";
+  // Abas abertas de outra pasta passam a ser arquivos avulsos: o "Salvar" delas não vai para a pasta nova. Escolhida
+  // de novo a mesma pasta, as abas continuam dela.
+  const mesma = !!estado.pastaLocal && !!(await estado.pastaLocal.isSameEntry?.(pasta));
+  if (!mesma) for (const aba of estado.abas) if (aba.origem === "pasta") aba.origem = "local";
   estado.pastaLocal = pasta;
   estado.pastaGuardada = null;
   if (lembrar) await lembrarPasta(pasta);
@@ -4328,7 +4338,7 @@ async function abrirDaPasta(nome) {
 async function abrirTodos() {
   let primeiroDat = null;
   for (const a of estado.arquivosPasta) {
-    if (a.nome.endsWith(".bak")) continue;
+    if (/\.(bak|tmp)$/i.test(a.nome)) continue;
     const aba = await abrirDaPasta(a.nome);
     if (aba && aba.tipo === "dat" && !primeiroDat) primeiroDat = aba;
   }
@@ -4843,8 +4853,9 @@ function fixarFlutuante(aba = abaDat()) {
   const f = aba.flutuante;
   if (!f.levantado) salvarHistorico(aba);
   colarArea(aba.doc, f, f.x, f.y, f.transparente);
-  const x = limitar(f.x, 0, aba.doc.largura - 1), y = limitar(f.y, 0, aba.doc.altura - 1);
-  const w = limitar(f.x + f.w, 1, aba.doc.largura) - x, h = limitar(f.y + f.h, 1, aba.doc.altura) - y;
+  // A seleção fica na parte da colagem que caiu dentro do desenho; toda fora, não sobra seleção.
+  const x = Math.max(f.x, 0), y = Math.max(f.y, 0);
+  const w = Math.min(f.x + f.w, aba.doc.largura) - x, h = Math.min(f.y + f.h, aba.doc.altura) - y;
   aba.selecao = w > 0 && h > 0 ? { x, y, w, h } : null;
   aba.flutuante = null;
   marcarModificado(aba);
@@ -4932,6 +4943,9 @@ tela.addEventListener("pointerdown", (e) => {
     if (!noDesenho(p, d) || d.pixels[p.y * d.largura + p.x] === cor) return;
     salvarHistorico(a);
     balde(d, p, cor);
+    // Com Espelhado, enche também a partir do ponto simétrico (se o primeiro balde ainda não chegou lá).
+    const q = eixoEspelho === null ? null : { x: eixoEspelho - p.x, y: p.y };
+    if (q && noDesenho(q, d) && d.pixels[q.y * d.largura + q.x] !== cor) balde(d, q, cor);
     renderizar();
     atualizarPainel();
   } else if (f === "conta-gotas") {
@@ -4939,7 +4953,7 @@ tela.addEventListener("pointerdown", (e) => {
     const n = d.pixels[p.y * d.largura + p.x];
     if (e.button === 2) estado.secundaria = n;
     else estado.primaria = n;
-    atualizarPainel();
+    atualizarPainel(false);
     const linha = ShimaDat.linhaDeOpcaoEm(blocosDeOpcao(a), p.x, p.y);
     if (linha) escolherLinhaDeOpcao(a, linha);
   } else if (f === "carimbo") {
@@ -5015,7 +5029,10 @@ tela.addEventListener("pointermove", (e) => {
 function terminarGesto() {
   eixoEspelho = null;
   const a = abaDat();
-  if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma" || gesto.tipo === "carimbo")) atualizarPainel();
+  if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma" || gesto.tipo === "carimbo")) {
+    marcarModificado(a); // o traço pode ter continuado depois de um Salvar feito no meio dele
+    atualizarPainel();
+  }
   // Um clique sem arrastar com a Seleção tira a seleção (em vez de deixar uma de 1 ponto).
   if (gesto && a && gesto.tipo === "selecionar" && !gesto.moveu) {
     a.selecao = null;
@@ -5529,6 +5546,7 @@ async function salvarNaPasta(a, nome) {
   } catch (erro) {
     return avisar(`Erro ao gravar: ${erro.message}`, true);
   }
+  const versao = a.versao; // o que mudar enquanto grava continua como não salvo
   try {
     let dados;
     if (estado.pastaLocal) {
@@ -5548,7 +5566,7 @@ async function salvarNaPasta(a, nome) {
     if (velha) tirarAba(velha);
     a.nome = nome;
     a.origem = "pasta";
-    a.modificado = false;
+    if (a.versao === versao) a.modificado = false;
     a.tamanho = bytes.length;
     a.impressao = impressaoDosBytes(bytes);
     desenharAbas();
@@ -5567,10 +5585,11 @@ async function baixarDat(a, nome = a.nome) {
   } catch (erro) {
     return avisar(`Erro ao gravar: ${erro.message}`, true);
   }
+  const versao = a.versao; // o que mudar enquanto baixa continua como não salvo
   const entregue = await baixar(bytes, nome);
   if (!entregue) return;
   if (a.origem !== "pasta") {
-    a.modificado = false;
+    if (a.versao === versao) a.modificado = false;
     a.tamanho = bytes.length;
     // Aberto de novo depois de baixado, o arquivo volta para esta aba.
     if (entregue === nome) a.impressao = impressaoDosBytes(bytes);
@@ -5646,10 +5665,12 @@ function escolherFerramenta(f) {
   atualizarStatus();
 }
 
-function atualizarPainel() {
+// mudouDesenho = false nas mudanças só de tela (cor escolhida, fundo, nomes): os blocos de linhas de opção continuam
+// valendo, sem varrer o desenho de novo (num desenho grande, a busca leva quase um segundo).
+function atualizarPainel(mudouDesenho = true) {
   const a = abaDat();
   if (!a) return;
-  a.opcoes = null; // depois de uma edição, os blocos de linhas de opção podem ter mudado
+  if (mudouDesenho) a.opcoes = null; // depois de uma edição, os blocos de linhas de opção podem ter mudado
   const d = a.doc;
   const cor = (n) => hexCor(d.paleta[n]);
   $("amostra-primaria").style.background = cor(estado.primaria);
@@ -5697,7 +5718,7 @@ function atualizarPainel() {
     ["Agulhas", d.largura],
     ["Carreiras", d.altura],
     ["Cores em uso", `${usadas.length} de 256`],
-    ["Origem", { pasta: `pasta ${estado.pasta}`, novo: "desenho novo", exemplo: "exemplo já carregado" }[a.origem] || "computador"],
+    ["Origem", { pasta: `pasta ${esc(estado.pasta)}`, novo: "desenho novo", exemplo: "exemplo já carregado" }[a.origem] || "computador"],
     ["Arquivo", a.tamanho ? bytesLegiveis(a.tamanho) : "ainda não salvo"],
     ["Formato", esc(String(d.assinatura || "").trim())],
   ]
@@ -5710,7 +5731,7 @@ function atualizarPainel() {
 function escolherCor(n, secundaria) {
   if (secundaria) estado.secundaria = n;
   else estado.primaria = n;
-  atualizarPainel();
+  atualizarPainel(false);
   if (estado.destacar && !secundaria) renderizar();
 }
 
@@ -5735,7 +5756,7 @@ for (const id of ["cores-uso", "codigos-nome", "grade-paleta"]) {
 $("campo-primaria").addEventListener("change", (e) => escolherCor(numeroCor(e.target.value), false));
 $("campo-fundo").addEventListener("change", (e) => {
   estado.fundo = numeroCor(e.target.value);
-  atualizarPainel();
+  atualizarPainel(false);
 });
 $("campo-rgb").addEventListener("change", (e) => {
   const a = abaDat();
@@ -5752,7 +5773,7 @@ $("campo-nome-cor").addEventListener("change", (e) => {
   if (texto) legenda[estado.primaria] = texto;
   else delete legenda[estado.primaria];
   gravarLegenda(legenda);
-  atualizarPainel();
+  atualizarPainel(false);
 });
 $("btn-trocar-cores").addEventListener("click", trocarCores);
 $("espelhado").addEventListener("change", (e) => {
@@ -5774,7 +5795,7 @@ $("colar-transparente").addEventListener("change", (e) => {
 
 function trocarCores() {
   [estado.primaria, estado.secundaria] = [estado.secundaria, estado.primaria];
-  atualizarPainel();
+  atualizarPainel(false);
 }
 
 function atualizarBotoes() {
@@ -6282,6 +6303,25 @@ function gravarArmazenado(chave, valor) {
   } catch (erro) {
     // Sem armazenamento (janela anônima, por exemplo): vale só até fechar a página.
   }
+}
+
+// Valores guardados de um desenho (processamento, repetições, pacotes, ficha): por pasta e nome, para dois X.dat de
+// pastas diferentes não se misturarem. Também vão para a chave só do nome (a de quem abre o arquivo sem a pasta, e a
+// dos valores de antes), junto com a pasta de quem gravou: a aba de outra pasta não pega os valores de lá.
+function lerDoDesenho(prefixo, a, padrao) {
+  if (a.pastaNome) {
+    const proprio = lerArmazenado(`${prefixo}${a.pastaNome}/${a.nome}`, null);
+    if (proprio !== null) return proprio;
+    const dono = lerArmazenado(`${prefixo}pasta:${a.nome}`, "");
+    if (dono && dono !== a.pastaNome) return padrao;
+  }
+  return lerArmazenado(prefixo + a.nome, padrao);
+}
+
+function gravarDoDesenho(prefixo, a, valor) {
+  if (a.pastaNome) gravarArmazenado(`${prefixo}${a.pastaNome}/${a.nome}`, valor);
+  gravarArmazenado(prefixo + a.nome, valor);
+  gravarArmazenado(`${prefixo}pasta:${a.nome}`, a.pastaNome || "");
 }
 
 // Número inteiro de um campo dentro dos limites; vazio ou inválido devolve o padrão.
@@ -7912,7 +7952,9 @@ function coresDaImagemNosFios(form) {
   avisar(`Fios com as cores da paleta mais parecidas com a imagem: ${escolhidas.filter((v) => v !== null).join(", ")}.`);
 }
 
-function carregarImagem(arquivo) {
+// Imagem do logo a partir do arquivo escolhido. Não pode se chamar carregarImagem: o editor.js já tem essa, por
+// URL, e as duas dividem o mesmo escopo global (a do último script venceria).
+function carregarImagemDoArquivo(arquivo) {
   if (window.createImageBitmap) return createImageBitmap(arquivo);
   return new Promise((pronto, falhou) => {
     const url = URL.createObjectURL(arquivo);
@@ -8093,7 +8135,7 @@ function aplicarListrasComR3(a, form) {
       logoImagem = null;
     } else {
       try {
-        const imagem = await carregarImagem(arquivo);
+        const imagem = await carregarImagemDoArquivo(arquivo);
         logoImagem = { id: `imagem:${++contadorLogo}`, imagem, w: imagem.width, h: imagem.height, nome: `imagem ${arquivo.name}` };
       } catch (erro) {
         logoImagem = null;
@@ -8127,14 +8169,16 @@ const LIMITE_JACQUARD = 300000; // pontos analisados de uma vez
 // Cores que são fio no jacquard. Nunca contam o 0, as marcas (13 largura do guia, 16 sem seleção, 99) e a
 // transferência (60/70), nem a ourela (cores só nas duas agulhas de cada ponta). No corpo de um painel, como no
 // Verificar, também ficam de fora os códigos de ponto (uma ribana de 1 e 2 não é jacquard) e as cores com menos
-// de 1% dos pontos (códigos soltos); numa seleção conta toda cor, mesmo pouca, como os pontos de um motivo.
+// de 1% dos pontos (códigos soltos); numa seleção conta toda cor, mesmo pouca, como os pontos de um motivo, e a
+// ourela só sai quando é código de ponto (como o 2 do exemplo): um fio do motivo pode ficar só na borda da seleção.
 const NAO_FIO = RESERVADAS_FIO;
 const REGRA_FIO_VERIFICAR = { minimo: 0.01, semCodigosDePonto: true };
 function coresDeFio(d, r, cores, { minimo = 0, semCodigosDePonto = false } = {}) {
   const ourela = RM.coresSoNaOurela(d.pixels, d.largura, r);
+  const daOurela = (cor) => ourela.has(cor) && (semCodigosDePonto || !!RM.tipoDePonto(cor));
   return new Set(
     cores
-      .filter((c) => !NAO_FIO.has(c.cor) && !ourela.has(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor)))
+      .filter((c) => !NAO_FIO.has(c.cor) && !daOurela(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor)))
       .map((c) => c.cor),
   );
 }
@@ -9026,13 +9070,13 @@ const LIMITE_CARREIRAS = 8000;
 let desenv = null;
 
 function repeticoesDe(a) {
-  if (!a.repeticoes) a.repeticoes = lerArmazenado(CHAVE_REPETICOES + a.nome, {});
+  if (!a.repeticoes) a.repeticoes = lerDoDesenho(CHAVE_REPETICOES, a, {});
   return a.repeticoes;
 }
 
 function pacotesDe(a) {
   if (!a.pacotes) {
-    const salvo = lerArmazenado(CHAVE_PACOTES + a.nome, {});
+    const salvo = lerDoDesenho(CHAVE_PACOTES, a, {});
     a.pacotes = { ...PACOTES_PADRAO, ...salvo, codigos: { ...CODIGOS_PACOTE, ...(salvo.codigos || {}) } };
   }
   return a.pacotes;
@@ -9235,7 +9279,7 @@ function desenharPreviaDesenvolvida(p, res) {
     if (alvo.dataset.chave) {
       const todas = repeticoesDe(a);
       todas[p.numero] = { ...(todas[p.numero] || {}), [alvo.dataset.chave]: inteiro(alvo.value, 1, 1, 9999) };
-      gravarArmazenado(CHAVE_REPETICOES + a.nome, todas);
+      gravarDoDesenho(CHAVE_REPETICOES, a, todas);
       desenv.dev = RM.desenvolvimento(a.doc, p, todas[p.numero]);
       atualizarTotalDesenvolver();
       return;
@@ -9247,7 +9291,7 @@ function desenharPreviaDesenvolvida(p, res) {
       const id = CAMPOS_CODIGO_PACOTE[alvo.name];
       pk.codigos[id] = inteiro(alvo.value, CODIGOS_PACOTE[id], 0, 255);
     } else return;
-    gravarArmazenado(CHAVE_PACOTES + a.nome, pk);
+    gravarDoDesenho(CHAVE_PACOTES, a, pk);
     estadoCamposPacotes(form, desenv.temBarra);
     atualizarTotalDesenvolver();
   });
@@ -9692,7 +9736,7 @@ let proc = null;
 // guardava antes passam para cá (ficha e processamento usam os mesmos).
 function processamentoDe(a) {
   if (a.processamento) return a.processamento;
-  const salvo = lerArmazenado(CHAVE_PROCESSAMENTO + a.nome, {});
+  const salvo = lerDoDesenho(CHAVE_PROCESSAMENTO, a, {});
   // Sem nada guardado, a máquina e a finura vêm do nome da pasta ("07 122 SSGsv") e depois do Modelo.
   const daPasta = RM.maquinaDaPasta(a.pastaNome);
   const dados = {
@@ -9703,15 +9747,15 @@ function processamentoDe(a) {
     puxador: { ...(salvo.puxador || {}) },
     velocidade: { ...(salvo.velocidade || {}) },
   };
-  const fichaSalva = lerArmazenado(CHAVE_FICHA + a.nome, null);
+  const fichaSalva = lerDoDesenho(CHAVE_FICHA, a, null);
   if (fichaSalva && fichaSalva.fios) {
     // Uma vez só: os fios saem da ficha e ficam aqui (um fio apagado no processamento não volta).
     for (const [g, fio] of Object.entries(fichaSalva.fios)) {
       if (fio && (dados.guias[g] || {}).fio === undefined) dados.guias[g] = { ...(dados.guias[g] || {}), fio };
     }
     delete fichaSalva.fios;
-    gravarArmazenado(CHAVE_FICHA + a.nome, fichaSalva);
-    gravarArmazenado(CHAVE_PROCESSAMENTO + a.nome, dados);
+    gravarDoDesenho(CHAVE_FICHA, a, fichaSalva);
+    gravarDoDesenho(CHAVE_PROCESSAMENTO, a, dados);
   }
   a.processamento = dados;
   return dados;
@@ -9725,7 +9769,7 @@ function completarGuias(dados, uso) {
 }
 
 function gravarProcessamento(a) {
-  gravarArmazenado(CHAVE_PROCESSAMENTO + a.nome, processamentoDe(a));
+  gravarDoDesenho(CHAVE_PROCESSAMENTO, a, processamentoDe(a));
 }
 
 const somaFaltas = (faltas) => Object.values(faltas).reduce((t, n) => t + n, 0);
@@ -10011,7 +10055,7 @@ function rodarProcessamento() {
       todas[painel] = { ...(todas[painel] || {}) };
       if (String(t.value).trim() === "") delete todas[painel][t.dataset.repChave];
       else todas[painel][t.dataset.repChave] = inteiro(t.value, 1, 1, 9999);
-      gravarArmazenado(CHAVE_REPETICOES + proc.a.nome, todas);
+      gravarDoDesenho(CHAVE_REPETICOES, proc.a, todas);
       const el = $("processar-altura");
       if (el) el.innerHTML = textoAlturaProc();
     } else return;
@@ -10160,7 +10204,7 @@ function htmlArquivosDoPrograma(a) {
 // escreveu fica guardado; o resto (carreiras, agulhas, máquina, velocidade...) vem do desenho e do
 // processamento cada vez que a ficha abre, para não ficar com contas velhas.
 function fichaGuardada(a) {
-  const salvo = lerArmazenado(CHAVE_FICHA + a.nome, {});
+  const salvo = lerDoDesenho(CHAVE_FICHA, a, {});
   const { corTexto, corFundo, escala } = salvo;
   const conferidos = { ...(salvo.conferidos || {}) }; // itens de "Antes de tecer" marcados à mão
   if (salvo.proprios) return { corTexto, corFundo, escala, conferidos, proprios: { campos: { ...(salvo.proprios.campos || {}) }, tempo: { ...(salvo.proprios.tempo || {}) } } };
@@ -10290,7 +10334,7 @@ function desenharFicha() {
 
 function gravarFicha() {
   const { a, dados, proprios, conferidos } = ficha;
-  gravarArmazenado(CHAVE_FICHA + a.nome, { corTexto: dados.corTexto, corFundo: dados.corFundo, escala: dados.escala, proprios, conferidos });
+  gravarDoDesenho(CHAVE_FICHA, a, { corTexto: dados.corTexto, corFundo: dados.corFundo, escala: dados.escala, proprios, conferidos });
 }
 
 // Arquivos abertos que podem ir no .zip; já vêm marcados o desenho, os que têm o mesmo nome e os .000 e .QFD

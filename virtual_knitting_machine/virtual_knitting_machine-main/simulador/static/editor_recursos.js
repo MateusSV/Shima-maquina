@@ -29,6 +29,25 @@ function gravarArmazenado(chave, valor) {
   }
 }
 
+// Valores guardados de um desenho (processamento, repetições, pacotes, ficha): por pasta e nome, para dois X.dat de
+// pastas diferentes não se misturarem. Também vão para a chave só do nome (a de quem abre o arquivo sem a pasta, e a
+// dos valores de antes), junto com a pasta de quem gravou: a aba de outra pasta não pega os valores de lá.
+function lerDoDesenho(prefixo, a, padrao) {
+  if (a.pastaNome) {
+    const proprio = lerArmazenado(`${prefixo}${a.pastaNome}/${a.nome}`, null);
+    if (proprio !== null) return proprio;
+    const dono = lerArmazenado(`${prefixo}pasta:${a.nome}`, "");
+    if (dono && dono !== a.pastaNome) return padrao;
+  }
+  return lerArmazenado(prefixo + a.nome, padrao);
+}
+
+function gravarDoDesenho(prefixo, a, valor) {
+  if (a.pastaNome) gravarArmazenado(`${prefixo}${a.pastaNome}/${a.nome}`, valor);
+  gravarArmazenado(prefixo + a.nome, valor);
+  gravarArmazenado(`${prefixo}pasta:${a.nome}`, a.pastaNome || "");
+}
+
 // Número inteiro de um campo dentro dos limites; vazio ou inválido devolve o padrão.
 function inteiro(valor, padrao, min, max) {
   const n = Math.round(parseFloat(String(valor ?? "").replace(",", ".")));
@@ -1657,7 +1676,9 @@ function coresDaImagemNosFios(form) {
   avisar(`Fios com as cores da paleta mais parecidas com a imagem: ${escolhidas.filter((v) => v !== null).join(", ")}.`);
 }
 
-function carregarImagem(arquivo) {
+// Imagem do logo a partir do arquivo escolhido. Não pode se chamar carregarImagem: o editor.js já tem essa, por
+// URL, e as duas dividem o mesmo escopo global (a do último script venceria).
+function carregarImagemDoArquivo(arquivo) {
   if (window.createImageBitmap) return createImageBitmap(arquivo);
   return new Promise((pronto, falhou) => {
     const url = URL.createObjectURL(arquivo);
@@ -1838,7 +1859,7 @@ function aplicarListrasComR3(a, form) {
       logoImagem = null;
     } else {
       try {
-        const imagem = await carregarImagem(arquivo);
+        const imagem = await carregarImagemDoArquivo(arquivo);
         logoImagem = { id: `imagem:${++contadorLogo}`, imagem, w: imagem.width, h: imagem.height, nome: `imagem ${arquivo.name}` };
       } catch (erro) {
         logoImagem = null;
@@ -1872,14 +1893,16 @@ const LIMITE_JACQUARD = 300000; // pontos analisados de uma vez
 // Cores que são fio no jacquard. Nunca contam o 0, as marcas (13 largura do guia, 16 sem seleção, 99) e a
 // transferência (60/70), nem a ourela (cores só nas duas agulhas de cada ponta). No corpo de um painel, como no
 // Verificar, também ficam de fora os códigos de ponto (uma ribana de 1 e 2 não é jacquard) e as cores com menos
-// de 1% dos pontos (códigos soltos); numa seleção conta toda cor, mesmo pouca, como os pontos de um motivo.
+// de 1% dos pontos (códigos soltos); numa seleção conta toda cor, mesmo pouca, como os pontos de um motivo, e a
+// ourela só sai quando é código de ponto (como o 2 do exemplo): um fio do motivo pode ficar só na borda da seleção.
 const NAO_FIO = RESERVADAS_FIO;
 const REGRA_FIO_VERIFICAR = { minimo: 0.01, semCodigosDePonto: true };
 function coresDeFio(d, r, cores, { minimo = 0, semCodigosDePonto = false } = {}) {
   const ourela = RM.coresSoNaOurela(d.pixels, d.largura, r);
+  const daOurela = (cor) => ourela.has(cor) && (semCodigosDePonto || !!RM.tipoDePonto(cor));
   return new Set(
     cores
-      .filter((c) => !NAO_FIO.has(c.cor) && !ourela.has(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor)))
+      .filter((c) => !NAO_FIO.has(c.cor) && !daOurela(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor)))
       .map((c) => c.cor),
   );
 }
@@ -2771,13 +2794,13 @@ const LIMITE_CARREIRAS = 8000;
 let desenv = null;
 
 function repeticoesDe(a) {
-  if (!a.repeticoes) a.repeticoes = lerArmazenado(CHAVE_REPETICOES + a.nome, {});
+  if (!a.repeticoes) a.repeticoes = lerDoDesenho(CHAVE_REPETICOES, a, {});
   return a.repeticoes;
 }
 
 function pacotesDe(a) {
   if (!a.pacotes) {
-    const salvo = lerArmazenado(CHAVE_PACOTES + a.nome, {});
+    const salvo = lerDoDesenho(CHAVE_PACOTES, a, {});
     a.pacotes = { ...PACOTES_PADRAO, ...salvo, codigos: { ...CODIGOS_PACOTE, ...(salvo.codigos || {}) } };
   }
   return a.pacotes;
@@ -2980,7 +3003,7 @@ function desenharPreviaDesenvolvida(p, res) {
     if (alvo.dataset.chave) {
       const todas = repeticoesDe(a);
       todas[p.numero] = { ...(todas[p.numero] || {}), [alvo.dataset.chave]: inteiro(alvo.value, 1, 1, 9999) };
-      gravarArmazenado(CHAVE_REPETICOES + a.nome, todas);
+      gravarDoDesenho(CHAVE_REPETICOES, a, todas);
       desenv.dev = RM.desenvolvimento(a.doc, p, todas[p.numero]);
       atualizarTotalDesenvolver();
       return;
@@ -2992,7 +3015,7 @@ function desenharPreviaDesenvolvida(p, res) {
       const id = CAMPOS_CODIGO_PACOTE[alvo.name];
       pk.codigos[id] = inteiro(alvo.value, CODIGOS_PACOTE[id], 0, 255);
     } else return;
-    gravarArmazenado(CHAVE_PACOTES + a.nome, pk);
+    gravarDoDesenho(CHAVE_PACOTES, a, pk);
     estadoCamposPacotes(form, desenv.temBarra);
     atualizarTotalDesenvolver();
   });
@@ -3437,7 +3460,7 @@ let proc = null;
 // guardava antes passam para cá (ficha e processamento usam os mesmos).
 function processamentoDe(a) {
   if (a.processamento) return a.processamento;
-  const salvo = lerArmazenado(CHAVE_PROCESSAMENTO + a.nome, {});
+  const salvo = lerDoDesenho(CHAVE_PROCESSAMENTO, a, {});
   // Sem nada guardado, a máquina e a finura vêm do nome da pasta ("07 122 SSGsv") e depois do Modelo.
   const daPasta = RM.maquinaDaPasta(a.pastaNome);
   const dados = {
@@ -3448,15 +3471,15 @@ function processamentoDe(a) {
     puxador: { ...(salvo.puxador || {}) },
     velocidade: { ...(salvo.velocidade || {}) },
   };
-  const fichaSalva = lerArmazenado(CHAVE_FICHA + a.nome, null);
+  const fichaSalva = lerDoDesenho(CHAVE_FICHA, a, null);
   if (fichaSalva && fichaSalva.fios) {
     // Uma vez só: os fios saem da ficha e ficam aqui (um fio apagado no processamento não volta).
     for (const [g, fio] of Object.entries(fichaSalva.fios)) {
       if (fio && (dados.guias[g] || {}).fio === undefined) dados.guias[g] = { ...(dados.guias[g] || {}), fio };
     }
     delete fichaSalva.fios;
-    gravarArmazenado(CHAVE_FICHA + a.nome, fichaSalva);
-    gravarArmazenado(CHAVE_PROCESSAMENTO + a.nome, dados);
+    gravarDoDesenho(CHAVE_FICHA, a, fichaSalva);
+    gravarDoDesenho(CHAVE_PROCESSAMENTO, a, dados);
   }
   a.processamento = dados;
   return dados;
@@ -3470,7 +3493,7 @@ function completarGuias(dados, uso) {
 }
 
 function gravarProcessamento(a) {
-  gravarArmazenado(CHAVE_PROCESSAMENTO + a.nome, processamentoDe(a));
+  gravarDoDesenho(CHAVE_PROCESSAMENTO, a, processamentoDe(a));
 }
 
 const somaFaltas = (faltas) => Object.values(faltas).reduce((t, n) => t + n, 0);
@@ -3756,7 +3779,7 @@ function rodarProcessamento() {
       todas[painel] = { ...(todas[painel] || {}) };
       if (String(t.value).trim() === "") delete todas[painel][t.dataset.repChave];
       else todas[painel][t.dataset.repChave] = inteiro(t.value, 1, 1, 9999);
-      gravarArmazenado(CHAVE_REPETICOES + proc.a.nome, todas);
+      gravarDoDesenho(CHAVE_REPETICOES, proc.a, todas);
       const el = $("processar-altura");
       if (el) el.innerHTML = textoAlturaProc();
     } else return;
@@ -3905,7 +3928,7 @@ function htmlArquivosDoPrograma(a) {
 // escreveu fica guardado; o resto (carreiras, agulhas, máquina, velocidade...) vem do desenho e do
 // processamento cada vez que a ficha abre, para não ficar com contas velhas.
 function fichaGuardada(a) {
-  const salvo = lerArmazenado(CHAVE_FICHA + a.nome, {});
+  const salvo = lerDoDesenho(CHAVE_FICHA, a, {});
   const { corTexto, corFundo, escala } = salvo;
   const conferidos = { ...(salvo.conferidos || {}) }; // itens de "Antes de tecer" marcados à mão
   if (salvo.proprios) return { corTexto, corFundo, escala, conferidos, proprios: { campos: { ...(salvo.proprios.campos || {}) }, tempo: { ...(salvo.proprios.tempo || {}) } } };
@@ -4035,7 +4058,7 @@ function desenharFicha() {
 
 function gravarFicha() {
   const { a, dados, proprios, conferidos } = ficha;
-  gravarArmazenado(CHAVE_FICHA + a.nome, { corTexto: dados.corTexto, corFundo: dados.corFundo, escala: dados.escala, proprios, conferidos });
+  gravarDoDesenho(CHAVE_FICHA, a, { corTexto: dados.corTexto, corFundo: dados.corFundo, escala: dados.escala, proprios, conferidos });
 }
 
 // Arquivos abertos que podem ir no .zip; já vêm marcados o desenho, os que têm o mesmo nome e os .000 e .QFD

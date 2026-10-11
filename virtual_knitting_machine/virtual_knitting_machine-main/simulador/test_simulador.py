@@ -13,8 +13,13 @@ from pathlib import Path
 
 from gerar_editor_portatil import EXEMPLO_PADRAO, SAIDA_PADRAO, gerar_artefato, gerar_html
 from ler_dat_shima import ler_dat
-from padroes import Parametros_Invalidos, simular
 from servidor import PASTA_DESENHOS, criar_servidor
+
+try:
+    from padroes import Parametros_Invalidos, simular
+except ImportError:  # Sem a biblioteca do simulador, só os testes dela ficam de fora; os do editor rodam.
+    Parametros_Invalidos = simular = None
+SEM_SIMULADOR = "biblioteca do simulador não instalada (pip install -e .)"
 
 DAT_DE_EXEMPLO = PASTA_DESENHOS / "00FE_BLS_ESTAMPA_ONÇA.dat"
 
@@ -23,6 +28,7 @@ def grade_do_tecido(resultado: dict) -> dict[tuple[int, int], str]:
     return {(p["row"], p["col"]): p["kind"] for p in resultado["pontos"]}
 
 
+@unittest.skipIf(simular is None, SEM_SIMULADOR)
 class Test_Padroes(unittest.TestCase):
 
     def test_meia_so_tem_pontos_de_frente(self):
@@ -101,6 +107,7 @@ class Test_Servidor(unittest.TestCase):
             status, _, _ = self.get(caminho)
             self.assertEqual(status, 200, caminho)
 
+    @unittest.skipIf(simular is None, SEM_SIMULADOR)
     def test_api_simular(self):
         status, tipo, corpo = self.get("/api/simular?padrao=ribana&largura=8&carreiras=3")
         self.assertEqual(status, 200)
@@ -109,6 +116,7 @@ class Test_Servidor(unittest.TestCase):
         self.assertEqual(dados["largura"], 8)
         self.assertEqual(len(dados["pontos"]), 24)
 
+    @unittest.skipIf(simular is None, SEM_SIMULADOR)
     def test_api_parametros_invalidos(self):
         for consulta in ("padrao=xadrez&largura=8&carreiras=3", "padrao=meia&largura=abc&carreiras=3", "padrao=meia&largura=99&carreiras=3"):
             status, _, corpo = self.get("/api/simular?" + consulta)
