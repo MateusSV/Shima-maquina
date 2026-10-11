@@ -518,6 +518,91 @@ details > summary { cursor: pointer; }
 .campos-ficha { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .tabela-pecas td, .tabela-pecas th { font-size: 12px; }
 
+/* processamento, pacotes, esquema e o resto do que veio do protótipo */
+.colunas-dialogo.colunas-passos { grid-template-columns: minmax(0, 210px) minmax(0, 1fr); }
+.passos-processamento { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.passo-proc {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 0 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: none;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.passo-proc:hover { border-color: var(--tinta); }
+.passo-proc[aria-current="step"] { border-color: var(--destaque); background: var(--destaque-fundo); }
+.marca-passo { grid-row: span 2; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--faixa); border: 1px solid var(--botao-borda); font-size: 11px; font-weight: 600; }
+.passo-proc.ok .marca-passo { background: var(--ok); border-color: var(--ok); color: #FFFFFF; }
+.passo-proc.falta .marca-passo { background: var(--alerta); border-color: var(--alerta); color: #FFFFFF; }
+.passo-proc.rodando .marca-passo { background: var(--destaque); border-color: var(--destaque); color: var(--destaque-texto); }
+.nome-passo { font-size: 13px; font-weight: 500; }
+.info-passo { font-size: 11px; color: var(--suave); }
+.conteudo-passo { display: flex; flex-direction: column; gap: 8px; }
+.tabela input[type="text"], .tabela input[type="number"], .tabela select { min-height: 30px; width: 100%; min-width: 56px; }
+.tabela input[type="color"] { height: 30px; min-width: 44px; }
+.tabela-rolavel.baixa { max-height: 220px; }
+.log-processamento { list-style: none; margin: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 6px; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+.log-processamento .ok-texto, .log-processamento .alerta { font-weight: 500; }
+.onde-usado { display: inline-block; white-space: nowrap; }
+
+.todas-linhas { display: flex; flex-direction: column; gap: 3px; }
+.todas-linhas .grupo-linhas { display: grid; grid-template-columns: 18px repeat(10, minmax(0, 1fr)); gap: 2px; align-items: center; }
+.todas-linhas .lado { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--suave); }
+.linha-op {
+  position: relative;
+  min-height: 26px;
+  padding: 0;
+  background: var(--card);
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  color: var(--suave);
+  font: inherit;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  cursor: pointer;
+}
+.linha-op:disabled { opacity: 0.35; cursor: default; }
+.linha-op.usada { color: var(--tinta); font-weight: 600; }
+.linha-op.usada::after { content: ""; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 3px; background: var(--destaque); }
+.linha-op[aria-pressed="true"] { border-color: var(--destaque); background: var(--destaque-fundo); color: var(--destaque); }
+
+.esquema { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.esquema svg { display: block; width: 100%; max-width: 440px; height: auto; max-height: 380px; margin: 0 auto; }
+.esquema .contorno { fill: var(--faixa); stroke: var(--destaque); stroke-width: 2; stroke-linejoin: round; }
+.esquema .cota { stroke: var(--suave); stroke-width: 1; }
+.esquema .linha-barra { stroke: var(--suave); stroke-width: 1; stroke-dasharray: 4 4; }
+.esquema text { fill: var(--tinta); font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+.esquema text.destaque { fill: var(--destaque); }
+
+.passo-forma { width: 100%; padding: 4px 6px; margin-left: -6px; background: none; border: 1px solid transparent; border-radius: 6px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.passo-forma:hover { border-color: var(--linha); }
+.passo-forma[aria-pressed="true"] { border-color: var(--destaque); background: var(--destaque-fundo); }
+
+.variantes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.item-variante { position: relative; display: flex; min-width: 0; }
+.variante { flex: 1 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 6px 8px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 8px; color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer; min-width: 0; }
+.variante:hover { border-color: var(--tinta); }
+.variante .amostras { display: flex; gap: 3px; }
+.variante .amostras span { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--botao-borda); }
+
+.lista-arquivos, .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.lista-arquivos label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.lista-arquivos .nome-arquivo { overflow-wrap: anywhere; }
+.checklist li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 6px; }
+.checklist .marca-check { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 11px; font-weight: 600; background: var(--card); border: 1px solid var(--botao-borda); }
+.checklist li.ok .marca-check { background: var(--ok); border-color: var(--ok); color: #FFFFFF; }
+.checklist li.pendente .marca-check { background: var(--alerta); border-color: var(--alerta); color: #FFFFFF; }
+.checklist small { display: block; color: var(--suave); font-size: 11px; }
+.celula-cor { display: inline-flex; align-items: center; gap: 6px; }
+.ponto-guia { display: inline-block; width: 10px; height: 10px; border-radius: 5px; margin-right: 6px; vertical-align: middle; }
+
 .aviso {
   position: fixed;
   right: 16px;
@@ -551,8 +636,9 @@ details > summary { cursor: pointer; }
 }
 
 @media (max-width: 760px) {
-  .colunas-dialogo, .colunas-dialogo.colunas-estreita, .colunas-dialogo.colunas-agulhas { grid-template-columns: minmax(0, 1fr); }
+  .colunas-dialogo, .colunas-dialogo.colunas-estreita, .colunas-dialogo.colunas-agulhas, .colunas-dialogo.colunas-passos { grid-template-columns: minmax(0, 1fr); }
   .campos-ficha { grid-template-columns: minmax(0, 1fr); }
+  .passos-processamento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {

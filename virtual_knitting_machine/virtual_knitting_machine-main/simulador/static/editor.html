@@ -182,7 +182,8 @@
       <button type="button" class="botao" data-recurso="gerar" title="Listras, losango (argyle) e texto">Gerar padrão…</button>
       <button type="button" class="botao" data-recurso="jacquard" title="Fios soltos do jacquard e guia-fios da intarsia">Jacquard e intarsia…</button>
       <button type="button" class="botao" data-recurso="verificar" title="Procura falhas antes de ir para a máquina e mostra as agulhas carreira a carreira">Verificar…</button>
-      <button type="button" class="botao" data-recurso="desenvolver" title="Altura da peça com os blocos do economizador (R2) repetidos">Altura com repetições…</button>
+      <button type="button" class="botao" data-recurso="desenvolver" title="Início, barra e final da peça e os blocos do economizador (R2) repetidos">Pacotes e altura…</button>
+      <button type="button" class="botao" data-recurso="processar" title="Máquina, guia-fios, ponto, puxador e velocidade">Processar…</button>
       <button type="button" class="botao" data-recurso="simular" title="Prévia da malha com o tipo de fio e as cores">Simular malha…</button>
       <button type="button" class="botao" data-recurso="ficha" title="Ficha técnica, tempo de tecimento e texto escrito no desenho">Ficha técnica…</button>
     </div>
@@ -219,12 +220,15 @@
     <h2 class="rotulo">Linhas de opção <span class="mono" id="titulo-opcoes"></span></h2>
     <div id="lista-opcoes" class="lista-opcoes"></div>
     <p class="suave pequeno">Os nomes com “?” vêm de referências públicas (R3 guia-fio, R5 cancelar malha, R6 ponto) e podem variar na sua versão do KnitPaint.</p>
+    <label class="campo-check" title="Deixa o desenho mais escuro para as linhas de opção aparecerem"><input type="checkbox" id="escurecer-desenho"> Escurecer o desenho</label>
     <div class="uma-linha" id="uma-linha" hidden>
       <h3 class="sub">Uma linha</h3>
       <div class="linha-campos">
         <label class="campo">Painel <select id="opcao-painel"></select></label>
         <label class="campo">Linha <select id="opcao-linha"></select></label>
       </div>
+      <div class="todas-linhas" id="opcao-todas" role="group" aria-label="Todas as linhas de opção; com ponto, usada no painel"></div>
+      <p class="suave pequeno" id="opcao-ajuda"></p>
       <label class="campo"><span id="rotulo-opcao-nome">Nome da linha</span> <input type="text" id="opcao-nome" maxlength="60" autocomplete="off"></label>
       <ul class="faixas" id="opcao-faixas" aria-label="Valores da linha por carreira"></ul>
       <form class="pintar-linha" id="form-pintar-linha">
@@ -383,17 +387,27 @@
     <div class="colunas-dialogo">
       <div class="coluna">
         <label class="campo">Estilo <select name="estilo"></select></label>
-        <h3 class="sub">Densidade da amostra (em 10 cm)</h3>
+        <h3 class="sub">Amostra e máquina</h3>
         <div class="linha-campos">
-          <label class="campo">Colunas (agulhas) <input type="number" name="colunas" min="1" max="200" step="0.1" required></label>
-          <label class="campo">Carreiras <input type="number" name="carreiras" min="1" max="200" step="0.1" required></label>
+          <label class="campo">Colunas em 10 cm <input type="number" name="colunas" min="1" max="200" step="0.1" required></label>
+          <label class="campo">Carreiras em 10 cm <input type="number" name="carreiras" min="1" max="200" step="0.1" required></label>
         </div>
+        <div class="linha-campos">
+          <label class="campo">Máquina <select name="maquina"></select></label>
+          <label class="campo">Finura <select name="finura"></select></label>
+        </div>
+        <p class="suave pequeno">Meça a amostra lavada e passada, na finura e no fio do modelo.</p>
         <h3 class="sub">Medidas em cm</h3>
         <div class="medidas" id="modelo-medidas"></div>
       </div>
       <div class="coluna">
         <h3 class="sub">Peças</h3>
         <div id="modelo-pecas"></div>
+        <label class="campo campo-curto">Esquema da peça <select name="esquema"></select></label>
+        <figure class="esquema">
+          <div id="modelo-esquema"></div>
+          <figcaption class="suave pequeno" id="modelo-esquema-legenda"></figcaption>
+        </figure>
         <p class="suave pequeno">Conta: cm × colunas ÷ 10 = agulhas, cm × carreiras ÷ 10 = carreiras. Lave e passe a amostra antes de medir a densidade.</p>
       </div>
     </div>
@@ -413,7 +427,7 @@
           </label>
           <label class="campo">Marca a quantas agulhas da borda <input type="number" name="marca" min="1" max="8" value="3"></label>
         </div>
-        <ol class="passos" id="forma-passos"></ol>
+        <ol class="passos" id="forma-passos" aria-label="Passo a passo: clique para ver as carreiras na prévia"></ol>
         <details>
           <summary class="pequeno">Códigos usados no desenho</summary>
           <div class="linha-campos codigos-forma">
@@ -450,16 +464,20 @@
           <select name="tipo">
             <option value="listras">Listras</option>
             <option value="losango">Losango (argyle)</option>
+            <option value="onca">Onça (rosetas)</option>
+            <option value="logo">Logo em pontos</option>
             <option value="texto">Texto</option>
           </select>
         </label>
-        <div class="linha-campos" data-para="listras losango">
+        <div class="linha-campos" data-para="listras losango onca">
           <label class="campo">Agulhas <input type="number" name="largura" min="1" max="8000"></label>
           <label class="campo">Carreiras <input type="number" name="altura" min="1" max="8000"></label>
         </div>
         <div class="campos-gerar" data-para="listras">
-          <label class="campo">Listras de baixo para cima, como cor:carreiras <input type="text" name="listras" value="1:6, 2:2, 3:4, 2:2" autocomplete="off"></label>
-          <p class="suave pequeno">Exemplo: 1:6, 2:2 faz 6 carreiras da cor 1 e 2 da cor 2, repetindo até a altura.</p>
+          <label class="campo">Listras de baixo para cima, como cor:carreiras ou cor:carreiras:guia <input type="text" name="listras" value="1:6, 2:2, 3:4, 2:2" autocomplete="off"></label>
+          <p class="suave pequeno">Exemplo: 1:6, 2:2 faz 6 carreiras da cor 1 e 2 da cor 2, repetindo até a altura. Com 1:6:3, a listra usa o guia-fio 3.</p>
+          <label class="campo-check"><input type="checkbox" name="listrasR3"> Escrever o guia-fio de cada listra na R3</label>
+          <p class="suave pequeno" id="gerar-listras-r3"></p>
         </div>
         <div class="campos-gerar" data-para="losango">
           <div class="linha-campos">
@@ -471,6 +489,35 @@
             <label class="campo">Cor de fundo <input type="number" name="corB" min="0" max="255" value="2"></label>
             <label class="campo">Cor das linhas <input type="number" name="corC" min="0" max="255" placeholder="sem linhas"></label>
           </div>
+        </div>
+        <div class="campos-gerar" data-para="onca">
+          <div class="linha-campos">
+            <label class="campo">Largura do módulo <input type="number" name="ow" min="18" max="240" value="72"></label>
+            <label class="campo">Altura do módulo <input type="number" name="oh" min="15" max="240" value="60"></label>
+          </div>
+          <div class="linha-campos">
+            <label class="campo">Cor do fundo <input type="number" name="oncaA" min="0" max="255" value="1"></label>
+            <label class="campo">Cor da roseta <input type="number" name="oncaB" min="0" max="255" value="2"></label>
+            <label class="campo">Cor do centro <input type="number" name="oncaC" min="0" max="255" value="3"></label>
+          </div>
+          <button type="button" class="botao" id="gerar-sortear">Sortear outras rosetas</button>
+          <p class="suave pequeno">O módulo se repete sem emenda até encher a largura e a altura.</p>
+        </div>
+        <div class="campos-gerar" data-para="logo">
+          <label class="campo">Texto do logo <input type="text" name="logoTexto" value="ONÇA" maxlength="40" autocomplete="off"></label>
+          <label class="campo">Ou uma imagem (PNG ou JPG) <input type="file" name="logoImagem" accept="image/*"></label>
+          <p class="pequeno mono" id="gerar-logo-origem"></p>
+          <div class="linha-campos">
+            <label class="campo">Largura (agulhas) <input type="number" name="logoW" min="8" max="2000" value="60"></label>
+            <label class="campo">Fios <select name="logoK"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+          </div>
+          <div class="linha-campos">
+            <label class="campo" data-fio="0">Fio A (fundo) <input type="number" name="logoC0" min="0" max="255" value="0"></label>
+            <label class="campo" data-fio="1">Fio B <input type="number" name="logoC1" min="0" max="255" value="1"></label>
+            <label class="campo" data-fio="2">Fio C <input type="number" name="logoC2" min="0" max="255" value="2"></label>
+            <label class="campo" data-fio="3">Fio D <input type="number" name="logoC3" min="0" max="255" value="3"></label>
+          </div>
+          <p class="suave pequeno">A altura sai da proporção da imagem e da densidade da amostra no Modelo, para o logo não ficar achatado na malha.</p>
         </div>
         <div class="campos-gerar" data-para="texto">
           <label class="campo">Texto (uma linha por linha) <textarea name="texto" rows="3">ONCA</textarea></label>
@@ -517,15 +564,18 @@
         <h3 class="sub">Intarsia: guia-fios</h3>
         <label class="campo">Guia-fios disponíveis na máquina <input type="number" name="guias" min="1" max="64" value="8"></label>
         <div id="intarsia-resultado"></div>
+        <div class="tabela-rolavel baixa" id="intarsia-tabela"></div>
       </div>
       <div class="coluna">
         <label class="campo">Mostrar
           <select name="vista">
             <option value="flutuacoes">o desenho com os fios soltos longos (em amarelo)</option>
+            <option value="avesso">o avesso do jacquard</option>
             <option value="guias">os guia-fios da intarsia</option>
           </select>
         </label>
         <div class="quadro"><canvas id="jacquard-mapa" role="img" aria-label="Mapa da área analisada"></canvas></div>
+        <p class="suave pequeno" id="jacquard-legenda"></p>
       </div>
     </div>
     <div class="botoes-dialogo"><button class="botao" value="fechar" formnovalidate>Fechar</button></div>
@@ -568,14 +618,79 @@
 
 <dialog id="dlg-desenvolver" class="largo" aria-labelledby="dlg-desenvolver-titulo">
   <form method="dialog" class="dialogo">
-    <h2 id="dlg-desenvolver-titulo">Altura com as repetições do economizador</h2>
-    <p class="suave pequeno">A R2 marca blocos de carreiras que a máquina repete. O desenho mostra cada bloco uma vez; diga quantas vezes ele repete (isso é definido no processamento) para ver a altura de verdade.</p>
-    <label class="campo campo-curto">Painel <select name="painel"></select></label>
-    <div id="desenvolver-tabela"></div>
-    <p id="desenvolver-total"></p>
+    <h2 id="dlg-desenvolver-titulo">Pacotes e altura com repetições</h2>
+    <p class="suave pequeno">O desenho guardado é compactado: a R2 marca blocos que a máquina repete e o início, a barra e o final podem ser trocados por pacotes prontos. Aqui você monta o desenho desenvolvido para ver a peça inteira e a altura de verdade.</p>
+    <div class="colunas-dialogo">
+      <div class="coluna">
+        <label class="campo campo-curto">Painel <select name="painel"></select></label>
+        <ul class="legenda" id="desenvolver-trechos" aria-label="Trechos do painel"></ul>
+        <div class="linha-campos">
+          <label class="campo">Início
+            <select name="inicio"><option value="arquivo">como no arquivo</option><option value="desperdicio">com fio de desperdício antes</option></select>
+          </label>
+          <label class="campo">Carreiras de desperdício <input type="number" name="inicioN" min="1" max="2000" value="20"></label>
+        </div>
+        <div class="linha-campos">
+          <label class="campo">Barra
+            <select name="barra"><option value="arquivo">como no arquivo</option><option value="tubular">tubular</option><option value="rib11">ribana 1×1</option><option value="rib22">ribana 2×2</option><option value="sem">sem barra</option></select>
+          </label>
+          <label class="campo">Altura da barra (carreiras) <input type="number" name="barraN" min="1" max="2000" value="10"></label>
+        </div>
+        <h3 class="sub">Corpo: repetições do economizador (R2)</h3>
+        <div id="desenvolver-tabela"></div>
+        <div class="linha-campos">
+          <label class="campo">Final
+            <select name="final"><option value="arquivo">como no arquivo</option><option value="arremate">com arremate</option><option value="desperdicio">com fio de desperdício para remalhar</option></select>
+          </label>
+          <label class="campo">Carreiras de desperdício <input type="number" name="finalN" min="1" max="2000" value="12"></label>
+        </div>
+        <details>
+          <summary class="pequeno">Códigos dos pacotes</summary>
+          <div class="linha-campos codigos-forma">
+            <label class="campo">Desperdício <input type="number" name="cDesperdicio" min="0" max="255" value="1"></label>
+            <label class="campo">Separação <input type="number" name="cSeparacao" min="0" max="255" value="3"></label>
+            <label class="campo">Arremate <input type="number" name="cArremate" min="0" max="255" value="16"></label>
+            <label class="campo">Malha na frente <input type="number" name="cFrente" min="0" max="255" value="1"></label>
+            <label class="campo">Malha atrás <input type="number" name="cTras" min="0" max="255" value="2"></label>
+            <label class="campo">Tubular, carreira A <input type="number" name="cTubularA" min="0" max="255" value="51"></label>
+            <label class="campo">Tubular, carreira B <input type="number" name="cTubularB" min="0" max="255" value="52"></label>
+          </div>
+          <p class="suave pequeno">Os pacotes trocam só as agulhas que tecem de cada painel; o resto da carreira (e as linhas de opção) vem do trecho do arquivo. Os códigos de desperdício, separação e arremate mudam entre versões do KnitPaint: confira na sua.</p>
+        </details>
+      </div>
+      <div class="coluna">
+        <p id="desenvolver-total"></p>
+        <div class="quadro alto"><canvas id="desenvolver-previa" role="img" aria-label="Painel desenvolvido"></canvas></div>
+        <ul class="legenda" id="desenvolver-partes" aria-label="Partes do desenho desenvolvido"></ul>
+      </div>
+    </div>
     <div class="botoes-dialogo">
       <button class="botao" value="fechar" formnovalidate>Fechar</button>
-      <button type="button" class="botao principal" id="desenvolver-criar" title="Abre uma aba nova com as carreiras repetidas, para ver a peça inteira">Criar desenho desenvolvido</button>
+      <button type="button" class="botao principal" id="desenvolver-criar" title="Abre uma aba nova com o desenho desenvolvido">Criar desenho desenvolvido</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-processar" class="largo" aria-labelledby="dlg-processar-titulo">
+  <form method="dialog" class="dialogo">
+    <h2 id="dlg-processar-titulo">Processamento</h2>
+    <p class="suave pequeno">Os números das linhas de opção ganham os valores da máquina. O editor confere e guarda esses valores neste navegador e baixa um resumo; o programa (.000) e os ajustes (.QFD) continuam sendo gerados pelo KnitPaint.</p>
+    <div class="colunas-dialogo colunas-passos">
+      <ol class="passos-processamento" id="processar-passos" aria-label="Passos do processamento"></ol>
+      <div class="coluna">
+        <h3 class="sub" id="processar-titulo"></h3>
+        <p class="suave pequeno" id="processar-explica"></p>
+        <div class="conteudo-passo" id="processar-conteudo"></div>
+        <div class="controles">
+          <button type="button" class="botao" data-passo="-1">← Passo anterior</button>
+          <button type="button" class="botao" data-passo="1">Próximo passo →</button>
+        </div>
+      </div>
+    </div>
+    <div class="botoes-dialogo">
+      <button class="botao" value="fechar" formnovalidate>Fechar</button>
+      <button type="button" class="botao" id="processar-txt">Baixar resumo (.txt)</button>
+      <button type="button" class="botao principal" id="processar-rodar">Processar</button>
     </div>
   </form>
 </dialog>
@@ -601,6 +716,13 @@
           <button type="button" class="botao" data-zoom-malha="-1" aria-label="Pontos menores">−</button>
           <button type="button" class="botao" data-zoom-malha="1" aria-label="Pontos maiores">+</button>
         </div>
+        <h3 class="sub">Variantes de cor</h3>
+        <div class="variantes" id="simular-variantes"></div>
+        <button type="button" class="botao" id="simular-guardar">Guardar as cores atuais</button>
+        <h3 class="sub">Peça inteira (2D)</h3>
+        <label class="campo">Peça do Modelo <select name="peca"></select></label>
+        <div class="quadro"><canvas id="simular-peca" role="img" aria-label="Peça inteira preenchida com o desenho"></canvas></div>
+        <p class="suave pequeno" id="simular-peca-info"></p>
       </div>
       <div class="coluna">
         <div class="quadro alto"><canvas id="simular-malha" role="img" aria-label="Simulação da malha"></canvas></div>
@@ -645,6 +767,13 @@
         <label class="campo-check"><input type="checkbox" name="limpar" checked> Ao escrever, pintar a seleção com a cor do fundo antes</label>
         <div class="quadro"><canvas id="ficha-previa" role="img" aria-label="Prévia da ficha escrita no desenho"></canvas></div>
         <p class="suave pequeno" id="ficha-tamanho"></p>
+        <h3 class="sub">Enviar à máquina</h3>
+        <ul class="lista-arquivos" id="ficha-arquivos" aria-label="Arquivos abertos"></ul>
+        <label class="campo-check"><input type="checkbox" name="zipResumo" checked> Incluir a ficha técnica e o resumo do processamento (.txt)</label>
+        <button type="button" class="botao" id="ficha-zip">Baixar .zip</button>
+        <p class="suave pequeno">O navegador não grava direto no pendrive da máquina nem na rede dela: baixe o .zip e copie os arquivos. Abra antes os arquivos que vão junto (por exemplo, com “Abrir todos”).</p>
+        <h3 class="sub">Antes de tecer <span class="suave" id="ficha-check-total"></span></h3>
+        <ul class="checklist" id="ficha-checklist"></ul>
       </div>
     </div>
     <div class="botoes-dialogo">

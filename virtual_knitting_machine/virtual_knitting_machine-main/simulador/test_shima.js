@@ -322,3 +322,149 @@ test("forma: simétrica e com os ombros do texto em várias densidades", () => {
     }
   }
 });
+
+test("pacotes: trechos do exemplo, desperdício, ribana, arremate e sem barra", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const paineis = Recursos.paineis(ShimaDat.linhasDeOpcao(doc));
+  const p = paineis[0];
+  const W = doc.largura;
+  for (const q of paineis) {
+    assert.deepEqual(Recursos.trechosDoPainel(doc, q).map((t) => `${t.id} ${t.de}–${t.ate}`), [
+      "inicio 187–190",
+      "barra 191–200",
+      "transferencia 201–202",
+      "corpo 203–359",
+      "final 360–365",
+    ]);
+  }
+  assert.deepEqual(paineis.map((q) => Recursos.areaDeMalha(doc, q)), [{ x0: 451, x1: 653 }, { x0: 746, x1: 944 }]);
+
+  // Tudo como no arquivo: o mesmo desenho desenvolvido só com as repetições da R2.
+  const repeticoes = { "216-223": 55 };
+  const igual = Recursos.desenvolverComPacotes(doc, p, { repeticoes, paineis });
+  const dev = Recursos.desenharDesenvolvido(doc, Recursos.desenvolvimento(doc, p, repeticoes).blocos);
+  assert.deepEqual([igual.w, igual.h, igual.painel.carreiras], [dev.w, dev.h, 611]);
+  assert.deepEqual(igual.px, dev.px);
+
+  // 20 carreiras de desperdício e 1 de separação antes, barra trocada por 12 de ribana 1×1, arremate no fim.
+  const res = Recursos.desenvolverComPacotes(doc, p, { inicio: { tipo: "desperdicio", n: 20 }, barra: { tipo: "rib11", n: 12 }, final: { tipo: "arremate" }, paineis });
+  assert.equal(res.h, 590 + 21 + 2 + 1);
+  assert.deepEqual(res.partes.map((t) => `${t.nome} ${t.de}–${t.ate}${t.gerada ? " novo" : ""}`), [
+    "Fio de desperdício 187–206 novo",
+    "Separação 207–207 novo",
+    "Início 208–211",
+    "Barra em ribana 1×1 212–223 novo",
+    "Transferência 224–225",
+    "Corpo 226–382",
+    "Final 383–388",
+    "Arremate 389–389 novo",
+  ]);
+  assert.deepEqual(res.painel, { de: 187, ate: 389, carreiras: 203 });
+  const linha = (c) => res.px.subarray((res.h - c) * W, (res.h - c + 1) * W);
+  // Só as agulhas que tecem dos dois painéis mudam; o resto (linhas de opção) vem da carreira de referência.
+  assert.deepEqual([449, 450, 451, 653, 654, 745, 746, 944, 945].map((x) => linha(187)[x]), [99, 13, 1, 1, 13, 13, 1, 1, 13]);
+  assert.deepEqual([451, 452, 453, 454].map((x) => linha(212)[x]), [1, 2, 1, 2]);
+  assert.deepEqual([451, 653, 746, 944].map((x) => linha(389)[x]), [16, 16, 16, 16]);
+  // Sem barra: some a barra e a transferência que vem depois dela.
+  assert.equal(Recursos.desenvolverComPacotes(doc, p, { barra: { tipo: "sem" }, paineis }).h, 590 - 12);
+  // Só a contagem, sem montar a imagem.
+  const conta = Recursos.desenvolverComPacotes(doc, p, { repeticoes, semPixels: true });
+  assert.deepEqual([conta.h, conta.px], [dev.h, null]);
+  assert.equal(Recursos.desenvolverComPacotes(doc, p, { repeticoes, limite: 1000 }).px, null);
+});
+
+test("processamento: o que o exemplo usa, o que falta e o resumo", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const uso = Recursos.usoDoProcessamento(doc, ShimaDat.linhasDeOpcao(doc));
+  assert.deepEqual(uso.guias.map((u) => [u.valor, u.onde.map((o) => `${o.painel}: ${o.carreiras}`)]), [
+    [1, ["1: 189–190", "2: 189–190"]],
+    [4, ["1: 191–200, 203–364", "2: 191–200, 203–364"]],
+  ]);
+  assert.deepEqual(uso.pontos.map((u) => u.valor), [5, 12, 14, 17]);
+  assert.deepEqual(uso.blocosR2.map((b) => [b.painel, b.chave, b.valor]), [[1, "216-223", "55"], [2, "216-223", "30"]]);
+  assert.equal(uso.trechos.length, 5);
+  assert.deepEqual(Recursos.faltasDoProcessamento({}, uso), { maquina: 2, guias: 4, economizador: 2, puxador: 5, ponto: 8, velocidade: 5, gerar: 0 });
+
+  const porTrecho = (v) => Object.fromEntries(uso.trechos.map((t) => [t.id, v]));
+  const dados = {
+    maquina: "SSG122SV",
+    finura: 7,
+    guias: { 1: { guia: "1", fio: "acrílico 2/32", cor: "#E9E4D8", lado: "E" }, 4: { guia: "4", fio: "lã 2/28", cor: "#2B2A33", lado: "D" } },
+    pontos: { 5: { f: 45, t: 45 }, 12: { f: 40, t: 40 }, 14: { f: 38, t: 38 }, 17: { f: 36, t: 36 } },
+    puxador: porTrecho(40),
+    velocidade: porTrecho(0.6),
+  };
+  const repeticoes = { 1: { "216-223": 55 }, 2: { "216-223": 30 } };
+  assert.deepEqual(Object.values(Recursos.faltasDoProcessamento(dados, uso, repeticoes)), [0, 0, 0, 0, 0, 0, 0]);
+  const texto = Recursos.linhasDoProcessamento("ONCA.dat", dados, uso, repeticoes).join("\n");
+  assert.match(texto, /Máquina: SSG122SV · finura 7G/);
+  assert.match(texto, /R3 4 → guia 4 · fio lã 2\/28 · cor #2B2A33 · entra pela direita \(painel 1: 191–200, 203–364; painel 2: 191–200, 203–364\)/);
+  assert.match(texto, /Painel 2, carreiras 216–223 \(R2 = 30\): repete 30 vez\(es\)/);
+  assert.match(texto, /R6 17 → frente 36 · atrás 36/);
+  assert.match(texto, /Corpo \(carreiras 203–359\): puxador 40 · velocidade 0.6/);
+});
+
+test("gerar: listras por carreira, onça repetível e logo em níveis de claridade", () => {
+  assert.deepEqual(Recursos.listrasPorCarreira(7, [{ cor: 1, carreiras: 2 }, { cor: 2, carreiras: 1 }]), [0, 0, 1, 0, 0, 1, 0]);
+  assert.deepEqual(Array.from(Recursos.gerarListras(2, 3, [{ cor: 5, carreiras: 1 }, { cor: 6, carreiras: 2 }])), [6, 6, 6, 6, 5, 5]);
+
+  const onca = Recursos.gerarOnca(72, 60, 7, [1, 2, 3]);
+  assert.equal(onca.length, 72 * 60);
+  assert.deepEqual([...new Set(onca)].sort(), [1, 2, 3]);
+  assert.deepEqual(Recursos.gerarOnca(72, 60, 7, [1, 2, 3]), onca); // mesma semente, mesmas rosetas
+  assert.notDeepEqual(Recursos.gerarOnca(72, 60, 8, [1, 2, 3]), onca);
+  const fundo = contar(onca)[1] / onca.length;
+  assert.ok(fundo > 0.4 && fundo < 0.9, `fundo com ${Math.round(fundo * 100)}% dos pontos`);
+
+  // 4 × 2: branco, preto, cinza e um ponto transparente (conta como branco).
+  const B = [255, 255, 255, 255], P = [0, 0, 0, 255], C = [128, 128, 128, 255], T = [0, 0, 0, 0];
+  const rgba = Uint8ClampedArray.from([B, P, P, B, B, C, T, B].flat());
+  const dois = Recursos.quantizarLuminancia(rgba, 4, 2, 2);
+  assert.deepEqual(Array.from(dois.px), [0, 1, 1, 0, 0, 0, 0, 0]); // 0 = o mais usado (o fundo)
+  assert.deepEqual(dois.medias, [[234, 234, 234], [0, 0, 0]]);
+  const tres = Recursos.quantizarLuminancia(rgba, 4, 2, 3);
+  assert.deepEqual(Array.from(tres.px), [0, 1, 1, 0, 0, 2, 0, 0]);
+});
+
+test("trechos: corpo com o ponto da R6 alternando carreira a carreira", () => {
+  // Bloco R à mão (como no teste das linhas de opção), carreiras 2 a 39; a R6 fica na coluna 31.
+  const doc = ShimaDat.novo(70, 40, null);
+  const p = (x, y, c) => (doc.pixels[y * 70 + x] = c);
+  for (let y = 1; y <= 38; y++) {
+    for (let k = 2; k <= 20; k++) p(22 + 2 * (k - 2), y, k);
+    p(20, y, y % 2 ? 6 : 7);
+  }
+  const r6 = (c, v) => p(31, doc.altura - c, v);
+  for (let c = 6; c <= 9; c++) r6(c, 14); // barra: 4 carreiras com o mesmo ponto
+  for (let c = 10; c <= 29; c++) r6(c, c % 2 ? 21 : 20); // corpo: 20 e 21 alternando
+  for (let c = 30; c <= 33; c++) r6(c, 12);
+  const painel = Recursos.paineis(ShimaDat.linhasDeOpcao(doc))[0];
+  assert.deepEqual(Recursos.trechosDoPainel(doc, painel).map((t) => `${t.id} ${t.de}–${t.ate}`), ["inicio 2–5", "barra 6–9", "corpo 10–29", "final 30–39"]);
+});
+
+test("pacotes: bloco da R2 que passa do alto do painel não repete carreiras a mais", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const W = doc.largura;
+  // O bloco L do painel 1 fica 8 carreiras mais baixo que o R: o painel termina na carreira 357.
+  const L = ShimaDat.linhasDeOpcao(doc)[0];
+  for (let y = L.carreiraInicio; y < L.carreiraInicio + 8; y++) doc.pixels.fill(0, y * W + L.xMin, y * W + L.xMax + 1);
+  const painel = Recursos.paineis(ShimaDat.linhasDeOpcao(doc))[0];
+  assert.equal(doc.altura - painel.y0, 357);
+  // Bloco da R2 nas carreiras 350 a 362, repetido 2 vezes.
+  Recursos.pintarValorNaLinha(doc, painel.R, 2, doc.altura - 362, doc.altura - 350, 9);
+  const res = Recursos.desenvolverComPacotes(doc, painel, { repeticoes: { "350-362": 2 } });
+  assert.equal(res.h, doc.altura + 13);
+  const topo = doc.altura - 362; // carreiras 363 a 590, iguais às do arquivo
+  assert.deepEqual(res.px.subarray(0, topo * W), doc.pixels.subarray(0, topo * W));
+  assert.deepEqual(res.px.subarray((topo + 13) * W, (topo + 26) * W), doc.pixels.subarray(topo * W, (topo + 13) * W));
+  assert.deepEqual(res.px.subarray(res.px.length - 349 * W), doc.pixels.subarray(doc.pixels.length - 349 * W));
+});
+
+test("pacotes: muitas repetições só contam as carreiras, sem montar a imagem", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const painel = Recursos.paineis(ShimaDat.linhasDeOpcao(doc))[0];
+  const inicio = Date.now();
+  const res = Recursos.desenvolverComPacotes(doc, painel, { repeticoes: { "216-223": 9999 }, limite: 8000 });
+  assert.deepEqual([res.h, res.px, res.painel.carreiras], [590 + 9998 * 8, null, 179 + 9998 * 8]);
+  assert.ok(Date.now() - inicio < 1000, "contar não pode depender do número de repetições");
+});
