@@ -264,7 +264,14 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--destaque
 .campo-barra { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--suave); }
 .separador { width: 1px; height: 24px; background: var(--linha); margin: 0 4px; }
 
-.janela { position: relative; flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--mesa); }
+.area-janela { position: relative; flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 18px; background: var(--faixa); }
+.janela { position: relative; grid-column: 2; grid-row: 1; min-height: 0; min-width: 0; overflow: auto; background: var(--mesa); }
+/* As réguas ficam por cima da área delas (posição absoluta) para o tamanho do canvas não mexer no da grade:
+   no celular, com a altura automática, uma régua alta não deixava a área do desenho diminuir. */
+.regua { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.regua-carreiras { grid-area: 1 / 1 / 2 / 2; border-right: 1px solid var(--linha); }
+.regua-agulhas { grid-area: 2 / 2 / 3 / 3; border-top: 1px solid var(--linha); }
+.regua-canto { grid-column: 1; grid-row: 2; }
 .folha { position: relative; margin: 24px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 24px rgba(0, 0, 0, 0.35); }
 .folha::after { content: ""; position: absolute; right: -24px; bottom: -24px; width: 1px; height: 1px; }
 #tela { display: block; image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; touch-action: none; }
@@ -393,7 +400,9 @@ dialog { border: 1px solid var(--linha); border-radius: 10px; padding: 0; backgr
 dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .dialogo { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
 .dialogo h2 { font-size: 18px; font-weight: 600; }
-.botoes-dialogo { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.botoes-dialogo { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; }
+.etapa-dialogo { margin-right: auto; font-size: 12px; color: var(--suave); }
+.num-etapa { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-right: 6px; padding: 0 4px; border-radius: 9px; background: var(--faixa); border: 1px solid var(--botao-borda); font-size: 10px; font-weight: 600; vertical-align: 1px; }
 .texto-dialogo { margin: 0; font-size: 15px; max-width: 46ch; }
 
 /* ---------- recursos para desenvolver o modelo ---------- */
@@ -454,7 +463,7 @@ details > summary { cursor: pointer; }
 .motivo[aria-pressed="true"] { border-color: var(--destaque); background: var(--destaque-fundo); }
 .motivo canvas { display: block; max-width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
 .motivo .nome-motivo { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.motivo .tamanho-motivo { font-size: 11px; color: var(--suave); }
+.motivo .tamanho-motivo { max-width: 100%; font-size: 11px; color: var(--suave); text-align: center; overflow-wrap: anywhere; }
 .apagar-motivo { position: absolute; top: 2px; right: 2px; width: 24px; height: 24px; border: 0; border-radius: 4px; background: none; color: var(--suave); font-size: 15px; cursor: pointer; }
 .apagar-motivo:hover { color: var(--erro); background: var(--card); }
 .lista-simbolos { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; font-size: 12px; }
@@ -554,6 +563,9 @@ details > summary { cursor: pointer; }
 .tabela-rolavel.baixa { max-height: 220px; }
 .log-processamento { list-style: none; margin: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 6px; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
 .log-processamento .ok-texto, .log-processamento .alerta { font-weight: 500; }
+#processar-conteudo .falta { border-color: var(--alerta); box-shadow: inset 0 0 0 1px var(--alerta); }
+.barra-progresso { height: 8px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 4px; overflow: hidden; }
+.barra-progresso span { display: block; height: 100%; background: var(--destaque); }
 .onde-usado { display: inline-block; white-space: nowrap; }
 
 .todas-linhas { display: flex; flex-direction: column; gap: 3px; }
@@ -582,6 +594,15 @@ details > summary { cursor: pointer; }
 .esquema .contorno { fill: var(--faixa); stroke: var(--destaque); stroke-width: 2; stroke-linejoin: round; }
 .esquema .cota { stroke: var(--suave); stroke-width: 1; }
 .esquema .linha-barra { stroke: var(--suave); stroke-width: 1; stroke-dasharray: 4 4; }
+.esquema .contorno-espelho { fill: none; stroke: var(--suave); stroke-width: 1.5; stroke-dasharray: 5 4; stroke-linejoin: round; }
+.esquema .linha-abertura { stroke: var(--destaque); stroke-width: 1.5; stroke-dasharray: 6 3; }
+.esquema text.pequeno { font-size: 11px; }
+.esquema text.suave { fill: var(--suave); }
+.dica-estilo { margin: 0; padding: 8px 10px; background: var(--destaque-fundo); border-left: 3px solid var(--destaque); border-radius: 4px; font-size: 13px; line-height: 1.5; }
+.arquivos-programa { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.arquivos-programa li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 8px; background: var(--faixa); border: 1px solid var(--linha); border-radius: 6px; font-size: 13px; }
+.etiqueta-arquivo { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: var(--ok); }
+.etiqueta-arquivo.tipo-ajustes { color: var(--destaque); }
 .esquema text { fill: var(--tinta); font-family: "IBM Plex Mono", monospace; font-size: 13px; }
 .esquema text.destaque { fill: var(--destaque); }
 
@@ -664,6 +685,6 @@ details > summary { cursor: pointer; }
   .corpo, .corpo.com-painel { display: flex; flex-direction: column; }
   .lateral { border-right: 0; border-bottom: 1px solid var(--linha); max-height: none; }
   .ajuda { display: none; }
-  .janela { min-height: 60vh; }
+  .area-janela { min-height: 60vh; }
   .painel { max-height: none; }
 }

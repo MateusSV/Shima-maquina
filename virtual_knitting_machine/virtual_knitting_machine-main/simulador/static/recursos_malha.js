@@ -40,19 +40,36 @@
     {
       id: "painel",
       nome: "Painel reto",
+      dica: "Painel reto, sem diminuições nem aumentos. A barra é a faixa de baixo.",
       medidas: [
         { id: "larg", nome: "Largura do painel", cm: 67.7, eixo: "h" },
         { id: "comp", nome: "Altura do painel", cm: 44.8, eixo: "v" },
         { id: "barra", nome: "Barra", cm: 2.5, eixo: "v" },
       ],
     },
-    { id: "careca", nome: "Gola careca", medidas: CORPO },
-    { id: "v", nome: "Gola V", medidas: trocar(CORPO, { gola: 16, golaP: 20 }) },
-    { id: "cardiga", nome: "Cardigã", medidas: trocar(CORPO, { gola: 16, golaP: 22 }, [{ id: "vista", nome: "Vista dos botões", cm: 3, eixo: "h" }]) },
-    { id: "regata", nome: "Regata", medidas: trocar(CORPO.slice(0, 7), { larg: 46, comp: 58, barra: 3, cava: 22, ombro: 5, gola: 20, golaP: 12 }) },
+    {
+      id: "careca",
+      nome: "Gola careca",
+      dica: "Gola careca: arremate no centro da gola e diminuições dos dois lados. A cava começa com um arremate e termina com diminuições.",
+      medidas: CORPO,
+    },
+    { id: "v", nome: "Gola V", dica: "Gola V: a frente se divide no centro e diminui dos dois lados até o ombro.", medidas: trocar(CORPO, { gola: 16, golaP: 20 }) },
+    {
+      id: "cardiga",
+      nome: "Cardigã",
+      dica: "Cardigã: duas frentes, cada uma com metade da largura mais metade da vista dos botões e a gola em V na borda do meio.",
+      medidas: trocar(CORPO, { gola: 16, golaP: 22 }, [{ id: "vista", nome: "Vista dos botões", cm: 3, eixo: "h" }]),
+    },
+    {
+      id: "regata",
+      nome: "Regata",
+      dica: "Regata: cava mais funda e ombro estreito, sem manga.",
+      medidas: trocar(CORPO.slice(0, 7), { larg: 46, comp: 58, barra: 3, cava: 22, ombro: 5, gola: 20, golaP: 12 }),
+    },
     {
       id: "polo",
       nome: "Gola polo",
+      dica: "Gola polo: peça separada. A Shima tem uma versão do KnitPaint-Online só para a máquina de golas N.SSR072.",
       medidas: [
         { id: "larg", nome: "Comprimento da gola", cm: 40, eixo: "h" },
         { id: "comp", nome: "Altura da gola", cm: 8, eixo: "v" },
@@ -100,18 +117,29 @@
     const W = ag(m("larg")), H = ca(m("comp")), barra = ca(m("barra")), cava = ca(m("cava"));
     const gola = ag(m("gola")), ombro = ag(m("ombro"));
     const recuo = Math.max(0, Math.round((W - gola - 2 * ombro) / 2));
-    const corpo = (nome, qtd, golaP, arremGola, extra) => ({
+    const corpo = (nome, qtd, golaP, arremGola, extra, mais) => ({
       nome,
       qtd,
       agulhas: W,
       carreiras: H,
       detalhe: `Barra de ${barra} carreiras. Cava a partir da carreira ${H - cava + 1}, ${recuo} agulhas a menos de cada lado. Gola de ${gola} agulhas e ${golaP} carreiras de fundo.${extra || ""}`,
-      forma: { tipo: "corpo", W, H, barra, cava, recuo, arremCava: Math.round(recuo / 3), gola, golaP, arremGola: centroPar(W, arremGola), degraus: 3 },
+      forma: { tipo: "corpo", W, H, barra, cava, recuo, arremCava: Math.round(recuo / 3), gola, golaP, arremGola: centroPar(W, arremGola), degraus: 3, ...mais },
     });
     if (estilo.id === "cardiga") {
-      const frente = corpo("Frentes", 2, ca(m("golaP")), gola / 3, ` A forma é a da frente inteira: divida no meio e some ${ag(m("vista") / 2)} agulhas de vista em cada frente.`);
-      frente.agulhas = Math.round(W / 2) + ag(m("vista") / 2);
-      pecas.push(frente);
+      // Cada frente é uma peça: metade do corpo mais metade da vista dos botões, aberta no meio (a borda
+      // da direita) e com a gola em V nessa borda. A outra frente é o espelho.
+      const vista = ag(m("vista") / 2), golaP = ca(m("golaP"));
+      const largura = Math.round(W / 2) + vista, golaMeia = Math.round(gola / 2) + vista;
+      pecas.push({
+        nome: "Frentes",
+        qtd: 2,
+        agulhas: largura,
+        carreiras: H,
+        detalhe: `Cada frente: metade do corpo mais metade da vista dos botões (${vista} agulhas), aberta no meio da barra até a gola. Barra de ${barra} carreiras. Cava a partir da carreira ${H - cava + 1}, ${recuo} agulhas a menos na borda da cava. Gola em V de ${golaP} carreiras: tira ${golaMeia} agulhas na borda do meio até o ombro. A outra frente é o espelho.`,
+        forma: { tipo: "corpo", meia: true, W: largura, H, barra, cava, recuo, arremCava: Math.round(recuo / 3), gola: golaMeia, golaP, vista, degraus: 3 },
+      });
+    } else if (estilo.id === "v") {
+      pecas.push(corpo("Frente", 1, ca(m("golaP")), 0, " A frente se divide no centro e diminui dos dois lados até o ombro (gola em V).", { decote: "v" }));
     } else {
       pecas.push(corpo("Frente", 1, ca(m("golaP")), gola / 3));
     }
@@ -119,17 +147,33 @@
     if (estilo.id !== "regata") {
       const mangaL = ag(m("mangaL")), punho = Math.min(ag(m("punho")), mangaL), manga = ca(m("manga"));
       const copa = ca(Math.min(m("manga") * 0.3, m("cava") * 0.75));
-      const aumento = Math.max(0, Math.round((mangaL - punho) / 2));
+      const forma = { tipo: "manga", punho, W: mangaL, H: manga, barra, copa, arremCopa: Math.round(recuo / 3), topo: Math.round(mangaL / 4) };
+      // O texto usa os números do passo a passo (o punho fica com a paridade da largura, e os aumentos
+      // que não cabem antes da copa ficam de fora).
+      const plano = planoManga(forma, 1, 3);
+      const aumentos = plano.passos.find((s) => s.nome === "Aumentos");
+      const ev = aumentos ? aumentos.eventos : [];
+      const ganho = ev.reduce((t, e) => t + e.n, 0);
+      const inicio = plano.linhas[0].segs[0] || [0, -1];
+      const largPunho = inicio[1] - inicio[0] + 1;
       pecas.push({
         nome: "Manga",
         qtd: 2,
         agulhas: mangaL,
         carreiras: manga,
-        detalhe: `Punho com ${punho} agulhas. ${aumento ? `Aumenta ${aumento} agulhas de cada lado até ${mangaL}.` : "Sem aumentos."} Copa de ${copa} carreiras.`,
-        forma: { tipo: "manga", punho, W: mangaL, H: manga, barra, copa, arremCopa: Math.round(recuo / 3), topo: Math.round(mangaL / 4) },
+        detalhe: `Punho com ${largPunho} agulhas. ${ganho ? `Aumenta ${ganho} agulhas de cada lado, ${ritmo(ev)}, até ${largPunho + 2 * ganho}.` : "Sem aumentos."} Copa de ${copa} carreiras.`,
+        forma,
       });
     }
     return { estilo, medidas, pecas };
+  }
+
+  // "1 a cada 6 ou 8 carreiras": quantas agulhas e de quantas em quantas carreiras, em poucas palavras.
+  function ritmo(eventos) {
+    const ns = [...new Set(eventos.map((e) => e.n))].sort((a, b) => a - b);
+    const intervalos = [...new Set(eventos.map((e) => e.intervalo))].sort((a, b) => a - b);
+    const cada = intervalos.length > 1 ? `${intervalos.slice(0, -1).join(", ")} ou ${intervalos[intervalos.length - 1]}` : intervalos[0];
+    return `${ns.length > 1 ? `${ns[0]} a ${ns[ns.length - 1]}` : ns[0]} a cada ${cada} carreiras`;
   }
 
   // ------------------------------------------------------------------ forma
@@ -154,14 +198,43 @@
     return eventos;
   }
 
-  function resumoEventos(eventos, sinal) {
+  // Como distribuir, mas com as diminuições espalhadas por igual (linha reta, como no V da gola): os
+  // intervalos maiores e menores se alternam em vez de ficarem os curtos no começo.
+  function distribuirReto(total, porVez, trecho) {
+    total = Math.max(0, Math.round(total));
+    if (!total) return [];
+    const pares = Math.max(1, Math.floor(trecho / 2));
+    const n = Math.min(Math.ceil(total / Math.max(1, porVez)), pares);
+    const base = Math.floor(total / n), extra = total % n;
+    const eventos = [];
+    let antes = 0;
+    for (let i = 0; i < n; i++) {
+      const off = 2 * Math.round(((i + 1) * pares) / n);
+      eventos.push({ off, n: i < extra ? base + 1 : base, intervalo: off - antes });
+      antes = off;
+    }
+    return eventos;
+  }
+
+  function resumoEventos(eventos, sinal, onde = "de cada lado") {
     const grupos = [];
     for (const e of eventos) {
       const g = grupos[grupos.length - 1];
       if (g && g.n === e.n && g.intervalo === e.intervalo) g.vezes++;
       else grupos.push({ n: e.n, intervalo: e.intervalo, vezes: 1 });
     }
-    return grupos.map((g) => `${sinal}${g.n} agulha${g.n > 1 ? "s" : ""} de cada lado a cada ${g.intervalo} carreiras, ${g.vezes}×`).join(" · ");
+    return grupos.map((g) => `${sinal}${g.n} agulha${g.n > 1 ? "s" : ""}${onde ? ` ${onde}` : ""} a cada ${g.intervalo} carreiras, ${g.vezes}×`).join(" · ");
+  }
+
+  // Resumo das diminuições em linha reta: os dois intervalos se alternam, então o texto conta quantas
+  // vezes vai cada um em vez de listar grupo por grupo.
+  function resumoReto(eventos, sinal, onde) {
+    const ns = new Set(eventos.map((e) => e.n));
+    const intervalos = [...new Set(eventos.map((e) => e.intervalo))].sort((a, b) => a - b);
+    if (ns.size > 1 || intervalos.length !== 2) return resumoEventos(eventos, sinal, onde);
+    const n = eventos[0].n;
+    const vezes = (iv) => eventos.filter((e) => e.intervalo === iv).length;
+    return `${sinal}${n} agulha${n > 1 ? "s" : ""}${onde ? ` ${onde}` : ""}, ${eventos.length}×: a cada ${intervalos[0]} carreiras ${vezes(intervalos[0])}× e a cada ${intervalos[1]} carreiras ${vezes(intervalos[1])}×, alternando`;
   }
 
   const novaLinha = (barra) => ({ segs: [], marcas: [], arrem: [], parcial: [], aumentos: [], barra });
@@ -182,23 +255,30 @@
     return { W, H, linhas, passos, resumo: `Painel reto de ${W} agulhas por ${H} carreiras.` };
   }
 
+  // Frente, costas e a frente aberta do cardigã. Na gola em V (decote "v") a frente se divide no centro e
+  // as diminuições vão em linha reta até perto do ombro. Na frente do cardigã (meia: true) a peça é uma
+  // frente só: a cava, o ombro e a malha parcial ficam na borda da esquerda; a borda da direita é o meio,
+  // reta da barra até o V (a abertura) e com as diminuições da gola daí até o ombro. Nela, gola é quanto
+  // sai na borda do meio. A outra frente é o espelho.
   function planoCorpo(p, porVez, dist) {
+    const meia = !!p.meia, emV = meia || p.decote === "v";
     const W = Math.max(8, Math.round(p.W)), H = Math.max(8, Math.round(p.H));
     const barra = limitar(Math.round(p.barra), 0, H - 2);
     const cava = limitar(Math.round(p.cava), 4, H - barra - 1);
-    const gola = limitar(Math.round(p.gola), 2, W - 4);
-    const recuo = limitar(Math.round(p.recuo), 0, Math.max(0, Math.floor((W - gola) / 2) - 1));
+    const gola = meia ? limitar(Math.round(p.gola), 1, W - 3) : limitar(Math.round(p.gola), 2, W - 4);
+    const recuo = limitar(Math.round(p.recuo), 0, meia ? Math.max(0, W - gola - 1) : Math.max(0, Math.floor((W - gola) / 2) - 1));
     const arremC = limitar(Math.round(p.arremCava), 0, recuo);
     const golaP = limitar(Math.round(p.golaP), 4, H - barra - 1);
-    const arremG = centroPar(W, limitar(Math.round(p.arremGola), 0, gola));
+    const arremG = meia ? 0 : centroPar(W, limitar(Math.round(p.arremGola || 0), 0, gola));
     const deg = limitar(Math.round(p.degraus), 1, Math.max(1, Math.min(6, Math.floor((H - barra) / 2))));
     const cava0 = H - cava + 1, gola0 = H - golaP + 1, ombro0 = H - 2 * deg + 1;
     const evCava = distribuir(recuo - arremC, porVez, Math.round(cava * 0.45));
-    const ladoGola = Math.floor((gola - arremG) / 2);
-    const evGola = distribuir(ladoGola, porVez, Math.max(2, golaP - 4));
+    const ladoGola = meia ? gola : Math.floor((gola - arremG) / 2);
+    // A gola redonda faz curva (mais diminuições no começo); a em V vai reta até 2 carreiras do fim.
+    const evGola = emV ? distribuirReto(ladoGola, porVez, Math.max(2, golaP - 2)) : distribuir(ladoGola, porVez, Math.max(2, golaP - 4));
     // O arremate central tem a paridade da largura: a gola abre arremG + 2 × ladoGola agulhas.
     const abertura = arremG + 2 * ladoGola;
-    const ombro = (W - abertura) / 2 - recuo;
+    const ombro = meia ? W - gola - recuo : (W - abertura) / 2 - recuo;
     const degraus = [];
     for (let i = 0; i < deg; i++) degraus.push(Math.max(0, Math.floor(ombro / deg) + (i < ombro % deg ? 1 : 0)));
 
@@ -206,7 +286,7 @@
     const add = (c, a) => (mapa[c] = mapa[c] || []).push(a);
     add(cava0, { t: "arremLados", n: arremC });
     evCava.forEach((e) => add(cava0 + e.off, { t: "dimLados", n: e.n }));
-    add(gola0, { t: "arremCentro", n: arremG });
+    if (!meia) add(gola0, { t: "arremCentro", n: arremG });
     evGola.forEach((e) => add(gola0 + e.off, { t: "dimGola", n: e.n }));
     degraus.forEach((n, i) => add(ombro0 + 2 * i, { t: "parcial", n }));
 
@@ -216,34 +296,45 @@
       const row = novaLinha(c <= barra);
       for (const a of mapa[c] || []) {
         if (a.t === "arremLados" && a.n > 0) {
-          row.arrem.push([L, L + a.n - 1], [R - a.n + 1, R]);
+          row.arrem.push([L, L + a.n - 1]);
           L += a.n;
-          R -= a.n;
+          if (!meia) {
+            row.arrem.push([R - a.n + 1, R]);
+            R -= a.n;
+          }
         } else if (a.t === "dimLados") {
           L += a.n;
-          R -= a.n;
-          row.marcas.push({ x: L + dist - 1, lado: "esq" }, { x: R - dist + 1, lado: "dir" });
+          row.marcas.push({ x: L + dist - 1, lado: "esq" });
+          if (!meia) {
+            R -= a.n;
+            row.marcas.push({ x: R - dist + 1, lado: "dir" });
+          }
         } else if (a.t === "arremCentro") {
           const x0 = Math.floor((W - a.n) / 2);
           if (a.n > 0) row.arrem.push([x0, x0 + a.n - 1]);
           nl = x0 - 1;
           nr = x0 + a.n;
+        } else if (a.t === "dimGola" && meia) {
+          R -= a.n;
+          row.marcas.push({ x: R - dist + 1, lado: "dir" });
         } else if (a.t === "dimGola" && nl !== null) {
           nl -= a.n;
           nr += a.n;
           row.marcas.push({ x: nl - dist + 1, lado: "dir" }, { x: nr + dist - 1, lado: "esq" });
         } else if (a.t === "parcial") {
           holdL += a.n;
-          holdR += a.n;
+          if (!meia) holdR += a.n;
         }
       }
       const a0 = L + holdL, a1 = R - holdR;
-      if (nl === null) row.segs.push([a0, a1]);
-      else {
+      if (nl === null) {
+        if (a1 >= a0) row.segs.push([a0, a1]);
+      } else {
         if (nl >= a0) row.segs.push([a0, nl]);
         if (a1 >= nr) row.segs.push([nr, a1]);
       }
-      if (holdL > 0) row.parcial.push([L, L + holdL - 1], [R - holdR + 1, R]);
+      if (holdL > 0) row.parcial.push([L, L + holdL - 1]);
+      if (holdR > 0) row.parcial.push([R - holdR + 1, R]);
       row.marcas = row.marcas.filter((m) => row.segs.some(([s0, s1]) => m.x >= s0 && m.x <= s1));
       if (c === H) {
         row.arrem.push(...row.segs, ...row.parcial);
@@ -253,32 +344,55 @@
       linhas.push(row);
     }
 
-    const passos = [];
+    const avisos = [];
     const ajustes = avisoDeAjustes([
-      ["largura", p.W, W],
+      [meia ? "largura da frente" : "largura", p.W, W],
       ["altura", p.H, H],
       ["barra", p.barra, barra],
       ["altura da cava", p.cava, cava],
-      ["largura da gola", p.gola, gola],
-      ["cava: tirar por lado", p.recuo, recuo],
+      [meia ? "gola: tirar no meio" : "largura da gola", p.gola, gola],
+      [meia ? "cava: tirar" : "cava: tirar por lado", p.recuo, recuo],
       ["cava: arremate", p.arremCava, arremC],
       ["fundo da gola", p.golaP, golaP],
       ["degraus do ombro", p.degraus, deg],
     ]);
-    if (ajustes) passos.push(ajustes);
-    if (ombro <= 0) passos.push({ nome: "Confira as medidas", aviso: true, texto: "A gola e a cava já ocupam toda a largura: não sobra ombro." });
-    if (gola0 <= cava0) passos.push({ nome: "Confira a gola", aviso: true, texto: "A gola começa antes da cava. Normalmente a gola começa depois." });
-    passos.push({ nome: "Barra", de: 1, ate: barra, texto: `${W} agulhas, ${barra} carreiras de barra.` });
-    passos.push({ nome: "Corpo reto", de: barra + 1, ate: cava0 - 1, texto: `${cava0 - 1 - barra} carreiras sem forma.` });
-    passos.push({ nome: "Cava: arremate", de: cava0, ate: cava0, texto: `${arremC} agulhas de cada lado.` });
+    if (ajustes) avisos.push(ajustes);
+    if (ombro <= 0) avisos.push({ nome: "Confira as medidas", aviso: true, texto: "A gola e a cava já ocupam toda a largura: não sobra ombro." });
+    // A gola em V costuma começar na altura da cava ou antes; a redonda, depois.
+    if (!emV && gola0 <= cava0) avisos.push({ nome: "Confira a gola", aviso: true, texto: "A gola começa antes da cava. Normalmente a gola começa depois." });
+    const lado = meia ? "na borda da cava" : "de cada lado";
     const eventos = (lista, inicio) => lista.map((e) => ({ carreira: inicio + e.off, n: e.n, intervalo: e.intervalo }));
-    if (evCava.length) passos.push({ nome: "Cava: diminuições", de: cava0 + evCava[0].off, ate: cava0 + evCava[evCava.length - 1].off, texto: `${resumoEventos(evCava, "−")}.`, eventos: eventos(evCava, cava0) });
-    passos.push({ nome: "Gola: arremate central", de: gola0, ate: gola0, texto: `${arremG} agulhas no centro. Daqui para cima os dois lados seguem separados.` });
-    if (evGola.length) passos.push({ nome: "Gola: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `${resumoEventos(evGola, "−")}.`, eventos: eventos(evGola, gola0) });
-    passos.push({ nome: "Ombro: malha parcial", de: ombro0, ate: H, texto: `${deg} degraus de ${degraus.join(", ")} agulhas, um a cada 2 carreiras.` });
-    passos.push({ nome: "Arremate final", de: H, ate: H, texto: `Arremata ${Math.max(0, ombro)} agulhas em cada ombro.` });
-    const resumo = `Começa com ${W} agulhas, fica com ${W - 2 * recuo} depois da cava e termina em 2 ombros de ${Math.max(0, ombro)} agulhas com uma gola de ${abertura}. São ${recuo} agulhas tiradas de cada lado na cava e ${ladoGola} de cada lado da gola.`;
-    return { W, H, linhas, passos, resumo };
+    const passos = [];
+    passos.push({ nome: "Barra", de: 1, ate: barra, texto: `${W} agulhas, ${barra} carreiras de barra.` });
+    const reto = Math.min(cava0, emV ? gola0 : cava0) - 1;
+    passos.push({ nome: "Corpo reto", de: barra + 1, ate: reto, texto: `${reto - barra} carreiras sem forma.` });
+    passos.push({ nome: "Cava: arremate", de: cava0, ate: cava0, texto: meia ? `${arremC} agulhas na borda da cava (à esquerda).` : `${arremC} agulhas de cada lado.` });
+    if (evCava.length) passos.push({ nome: "Cava: diminuições", de: cava0 + evCava[0].off, ate: cava0 + evCava[evCava.length - 1].off, texto: `${resumoEventos(evCava, "−", lado)}.`, eventos: eventos(evCava, cava0) });
+    if (meia) {
+      if (evGola.length) passos.push({ nome: "Gola V: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `Na borda do meio (à direita), da carreira ${gola0} para cima: ${resumoReto(evGola, "−", "")}.`, eventos: eventos(evGola, gola0) });
+    } else if (emV) {
+      passos.push({
+        nome: "Gola V: divisão no centro",
+        de: gola0,
+        ate: gola0,
+        texto: arremG
+          ? `${arremG} agulha${arremG > 1 ? "s arrematadas" : " arrematada"} no centro. Daqui para cima os dois lados seguem separados.`
+          : "A frente se divide no centro, sem arremate. Daqui para cima os dois lados seguem separados.",
+      });
+      if (evGola.length) passos.push({ nome: "Gola V: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `${resumoReto(evGola, "−", "de cada lado")}.`, eventos: eventos(evGola, gola0) });
+    } else {
+      passos.push({ nome: "Gola: arremate central", de: gola0, ate: gola0, texto: `${arremG} agulhas no centro. Daqui para cima os dois lados seguem separados.` });
+      if (evGola.length) passos.push({ nome: "Gola: diminuições", de: gola0 + evGola[0].off, ate: gola0 + evGola[evGola.length - 1].off, texto: `${resumoEventos(evGola, "−")}.`, eventos: eventos(evGola, gola0) });
+    }
+    passos.push({ nome: "Ombro: malha parcial", de: ombro0, ate: H, texto: `${deg} degraus de ${degraus.join(", ")} agulhas${meia ? " na borda da cava" : ""}, um a cada 2 carreiras.` });
+    passos.push({ nome: "Arremate final", de: H, ate: H, texto: meia ? `Arremata as ${Math.max(0, ombro)} agulhas do ombro.` : `Arremata ${Math.max(0, ombro)} agulhas em cada ombro.` });
+    // Em ordem de carreira: na gola em V funda o V começa antes da cava.
+    passos.sort((s, t) => s.de - t.de);
+    if (meia) passos.push({ nome: "A outra frente", texto: "Esta frente tem a abertura na borda da direita (o meio, com a vista dos botões). A outra frente é o espelho: abertura na borda da esquerda." });
+    const resumo = meia
+      ? `Uma das frentes: começa com ${W} agulhas e termina num ombro de ${Math.max(0, ombro)} agulhas. São ${recuo} agulhas tiradas na borda da cava e ${gola} na borda do meio (gola em V).`
+      : `Começa com ${W} agulhas, fica com ${W - 2 * recuo} depois da cava e termina em 2 ombros de ${Math.max(0, ombro)} agulhas com uma gola ${emV ? "em V " : ""}de ${abertura}. São ${recuo} agulhas tiradas de cada lado na cava e ${ladoGola} de cada lado da gola.`;
+    return { W, H, linhas, passos: [...avisos, ...passos], resumo };
   }
 
   function planoManga(p, porVez, dist) {
@@ -1143,6 +1257,37 @@
   ];
   const MAQUINAS = ["SSG122SV", "SVR123SP", "SRY123LP", "MACH2XS (WHOLEGARMENT)", "N.SSR072 (golas)"];
   const FINURAS = [3, 5, 7, 10, 12, 14, 16, 18];
+  const SERIES_SHIMA = ["SSG", "SSR", "SVR", "SRY", "SES", "SIG", "SIR", "SCG", "SFG", "SWG", "SPG", "SSI", "MACH"];
+
+  // Máquina e finura pelo nome da pasta, como a Shima costuma nomear: "07 122 SSGsv" é a SSG122SV na
+  // finura 7; "SVR123SP 12G" também vale. Devolve { maquina, finura } com "" no que não achar.
+  function maquinaDaPasta(nome) {
+    const texto = String(nome || "");
+    const partes = texto.split(/[\s_\-.]+/).filter(Boolean);
+    const junto = texto.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    let maquina = MAQUINAS.find((m) => junto.includes(m.replace(/\s.*$/, "").replace(/[^A-Z0-9]/g, ""))) || "";
+    if (!maquina) {
+      // Número e série separados: "122 SSGsv" vira SSG122SV (a série em maiúsculas e a variante depois).
+      const numero = partes.find((x) => /^\d{3}$/.test(x));
+      for (const x of partes) {
+        const t = x.toUpperCase();
+        const serie = /^[A-Z]{3,7}$/.test(t) && SERIES_SHIMA.find((sr) => t.startsWith(sr) && t.length - sr.length <= 3);
+        if (numero && serie) {
+          maquina = `${serie}${numero}${t.slice(serie.length)}`;
+          break;
+        }
+      }
+    }
+    // A finura vem com G ("12G") ou, se a máquina apareceu no nome, como um número solto ("07").
+    let finura = "";
+    const comG = /(?:^|[^\d])(\d{1,2})\s*G(?![A-Z])/i.exec(texto);
+    if (comG && FINURAS.includes(Number(comG[1]))) finura = Number(comG[1]);
+    else if (maquina) {
+      const t = partes.find((x) => /^\d{1,2}$/.test(x) && FINURAS.includes(Number(x)));
+      if (t) finura = Number(t);
+    }
+    return { maquina, finura };
+  }
 
   // O que o processamento precisa: os guia-fios da R3 e os pontos da R6 usados (com as carreiras de cada
   // painel), os trechos do primeiro painel e os blocos do economizador (R2) de cada painel.
@@ -1229,6 +1374,7 @@
   // Códigos que tecem, segundo as referências públicas (frente, atrás, os dois, tuck, sem transferir,
   // frente e mover). Os outros (13 largura do guia, 16 sem seleção, transferências) não contam como malha.
   const TECE = new Set([1, 2, 3, 11, 12, 51, 52, 61, 71]);
+  const TRANSFERE = new Set([60, 70]); // só transferência, sem tricotar
 
   function intervalos(carreiras) {
     const ord = [...carreiras].sort((a, b) => a - b);
@@ -1258,9 +1404,10 @@
         continue;
       }
       const semGuia = [], semPonto = [], cancelaComGuia = [], cancela = [], semLargura = [], soltos = [];
+      const transfere = [], transfereComGuia = [], transfereTecendo = [], transfereSemR5 = [];
       let esquerda = Infinity, direita = -Infinity;
       for (let y = p.y0; y <= p.y1; y++) {
-        let tece = false, tem13 = false, seguidos = 0, maior = 0;
+        let tece = false, tem13 = false, transf = false, seguidos = 0, maior = 0;
         for (let x = p.x0; x <= p.x1; x++) {
           const v = px[y * W + x];
           if (TECE.has(v)) {
@@ -1269,6 +1416,7 @@
             direita = Math.max(direita, x);
           }
           if (v === 13) tem13 = true;
+          if (TRANSFERE.has(v)) transf = true;
           seguidos = v === 16 ? seguidos + 1 : 0;
           maior = Math.max(maior, seguidos);
         }
@@ -1276,7 +1424,14 @@
         const c = H - y;
         if (tece && !tem(3)) semGuia.push(c);
         if (tece && !tem(6)) semPonto.push(c);
-        if (tem(5)) (tem(3) ? cancelaComGuia : cancela).push(c);
+        // Na carreira de transferência (60/70) a R5 cancela a malha e a R3 fica vazia: o carro só passa os
+        // pontos de uma frontura para a outra. Ela entra só nestas regras, não nas de cancelar malha.
+        if (transf) {
+          const r3 = tem(3), r5 = tem(5);
+          if (r3) transfereComGuia.push(c);
+          if (!r5) (tece ? transfereTecendo : transfereSemR5).push(c);
+          if (!r3 && r5) transfere.push(c);
+        } else if (tem(5)) (tem(3) ? cancelaComGuia : cancela).push(c);
         if (tece && !tem13) semLargura.push(c);
         if (maior > limite) soltos.push(c);
       }
@@ -1284,6 +1439,32 @@
       const nome = lista.length > 1 ? ` (painel ${p.numero})` : "";
       if (semGuia.length) itens.push({ nivel: "aviso", regra: "sem-guia", titulo: `Carreiras com malha e sem guia-fio (R3)${nome}`, texto: "Estas carreiras têm códigos de malha, mas a linha R3 está vazia. Pode ser que usem o guia da carreira anterior; confira no KnitPaint.", ...onde(semGuia) });
       if (semPonto.length) itens.push({ nivel: "aviso", regra: "sem-ponto", titulo: `Carreiras com malha e sem número de ponto (R6)${nome}`, texto: "Sem R6 a carreira usa o ponto padrão da máquina. Confira se é isso que você quer.", ...onde(semPonto) });
+      if (transfereComGuia.length)
+        itens.push({
+          nivel: "erro",
+          regra: "transferencia-com-guia",
+          titulo: `Transferência com guia-fio (R3)${nome}`,
+          texto: "Há transferência (60/70) em carreira com guia-fio na R3. Na carreira de transferência a R3 fica vazia: as agulhas só passam os pontos de uma frontura para a outra.",
+          ...onde(transfereComGuia),
+        });
+      if (transfereTecendo.length)
+        itens.push({
+          nivel: "erro",
+          regra: "transferencia-tecendo",
+          titulo: `Transferência em carreira que tricota${nome}`,
+          texto: "Há transferência (60/70) em carreira que também tem códigos de malha e não tem R5. Na carreira de transferência a R5 cancela a malha.",
+          ...onde(transfereTecendo),
+        });
+      if (transfereSemR5.length)
+        itens.push({
+          nivel: "aviso",
+          regra: "transferencia-sem-r5",
+          titulo: `Transferência sem cancelar malha (R5)${nome}`,
+          texto: "Estas carreiras só transferem (60/70), mas não têm R5. Normalmente a R5 cancela a malha na carreira de transferência; confira no KnitPaint.",
+          ...onde(transfereSemR5),
+        });
+      if (transfere.length && !transfereComGuia.length && !transfereTecendo.length && !transfereSemR5.length)
+        itens.push({ nivel: "info", regra: "transferencia-coerente", titulo: `Transferência sem fio: coerente${nome}`, texto: "Nas carreiras de transferência (60/70) a R5 cancela a malha e a R3 está vazia: as agulhas só passam os pontos de uma frontura para a outra.", ...onde(transfere) });
       if (cancelaComGuia.length) itens.push({ nivel: "aviso", regra: "cancela-com-guia", titulo: `Cancelar malha (R5) com guia-fio (R3)${nome}`, texto: "A carreira não tece, mas tem guia-fio. Confira se o guia deve passar nessa carreira.", ...onde(cancelaComGuia) });
       else if (cancela.length) itens.push({ nivel: "info", regra: "cancela-coerente", titulo: `Cancelar malha sem guia-fio: coerente${nome}`, texto: "Nas carreiras com R5 a malha é cancelada e a R3 está vazia: as agulhas só transferem ou esperam.", ...onde(cancela) });
       if (semLargura.length) itens.push({ nivel: "aviso", regra: "sem-largura", titulo: `Carreiras com malha sem a largura do guia-fio (13)${nome}`, texto: "O código 13 marca até onde o guia-fio vai. Estas carreiras tecem, mas não têm a marca na área do painel.", ...onde(semLargura) });
@@ -1306,7 +1487,7 @@
         });
       }
     }
-    if (!itens.some((i) => i.nivel !== "info")) itens.push({ nivel: "info", regra: "nenhum", titulo: "Nenhum problema encontrado", texto: "As regras de guia-fio, ponto, cancelar malha, largura do guia e flutuação passaram." });
+    if (!itens.some((i) => i.nivel !== "info")) itens.push({ nivel: "info", regra: "nenhum", titulo: "Nenhum problema encontrado", texto: "As regras de guia-fio, ponto, cancelar malha, transferência, largura do guia e flutuação passaram." });
     return itens;
   }
 
@@ -1407,12 +1588,12 @@
   }
 
   const api = {
-    ESTILOS, calcularModelo, distribuir, resumoEventos, planoForma, pixelsDaForma,
+    ESTILOS, calcularModelo, distribuir, distribuirReto, resumoEventos, planoForma, pixelsDaForma,
     trechosDificeis, BIBLIOTECA, repetirMotivo,
     coresDaArea, flutuacoes, guiasIntarsia, gerarListras, gerarLosango,
     paineis, colunaDoValor, valoresDaLinha, faixasDaLinha, pintarValorNaLinha, desenvolvimento, desenharDesenvolvido,
     trechosDoPainel, areaDeMalha, desenvolverComPacotes, resumoDoTrecho, valoresNasCarreiras, listrasPorCarreira, gerarOnca, quantizarLuminancia,
-    PASSOS_PROCESSAMENTO, MAQUINAS, FINURAS, usoDoProcessamento, faltasDoProcessamento, linhasDoProcessamento,
+    PASSOS_PROCESSAMENTO, MAQUINAS, FINURAS, maquinaDaPasta, usoDoProcessamento, faltasDoProcessamento, linhasDoProcessamento,
     TECE, verificarDesenho, intervalos,
     tempoTecimento, tipoDePonto, semAcento, CAMPOS_FICHA, linhasDaFicha, FONTE, textoEmPixels,
   };
