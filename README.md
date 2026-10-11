@@ -50,6 +50,40 @@ Depois abra http://localhost:8000/editor.html no navegador. Para usar outra past
 - **Destacar cor**: mostra só uma cor para achar onde ela aparece. Grade com linha forte a cada 10.
 - Substituir cor, redimensionar, importar imagem, desfazer/refazer, exportar PNG.
 
+### Desenvolver o modelo (recursos do KnitPaint)
+
+No painel à direita, em **Desenvolver o modelo**, **Biblioteca de pontos** e **Linhas de opção**:
+
+- **Modelo**: escolha o estilo (painel reto, gola careca, gola V, cardigã, regata, gola polo), a densidade
+  da amostra (colunas e carreiras em 10 cm) e as medidas em cm; o editor calcula as agulhas e carreiras de
+  cada peça.
+- **Forma**: para cada peça, as diminuições e aumentos espalhados pelas carreiras, arremates, malha parcial
+  dos ombros e marcas de diminuição, passo a passo. Cria um desenho novo com a forma ou cola no desenho
+  aberto. Os códigos usados (malha, fora, arremate, malha parcial, diminuições) podem ser trocados.
+- **Biblioteca de pontos e carimbo (K)**: trança, barra, links, rendado, flutuação, transferência e tuck.
+  O carimbo põe o motivo com o canto de baixo à esquerda no clique e, arrastando, repete alinhado.
+  **Repetir o motivo na seleção** em repetição normal ou em degraus. **Usar a cópia** e **Guardar motivo**
+  criam os seus próprios motivos (ficam no navegador).
+- **Símbolos**: com zoom de 800% ou mais, mostra o tipo de ponto de cada código (frente, atrás, tuck, sem
+  seleção, mover).
+- **Gerar padrão**: listras, losango (argyle) e texto em letras de pixels, como colagem.
+- **Jacquard e intarsia**: fios soltos no avesso em flutuação, birdseye, escada ou tubular, com a maior
+  flutuação marcada no desenho; quantos guia-fios a intarsia precisa e o mapa de cada um.
+- **Uma linha de opção**: escolha o painel e a linha (L1–L20, R1–R20) para ver as faixas de valores por
+  carreira, dar um nome à linha e **pintar um valor** de uma carreira até outra. O conta-gotas numa linha
+  de opção a escolhe.
+- **Verificar**: procura carreiras com malha sem guia-fio (R3) ou sem ponto (R6), cancelar malha (R5) com
+  guia-fio, falta da largura do guia (13), flutuações longas (16) e painéis diferentes. Mostra as agulhas
+  das duas fronturas com o carro passando, carreira a carreira.
+- **Altura com repetições**: os blocos do economizador (R2) com quantas vezes cada um repete, a altura real
+  e um desenho desenvolvido com as carreiras repetidas.
+- **Simular malha**: prévia da malha (frente ou avesso, tipo de fio, cor pelo guia-fio ou pelo desenho).
+- **Ficha técnica**: código, descrição, máquina, tempo, fio, pesos, data e fio de cada guia; estimativa do
+  tempo de tecimento; baixa em `.txt` ou escreve a ficha no desenho em letras de pixels.
+
+Os significados de códigos e linhas de opção vêm de referências públicas do KnitPaint e mudam entre
+versões: os nomes aparecem com “?” e os códigos usados pelos recursos podem ser trocados.
+
 O que o editor **não** faz: gerar o programa da máquina (`.000`) a partir do `.dat`. Isso é o
 processamento do KnitPaint. Para isso use o KnitPaint ou o SDS KnitPaint-Online da Shima Seiki.
 
@@ -66,7 +100,8 @@ não têm documentação oficial e foram descobertos analisando os arquivos.
 
 Para converter um `.dat` em PNG sem abrir o editor: `python simulador/ler_dat_shima.py ARQUIVO.dat`.
 
-O `Editor Shima.html` é gerado a partir de `simulador/static/editor.*`. Depois de mudar o editor, rode
+O `Editor Shima.html` é gerado a partir de `simulador/static/editor.*`, `recursos_malha.js` (a lógica dos
+recursos acima) e `editor_recursos.js` (os diálogos). Depois de mudar o editor, rode
 `python simulador/gerar_editor_portatil.py` para atualizá-lo.
 
 Testes: `python -m unittest` dentro de `simulador/` e `node --test simulador/test_shima.js`.

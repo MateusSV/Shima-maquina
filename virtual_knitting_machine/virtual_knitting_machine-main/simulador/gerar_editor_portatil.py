@@ -18,6 +18,8 @@ import re
 from pathlib import Path
 
 PASTA_ESTATICA = Path(__file__).with_name("static")
+# Na ordem em que editor.html carrega: formatos, recursos de malha, editor e os diálogos dos recursos.
+SCRIPTS = ("shima_dat.js", "shima_arquivos.js", "recursos_malha.js", "editor.js", "editor_recursos.js")
 SAIDA_PADRAO = Path(__file__).resolve().parents[3] / "Editor Shima.html"
 EXEMPLO_PADRAO = Path(__file__).resolve().parents[2] / "07 122 SSGsv" / "00FE_BLS_ESTAMPA_ONÇA.dat"
 
@@ -31,6 +33,10 @@ def gerar_html() -> str:
         raise RuntimeError("editor.html mudou: não encontrei o link para editor.css")
     html = html.replace(link_css, f"<style>\n{css}</style>")
 
+    encontrados = re.findall(r'<script src="([\w.]+\.js)"></script>', html)
+    if tuple(encontrados) != SCRIPTS:
+        raise RuntimeError(f"editor.html mudou: esperava os scripts {SCRIPTS}, encontrei {tuple(encontrados)}")
+
     def embutir(m: re.Match) -> str:
         codigo = (PASTA_ESTATICA / m.group(1)).read_text(encoding="utf-8")
         if "</script" in codigo.lower():
@@ -38,8 +44,8 @@ def gerar_html() -> str:
         return f"<script>\n// ---- {m.group(1)} ----\n{codigo}</script>"
 
     html, quantos = re.subn(r'<script src="([\w.]+\.js)"></script>', embutir, html)
-    if quantos != 3:
-        raise RuntimeError(f"esperava 3 scripts em editor.html, encontrei {quantos}")
+    if quantos != len(SCRIPTS):
+        raise RuntimeError(f"esperava {len(SCRIPTS)} scripts em editor.html, encontrei {quantos}")
 
     # No arquivo único não existe o simulador ao lado.
     html = html.replace('  <a class="link-simulador" href="index.html">Simulador</a>\n', "")

@@ -23,6 +23,7 @@ const FERRAMENTAS = {
   balde: { nome: "Balde", tecla: "g" },
   "conta-gotas": { nome: "Conta-gotas", tecla: "i" },
   selecao: { nome: "Seleção", tecla: "m" },
+  carimbo: { nome: "Carimbo", tecla: "k" },
 };
 // Nomes de cores e de linhas de opção vindos de referências públicas do KnitPaint. Variam entre versões:
 // aparecem como sugestão ("?") até a pessoa confirmar ou trocar o nome na legenda.
@@ -35,8 +36,9 @@ const SUGESTOES_CORES = {
   13: "largura do guia-fio",
   16: "sem seleção (não tece)",
 };
-const NOMES_LINHAS = { R1: "economizador / repetição", R3: "guia-fio", R5: "cancelar malha", R6: "ponto (densidade)" };
+const NOMES_LINHAS = { R1: "economizador / repetição", R2: "economizador: repetição de fora", R3: "guia-fio", R5: "cancelar malha", R6: "ponto (densidade)" };
 const CHAVE_LEGENDA = "editor-shima-legenda";
+const CHAVE_NOMES_LINHAS = "editor-shima-nomes-linhas";
 
 function lerLegenda() {
   try {
@@ -61,6 +63,30 @@ function nomeDaCor(n) {
   return SUGESTOES_CORES[n] ? `${SUGESTOES_CORES[n]}?` : "";
 }
 
+// Nomes das linhas de opção (L1–L20, R1–R20) dados pela pessoa; sem nome, vale a sugestão com "?".
+const nomesLinhas = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_NOMES_LINHAS) || "{}") || {};
+  } catch (erro) {
+    return {};
+  }
+})();
+
+function nomeDaLinha(id) {
+  if (nomesLinhas[id]) return nomesLinhas[id];
+  return NOMES_LINHAS[id] ? `${NOMES_LINHAS[id]}?` : "";
+}
+
+function renomearLinha(id, nome) {
+  if (nome) nomesLinhas[id] = nome;
+  else delete nomesLinhas[id];
+  try {
+    localStorage.setItem(CHAVE_NOMES_LINHAS, JSON.stringify(nomesLinhas));
+  } catch (erro) {
+    // Sem armazenamento: o nome vale só até fechar a página.
+  }
+}
+
 const TIPOS = { dat: "desenho", programa: "programa", ajustes: "ajustes", imagem: "imagem", desconhecido: "outro" };
 
 const estado = {
@@ -83,6 +109,8 @@ const estado = {
   destacar: false, // destacar a cor primária, apagando as outras
   carreiraFoco: null, // carreira sob o cursor, para o painel de linhas de opção
   imagemImportar: null, // { nome, url } escolhida numa aba de imagem
+  simbolos: false, // desenhar o tipo de ponto de cada código por cima do desenho
+  motivo: null, // motivo do carimbo: { nome, w, h, px } (linha de cima primeiro)
 };
 
 const tela = $("tela");
@@ -225,11 +253,12 @@ function perguntar(texto, botao = "Continuar") {
   });
 }
 
-function pedirNome(titulo, valor) {
+function pedirNome(titulo, valor, rotulo = "Nome do arquivo") {
   return new Promise((responder) => {
     const dlg = $("dlg-nome");
     const campo = dlg.querySelector("input[name=nome]");
     $("dlg-nome-titulo").textContent = titulo;
+    $("dlg-nome-rotulo").textContent = rotulo;
     campo.value = valor;
     dlg.addEventListener("close", () => responder(dlg.returnValue === "ok" ? campo.value.trim() || null : null), { once: true });
     abrirDialogo("dlg-nome");
@@ -649,6 +678,7 @@ function renderizar() {
   }
   ctx.putImageData(imagem, 0, 0);
   posicionarCaixas();
+  agendarSimbolos();
 }
 
 function zoomQueCabe(d) {
@@ -674,6 +704,7 @@ function aplicarTamanho(aba) {
   grade.style.backgroundSize = `${z}px ${z}px, ${z}px ${z}px, ${10 * z}px ${10 * z}px, ${10 * z}px ${10 * z}px`;
   $("zoom").value = String(z);
   posicionarCaixas();
+  agendarSimbolos();
 }
 
 function definirZoom(z, cx, cy) {
@@ -1034,6 +1065,14 @@ tela.addEventListener("pointerdown", (e) => {
     if (e.button === 2) estado.secundaria = n;
     else estado.primaria = n;
     atualizarPainel();
+    const linha = ShimaDat.linhaDeOpcaoEm(blocosDeOpcao(a), p.x, p.y);
+    if (linha) escolherLinhaDeOpcao(a, linha);
+  } else if (f === "carimbo") {
+    if (!estado.motivo) return avisar("Escolha um motivo na Biblioteca de pontos.");
+    salvarHistorico(a);
+    gesto = { tipo: "carimbo", origem: p, feitos: new Set(["0,0"]) };
+    carimbarMotivo(d, p, estado.motivo);
+    renderizar();
   } else if (f === "selecao") {
     if (a.flutuante && dentro(p, a.flutuante)) {
       gesto = { tipo: "mover", dx: p.x - a.flutuante.x, dy: p.y - a.flutuante.y };
@@ -1068,6 +1107,15 @@ tela.addEventListener("pointermove", (e) => {
       const fim = gesto.forma === "linha" && e.shiftKey ? travarAngulo(gesto.inicio, p) : p;
       desenharForma(d, gesto.forma, gesto.inicio, fim, gesto.cor, estado.pincel);
       renderizar();
+    } else if (gesto.tipo === "carimbo") {
+      // Arrastando, o motivo se repete alinhado com o primeiro carimbo.
+      const m = estado.motivo;
+      const i = Math.floor((p.x - gesto.origem.x) / m.w), j = Math.floor((gesto.origem.y - p.y) / m.h);
+      if (!gesto.feitos.has(`${i},${j}`)) {
+        gesto.feitos.add(`${i},${j}`);
+        carimbarMotivo(d, { x: gesto.origem.x + i * m.w, y: gesto.origem.y - j * m.h }, m);
+        renderizar();
+      }
     } else if (gesto.tipo === "selecionar") {
       a.selecao = retanguloEntre(gesto.inicio, prender(p, d));
       posicionarCaixas();
@@ -1083,7 +1131,7 @@ tela.addEventListener("pointermove", (e) => {
 function terminarGesto() {
   eixoEspelho = null;
   const a = abaDat();
-  if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma")) atualizarPainel();
+  if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma" || gesto.tipo === "carimbo")) atualizarPainel();
   gesto = null;
   atualizarBotoes();
 }
@@ -1257,6 +1305,16 @@ const ACOES = {
     form.largura.value = a.doc.largura;
     form.altura.value = a.doc.altura;
     abrirDialogo("dlg-redimensionar");
+  },
+  // Biblioteca de pontos (editor_recursos.js)
+  "repetir-motivo"(a) {
+    repetirMotivoNaSelecao(a);
+  },
+  "usar-copia"() {
+    usarCopiaComoMotivo();
+  },
+  "guardar-motivo"() {
+    guardarMotivo();
   },
 };
 
@@ -1711,6 +1769,7 @@ function atualizarPainel() {
     .map(([k, v]) => `<dt>${k}</dt><dd class="mono">${v}</dd>`)
     .join("");
   atualizarBotoes();
+  atualizarRecursos(a);
 }
 
 function escolherCor(n, secundaria) {
@@ -1800,6 +1859,9 @@ function atualizarBotoes() {
   tem("cortar-desenho", !!a.selecao);
   for (const acao of ["duplicar-carreiras", "excluir-carreiras", "duplicar-agulhas", "excluir-agulhas"]) tem(acao, !!a.selecao);
   tem("mudar-tamanho", sel);
+  tem("repetir-motivo", !!a.selecao && !!estado.motivo);
+  tem("usar-copia", !!estado.area);
+  tem("guardar-motivo", !!estado.motivo);
 }
 
 function desenharOpcoes() {
@@ -1827,7 +1889,7 @@ function desenharOpcoes() {
       const painel = Math.floor(blocos.indexOf(b) / 2) + 1;
       const linhas = valores.length
         ? valores
-            .map((v) => `<tr><th class="mono">${v.linha}</th><td class="mono">${v.cores.join(", ")}</td><td class="suave">${NOMES_LINHAS[v.linha] ? `${NOMES_LINHAS[v.linha]}?` : ""}</td></tr>`)
+            .map((v) => `<tr><th class="mono">${v.linha}</th><td class="mono">${v.cores.join(", ")}</td><td class="suave">${esc(nomeDaLinha(v.linha))}</td></tr>`)
             .join("")
         : `<tr><td colspan="3" class="suave">sem valores</td></tr>`;
       return `<table class="tabela tabela-opcoes"><caption>${b.lado === "L" ? "Esquerda" : "Direita"} · painel ${painel}</caption><tbody>${linhas}</tbody></table>`;
@@ -1843,7 +1905,8 @@ function atualizarStatus(p) {
     const n = d.pixels[p.y * d.largura + p.x];
     const nome = nomeDaCor(n);
     const linha = ShimaDat.linhaDeOpcaoEm(blocosDeOpcao(a), p.x, p.y);
-    const textoLinha = linha ? ` · Linha de opção ${linha.lado}${linha.numero}${NOMES_LINHAS[linha.lado + linha.numero] ? `: ${NOMES_LINHAS[linha.lado + linha.numero]}?` : ""}` : "";
+    const nomeLinha = linha ? nomeDaLinha(linha.lado + linha.numero) : "";
+    const textoLinha = linha ? ` · Linha de opção ${linha.lado}${linha.numero}${nomeLinha ? `: ${nomeLinha}` : ""}` : "";
     $("status-posicao").textContent = `Agulha ${p.x + 1} · Carreira ${d.altura - p.y} · Cor ${n}${nome ? ` (${nome})` : ""}${textoLinha}`;
     if (estado.carreiraFoco !== p.y) {
       estado.carreiraFoco = p.y;
@@ -1854,7 +1917,8 @@ function atualizarStatus(p) {
   }
   const r = a.flutuante || a.selecao;
   $("status-selecao").textContent = r ? `${a.flutuante ? "Colagem" : "Seleção"} ${r.w} × ${r.h}` : "";
-  $("status-ferramenta").textContent = `${FERRAMENTAS[estado.ferramenta].nome}${["lapis", "borracha", "linha", "retangulo"].includes(estado.ferramenta) ? ` · ${estado.pincel} px` : ""}${estado.espelhado ? " · espelhado" : ""}`;
+  const motivo = estado.ferramenta === "carimbo" ? (estado.motivo ? ` · ${estado.motivo.nome} ${estado.motivo.w}×${estado.motivo.h}` : " · escolha um motivo") : "";
+  $("status-ferramenta").textContent = `${FERRAMENTAS[estado.ferramenta].nome}${["lapis", "borracha", "linha", "retangulo"].includes(estado.ferramenta) ? ` · ${estado.pincel} px` : ""}${motivo}${estado.espelhado ? " · espelhado" : ""}`;
   $("status-tamanho").textContent = `${d.largura} × ${d.altura} · ${Math.round(a.zoom * 100)}%`;
 }
 
@@ -2144,7 +2208,8 @@ $("btn-baixar").addEventListener("click", () => {
 $("btn-png").addEventListener("click", exportarPng);
 
 document.addEventListener("keydown", (e) => {
-  if (e.target.closest("input, select, textarea") || document.querySelector("dialog[open]")) return;
+  // Caixas de marcar (Grade, Espelhado, Símbolos…) não usam letras: os atalhos continuam valendo nelas.
+  if (e.target.closest('input:not([type="checkbox"]), select, textarea') || document.querySelector("dialog[open]")) return;
   const a = abaDat();
   const ctrl = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
@@ -2207,17 +2272,24 @@ window.addEventListener("resize", () => {
   if (a) posicionarCaixas();
 });
 
-escolherFerramenta("lapis");
-if (window.SHIMA_EXEMPLO) {
-  // Versão publicada: abre já com um desenho de exemplo embutido na página.
-  const binario = atob(window.SHIMA_EXEMPLO.base64);
-  const bytes = Uint8Array.from(binario, (c) => c.charCodeAt(0));
-  abrirBuffer(window.SHIMA_EXEMPLO.nome, bytes.buffer, "exemplo");
-}
-desenharConexao();
-carregarPasta().then(async () => {
+// Começa depois que todos os scripts da página carregaram: editor_recursos.js vem depois deste arquivo e
+// a tela do desenho já usa as funções dele.
+function iniciar() {
+  escolherFerramenta("lapis");
+  if (window.SHIMA_EXEMPLO) {
+    // Versão publicada: abre já com um desenho de exemplo embutido na página.
+    const binario = atob(window.SHIMA_EXEMPLO.base64);
+    const bytes = Uint8Array.from(binario, (c) => c.charCodeAt(0));
+    abrirBuffer(window.SHIMA_EXEMPLO.nome, bytes.buffer, "exemplo");
+  }
   desenharConexao();
-  await retomarPastaLembrada();
-  const pedido = new URLSearchParams(location.search).get("abrir");
-  if (pedido) abrirDaPasta(pedido);
-});
+  carregarPasta().then(async () => {
+    desenharConexao();
+    await retomarPastaLembrada();
+    const pedido = new URLSearchParams(location.search).get("abrir");
+    if (pedido) abrirDaPasta(pedido);
+  });
+}
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciar, { once: true });
+else setTimeout(iniciar);
