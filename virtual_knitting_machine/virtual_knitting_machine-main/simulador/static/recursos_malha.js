@@ -1379,6 +1379,7 @@
   // frente e mover). Os outros (13 largura do guia, 16 sem seleção, transferências) não contam como malha.
   const TECE = new Set([1, 2, 3, 11, 12, 51, 52, 61, 71]);
   const TRANSFERE = new Set([60, 70]); // só transferência, sem tricotar
+  const MARCAS = new Set([0, 13, 16, 99]); // fora, largura do guia, sem seleção e o 99 dos arquivos (nada tece)
 
   function intervalos(carreiras) {
     const ord = [...carreiras].sort((a, b) => a - b);
@@ -1406,17 +1407,23 @@
       if (m.x0 + k <= m.x1) colunas.add(m.x0 + k);
       if (m.x1 - k >= m.x0) colunas.add(m.x1 - k);
     }
-    const achadas = [], codigos = new Set();
-    for (const x of [...colunas].sort((a, b) => a - b)) {
+    // Uma coluna alterna dois códigos quando quase toda carreira troca: devolve os dois códigos ou null.
+    const alterna = (x) => {
       const vals = [];
       for (let c = corpo.de; c <= corpo.ate; c++) vals.push(doc.pixels[(H - c) * W + x]);
       const dif = new Set(vals);
       let trocas = 0;
       for (let k = 1; k < vals.length; k++) if (vals[k] !== vals[k - 1]) trocas++;
-      if (dif.size === 2 && trocas >= 0.8 * (vals.length - 1)) {
-        achadas.push(x + 1);
-        dif.forEach((v) => codigos.add(v));
-      }
+      return dif.size === 2 && trocas >= 0.8 * (vals.length - 1) ? [...dif].sort((a, b) => a - b).join() : null;
+    };
+    // Se o meio da malha alterna os mesmos códigos (tubular, listras de uma carreira), é o desenho, não a ourela.
+    const meio = new Set([0.25, 0.5, 0.75].map((f) => alterna(Math.round(m.x0 + f * (m.x1 - m.x0)))).filter(Boolean));
+    const achadas = [], codigos = new Set();
+    for (const x of [...colunas].sort((a, b) => a - b)) {
+      const par = alterna(x);
+      if (!par || meio.has(par)) continue;
+      achadas.push(x + 1);
+      par.split(",").forEach((v) => codigos.add(Number(v)));
     }
     if (!achadas.length) return null;
     return { agulhas: achadas, codigos: [...codigos].sort((a, b) => a - b), de: corpo.de, ate: corpo.ate, x0: m.x0, x1: m.x1 };
@@ -1442,7 +1449,7 @@
       const guiasSemMalha = new Set();
       let esquerda = Infinity, direita = -Infinity;
       for (let y = p.y0; y <= p.y1; y++) {
-        let tece = false, tem13 = false, transf = false, seguidos = 0, maior = 0;
+        let tece = false, tem13 = false, transf = false, soMarcas = true, seguidos = 0, maior = 0;
         for (let x = p.x0; x <= p.x1; x++) {
           const v = px[y * W + x];
           if (TECE.has(v)) {
@@ -1452,6 +1459,7 @@
           }
           if (v === 13) tem13 = true;
           if (TRANSFERE.has(v)) transf = true;
+          if (!MARCAS.has(v)) soMarcas = false;
           seguidos = v === 16 ? seguidos + 1 : 0;
           maior = Math.max(maior, seguidos);
         }
@@ -1467,7 +1475,7 @@
           if (!r5) (tece ? transfereTecendo : transfereSemR5).push(c);
           if (!r3 && r5) transfere.push(c);
         } else if (tem(5)) (tem(3) ? cancelaComGuia : cancela).push(c);
-        else if (tem(3) && !tece) {
+        else if (tem(3) && soMarcas) {
           // O guia passa sem nenhuma agulha tecer: normalmente a entrada do fio no começo da peça.
           guiaSemMalha.push(c);
           valoresDaLinha(doc, p.R, 3, y).forEach((v) => guiasSemMalha.add(v));
@@ -1550,7 +1558,7 @@
         });
       }
     }
-    if (!itens.some((i) => i.nivel !== "info")) itens.push({ nivel: "info", regra: "nenhum", titulo: "Nenhum problema encontrado", texto: "As regras de guia-fio, ponto, cancelar malha, transferência, largura do guia e flutuação passaram." });
+    if (!itens.some((i) => i.nivel !== "info")) itens.push({ nivel: "info", regra: "nenhum", titulo: "Nenhum problema no desenho", texto: "As regras de guia-fio, ponto, cancelar malha, transferência, largura do guia e flutuação passaram." });
     return itens;
   }
 

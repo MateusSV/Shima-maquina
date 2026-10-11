@@ -1236,7 +1236,8 @@ tela.addEventListener("pointerdown", (e) => {
     } else {
       fixarFlutuante(a);
       const q = prender(p, d);
-      gesto = { tipo: "selecionar", inicio: q };
+      // O ponto da tela onde começou: um tremido de poucos pixels ainda conta como clique.
+      gesto = { tipo: "selecionar", inicio: q, telaX: e.clientX, telaY: e.clientY };
       a.selecao = retanguloEntre(q, q);
       posicionarCaixas();
     }
@@ -1273,7 +1274,7 @@ tela.addEventListener("pointermove", (e) => {
       renderizar();
     } else if (gesto.tipo === "selecionar") {
       const q = prender(p, d);
-      if (q.x !== gesto.inicio.x || q.y !== gesto.inicio.y) gesto.moveu = true;
+      if (Math.hypot(e.clientX - gesto.telaX, e.clientY - gesto.telaY) >= 6) gesto.moveu = true;
       a.selecao = retanguloEntre(gesto.inicio, q);
       posicionarCaixas();
     } else if (gesto.tipo === "mover" && a.flutuante) {
@@ -1974,7 +1975,12 @@ function escolherCor(n, secundaria) {
 for (const id of ["cores-uso", "codigos-nome", "grade-paleta"]) {
   $(id).addEventListener("click", (e) => {
     const b = e.target.closest("[data-cor]");
-    if (b) escolherCor(Number(b.dataset.cor), false);
+    if (!b) return;
+    const cor = b.dataset.cor;
+    escolherCor(Number(cor), false);
+    // A lista é redesenhada: o foco volta para a mesma cor (para quem usa o teclado).
+    const novo = $(id).querySelector(`[data-cor="${cor}"]`);
+    if (novo) novo.focus();
   });
   $(id).addEventListener("contextmenu", (e) => {
     const b = e.target.closest("[data-cor]");

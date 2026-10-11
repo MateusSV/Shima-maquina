@@ -829,7 +829,15 @@ function calcularModeloAtual() {
 
 const textoPontos = (m) => `= ${m.pontos} ${m.eixo === "h" ? "agulhas" : "carreiras"}`;
 
+// Desde que a pessoa abriu o Modelo ou a Forma, o Verificar mostra os trechos difíceis das peças.
+function marcarModeloEmUso() {
+  if (modelo.emUso) return;
+  modelo.emUso = true;
+  gravarArmazenado(CHAVE_MODELO, modelo);
+}
+
 function abrirModelo() {
+  marcarModeloEmUso();
   const form = $("dlg-modelo").querySelector("form");
   form.estilo.innerHTML = RM.ESTILOS.map((e) => `<option value="${e.id}">${esc(e.nome)}</option>`).join("");
   form.estilo.value = modelo.estilo;
@@ -1243,6 +1251,7 @@ function formaDaPeca(peca, r = ultimoModelo || calcularModeloAtual()) {
 }
 
 function abrirForma(indice = formaPeca) {
+  marcarModeloEmUso();
   const r = ultimoModelo || calcularModeloAtual();
   if (limitar(indice, 0, r.pecas.length - 1) !== formaPeca) formaDestaque = null;
   formaPeca = limitar(indice, 0, r.pecas.length - 1);
@@ -1623,7 +1632,7 @@ function imagemDoLogo(form) {
   return { w, h, px, fonte, medias: q.medias };
 }
 
-const RESERVADAS_FIO = new Set([0, 13, 16]); // sem malha, largura do guia e sem seleção não são cor de fio
+const RESERVADAS_FIO = new Set([0, 13, 16, 60, 70]); // sem malha, largura do guia, sem seleção e transferência não são cor de fio
 
 // Para cada fio, a cor da paleta mais parecida com a cor dele na imagem (sem repetir a mesma cor).
 function coresDaImagemNosFios(form) {
@@ -1841,17 +1850,20 @@ const LIMITE_JACQUARD = 300000; // pontos analisados de uma vez
 // Cores que são fio no jacquard. Nunca contam o 0, as marcas (13 largura do guia, 16 sem seleção) e a
 // transferência (60/70). Sem seleção também ficam de fora as cores com menos de 5% dos pontos (ourela e marcas)
 // e, no corpo de um painel, os códigos de ponto (uma ribana de 1 e 2 não é jacquard), como no Verificar.
-const NAO_FIO = new Set([0, 13, 16, 60, 70]);
+const NAO_FIO = RESERVADAS_FIO;
+const REGRA_FIO_VERIFICAR = { minimo: 0.05, semCodigosDePonto: true };
 function coresDeFio(cores, r, { minimo = 0, semCodigosDePonto = false } = {}) {
   return new Set(cores.filter((c) => !NAO_FIO.has(c.cor) && c.n >= minimo * r.w * r.h && !(semCodigosDePonto && RM.tipoDePonto(c.cor))).map((c) => c.cor));
 }
 
-function abrirJacquard() {
+// regraDoVerificar: quem vem de um item do Verificar analisa com a mesma regra de fio dele.
+function abrirJacquard(regraDoVerificar = null) {
   const a = abaDat();
   if (!a) return;
   fixarFlutuante(a);
   let { r, texto } = areaDeAnalise(a, "analisando");
-  let regra = {};
+  // Na seleção também ficam de fora as cores com menos de 5% dos pontos (ourela, marcas), como antes.
+  let regra = regraDoVerificar || { minimo: 0.05 };
   if (!a.selecao) {
     // Sem seleção: o corpo do painel que está na tela, com a mesma regra de fio do Verificar.
     const corpo = corpoVisivel(a);
@@ -1903,10 +1915,10 @@ function analisarJacquard() {
   Object.assign(jacquard, { longas, maior, fl, maximo, estrutura, escada });
   const mostrar = cores.slice(0, 24);
   let html = `<div class="cores-area">${mostrar
-    .map((c) => `<span${fios.has(c.cor) ? "" : ' class="nao-fio" title="Não conta como fio"'}>${amostraCor(d, c.cor)} <span class="suave">× ${c.n.toLocaleString("pt-BR")}</span></span>`)
+    .map((c) => `<span${fios.has(c.cor) ? "" : ' class="nao-fio"'}>${amostraCor(d, c.cor)} <span class="suave">× ${c.n.toLocaleString("pt-BR")}${fios.has(c.cor) ? "" : " · não é fio"}</span></span>`)
     .join("")}${cores.length > mostrar.length ? `<span class="suave">+${cores.length - mostrar.length}</span>` : ""}</div>`;
   const k = fios.size;
-  html += `<p>${cores.length} ${cores.length === 1 ? "cor" : "cores"} na área${k === cores.length ? "" : `, ${k} como fio (as apagadas não contam)`}. ${EXPLICA_AVESSO[estrutura](escada)}</p>`;
+  html += `<p>${cores.length} ${cores.length === 1 ? "cor" : "cores"} na área${k === cores.length ? "" : `, ${k} como fio`}. ${EXPLICA_AVESSO[estrutura](escada)}</p>`;
   if (k > 1) {
     html += `<p>${k} fios · ${r.h.toLocaleString("pt-BR")} carreiras de desenho = <strong>${(k * r.h).toLocaleString("pt-BR")} carreiras na máquina</strong> (uma por fio).</p>`;
   } else {
@@ -2176,7 +2188,7 @@ function itensDeCor(a, maximo) {
     const r = { x: m.x0, y: d.altura - corpo.ate, w: m.x1 - m.x0 + 1, h: corpo.ate - corpo.de + 1 };
     if (r.w * r.h > LIMITE_JACQUARD) continue;
     // Uma ribana (1 e 2) ou a forma (0 em volta) não são jacquard: códigos de ponto e o 0 não contam como fio.
-    const principais = coresDeFio(RM.coresDaArea(d.pixels, d.largura, r), r, { minimo: 0.05, semCodigosDePonto: true });
+    const principais = coresDeFio(RM.coresDaArea(d.pixels, d.largura, r), r, REGRA_FIO_VERIFICAR);
     if (principais.size < 2) continue;
     const nome = ` (painel ${p.numero})`;
     const longas = RM.flutuacoes(d.pixels, d.largura, r, estrutura, escada, principais).lista.filter((f) => f.comprimento > maximo);
@@ -2226,6 +2238,8 @@ const ONDE_NA_FORMA = { Cava: "na cava", Gola: "na gola", "Gola V": "na gola V",
 
 // Trechos difíceis nas peças do Modelo (com os ajustes da Forma): diminuições ou aumentos fortes seguidos.
 function itensDaForma() {
+  // Só depois de abrir o Modelo ou a Forma: sem isso, as peças de exemplo dariam avisos em todo arquivo.
+  if (!modelo.emUso) return [];
   const r = ultimoModelo || calcularModeloAtual();
   const itens = [];
   r.pecas.forEach((peca, indice) => {
@@ -2293,7 +2307,7 @@ function abrirFerramentaDoItem(item) {
   } else if (item.regra === "sem-ponto") abrirProcessar(RM.PASSOS_PROCESSAMENTO.findIndex((s) => s.id === "ponto"));
   else if (item.regra === "jacquard" || item.regra === "intarsia") {
     selecionarNoDesenho(a, item.area);
-    abrirJacquard();
+    abrirJacquard(REGRA_FIO_VERIFICAR);
     if (item.regra === "intarsia" && jacquard) {
       $("dlg-jacquard").querySelector("form").vista.value = "guias";
       analisarJacquard();
@@ -2509,17 +2523,30 @@ function desenharAgulhas() {
     }
     return null;
   };
-  // Laçadas nas agulhas depois da carreira yy: a malha deixa a laçada nova, a agulha parada (sem seleção ou
-  // fora da malha) fica com a de antes e a transferência leva a de antes para o destino.
-  const lacos = (yy, i, n = 0) => {
-    const ac = acaoDoPonto(codigoEm(yy, i));
-    const parada = !ac.transfere && !ac.frente && !ac.tras;
-    if (!ac.transfere && !parada) return ac;
-    const antes = n < 6 ? lacos(yy + 1, i, n + 1) : { frente: 0, tras: 0 };
-    if (parada) return antes;
-    const tem = antes.frente > 0 || antes.tras > 0 ? 1 : 0;
-    const para = destino(yy, i);
-    return para === "frente" ? { frente: tem, tras: 0 } : para === "tras" ? { frente: 0, tras: tem } : antes;
+  // Laçadas nas agulhas depois da carreira yy: a malha deixa a laçada nova; a agulha parada (sem seleção, 99)
+  // fica com a de antes, por quantas carreiras for; o 0 (fora da peça, depois de arrematar ou diminuir) não
+  // tem laçada; a transferência leva a de antes para o destino.
+  const lacos = (yy, i) => {
+    const transferencias = [];
+    let estado = { frente: 0, tras: 0 };
+    for (let k = 0; yy + k <= ar.y1; k++) {
+      const v = codigoEm(yy + k, i);
+      const ac = acaoDoPonto(v);
+      if (ac.frente || ac.tras) {
+        estado = ac;
+        break;
+      }
+      if (v === 0) break;
+      if (ac.transfere) transferencias.push(yy + k);
+    }
+    // As transferências valem de baixo para cima.
+    for (let j = transferencias.length - 1; j >= 0; j--) {
+      const tem = estado.frente > 0 || estado.tras > 0 ? 1 : 0;
+      const para = destino(transferencias[j], i);
+      if (para === "frente") estado = { frente: tem, tras: 0 };
+      else if (para === "tras") estado = { frente: 0, tras: tem };
+    }
+    return estado;
   };
   const caminho = [];
   for (let i = 0; i < jan; i++) {
@@ -3103,10 +3130,18 @@ function desenharVariantes() {
 }
 
 // As cores da variante vão para os fios na ordem (e voltam ao começo se houver mais fios que cores).
+// Marca a variante escolhida nos botões que já estão na tela (redesenhar tiraria o foco do botão).
+function marcarVariante() {
+  const lista = [...VARIANTES_PRONTAS, ...minhasVariantes];
+  $("simular-variantes")
+    .querySelectorAll("[data-variante]")
+    .forEach((b) => b.setAttribute("aria-pressed", String(lista[Number(b.dataset.variante)] === simul.variante)));
+}
+
 function aplicarVariante(v) {
   const porGuia = porGuiaNaSimulacao();
   simul.variante = v; // fica marcada até mudar uma cor à mão
-  desenharVariantes();
+  marcarVariante();
   if (!v.cores) {
     if (porGuia) simul.coresGuia = { ...simul.original };
     else simul.trocas = {};
@@ -3304,7 +3339,7 @@ function desenharSimulacao() {
     // Uma cor mudada à mão (ou outro jeito de colorir) já não é a variante escolhida.
     if ((chave || alvo.name === "cores") && simul.variante) {
       simul.variante = null;
-      if (alvo.name !== "cores") desenharVariantes();
+      marcarVariante();
     }
     if (alvo.name === "cores") {
       desenharFiosSimular();
@@ -3909,7 +3944,9 @@ function abrirFicha() {
   const v = ficha.dados;
   $("ficha-campos").innerHTML = RM.CAMPOS_FICHA.map(([id]) => {
     const [dica, exemplo] = DICAS_FICHA[id] || ["", ""];
-    return `<label class="campo">${ROTULOS_FICHA[id]} <input type="text" maxlength="60" data-campo="${id}" value="${esc(v.campos[id] || "")}" placeholder="${esc(exemplo)}" aria-describedby="dica-ficha-${id}" autocomplete="off"><span class="unidade" id="dica-ficha-${id}">${esc(dica)}</span></label>`;
+    return `<div class="campo-com-dica"><label class="campo">${ROTULOS_FICHA[id]} <input type="text" maxlength="60" data-campo="${id}" value="${esc(v.campos[id] || "")}" placeholder="${esc(
+      exemplo,
+    )}" aria-describedby="dica-ficha-${id}" autocomplete="off"></label><span class="unidade" id="dica-ficha-${id}">${esc(dica)}</span></div>`;
   }).join("");
   $("ficha-guias").innerHTML = ficha.guias.length
     ? ficha.guias
@@ -3980,7 +4017,9 @@ function desenharArquivosFicha() {
   $("ficha-arquivos").innerHTML = estado.abas
     .map((x) => {
       const marcado = x === a || juntos.has(x) || baseDoNome(x.nome) === base;
-      const tamanho = x.tamanho ? `${x.tamanho.toLocaleString("pt-BR")} bytes` : "novo";
+      // O desenho vai como está agora: o tamanho é o do arquivo que seria gravado.
+      const bytes = x.tipo === "dat" ? bytesDoDesenho(x).length : x.tamanho;
+      const tamanho = `${bytes.toLocaleString("pt-BR")} bytes`;
       return `<li><label><input type="checkbox" data-arquivo="${x.id}"${marcado ? " checked" : ""}><span class="nome-arquivo">${esc(x.nome)}${
         x.modificado ? ' <span class="suave">(alterado)</span>' : ""
       }</span><span class="suave mono">${esc(TIPOS_ARQUIVO[x.tipo] || x.tipo)} · ${tamanho}</span></label></li>`;
@@ -4042,8 +4081,7 @@ async function baixarZipDaFicha() {
 // No Chrome e no Edge dá para gravar direto numa pasta escolhida, como a do pendrive da máquina.
 async function gravarNaPastaDaFicha() {
   if (!ficha || !acessoAPastasDisponivel()) return;
-  const arquivos = await arquivosDaFicha();
-  if (!arquivos) return;
+  // A janela da pasta vem primeiro, enquanto o clique ainda vale para o navegador.
   let pasta;
   try {
     pasta = await window.showDirectoryPicker({ id: "pendrive", mode: "readwrite" });
@@ -4051,6 +4089,11 @@ async function gravarNaPastaDaFicha() {
     if (erro && erro.name !== "AbortError") avisar(`Não foi possível abrir a pasta: ${erro.message}`, true);
     return;
   }
+  if (estado.pastaLocal && (await pasta.isSameEntry(estado.pastaLocal).catch(() => false))) {
+    return avisar("Essa é a pasta dos desenhos conectada ao editor. Escolha a pasta do pendrive (para guardar o desenho, use Salvar).", true);
+  }
+  const arquivos = await arquivosDaFicha();
+  if (!arquivos) return;
   try {
     const existentes = [];
     for (const f of arquivos) {
@@ -4092,8 +4135,13 @@ function itensAntesDeTecer() {
     // Conta os erros e os avisos do Verificar, com o mesmo limite de fio solto do diálogo dele.
     const maximo = inteiro($("dlg-verificar").querySelector("form").maximo.value, 5, 1, 500);
     // Os trechos difíceis são das peças do Modelo, não deste desenho: ficam no Verificar, fora desta conta.
-    const lista = itensDoVerificar(a, maximo).filter((i) => i.regra !== "forma");
-    ficha.verificacao = { erros: lista.filter((i) => i.nivel === "erro").length, avisos: lista.filter((i) => i.nivel === "aviso").length };
+    const todos = itensDoVerificar(a, maximo);
+    const lista = todos.filter((i) => i.regra !== "forma");
+    ficha.verificacao = {
+      erros: lista.filter((i) => i.nivel === "erro").length,
+      avisos: lista.filter((i) => i.nivel === "aviso").length,
+      forma: todos.length - lista.length,
+    };
   }
   const uso = RM.usoDoProcessamento(a.doc, blocos);
   const pd = completarGuias(processamentoDe(a), uso);
@@ -4104,18 +4152,21 @@ function itensAntesDeTecer() {
   const vazios = ["codigo", "descricao", "maquina", "fio"].filter((k) => !preenchido(c[k])).map((k) => ROTULOS_FICHA[k].toLowerCase());
   const doPrograma = arquivosDoPrograma(a);
   const programas = doPrograma.programas.length > 0 && doPrograma.ajustes.length > 0;
-  const { erros, avisos } = ficha.verificacao;
+  const { erros, avisos, forma } = ficha.verificacao;
+  const daForma = forma ? `; e ${forma} trecho${forma === 1 ? "" : "s"} difíce${forma === 1 ? "l" : "is"} na forma do Modelo, que não conta${forma === 1 ? "" : "m"} aqui` : "";
   const plural = (n, nome) => `${n} ${nome}${n === 1 ? "" : "s"}`;
   const itens = [
     {
       id: "verificar",
       ok: !erros && !avisos,
-      titulo: "Verificar sem erros nem avisos",
-      detalhe: erros
-        ? `${plural(erros, "erro")}${avisos ? ` e ${plural(avisos, "aviso")}` : ""} no Verificar: corrija os erros antes de tecer`
-        : avisos
-          ? `${plural(avisos, "aviso")} no Verificar: confira se são esperados`
-          : "nenhum erro nem aviso nas regras do Verificar",
+      titulo: "Verificar: desenho sem erros nem avisos",
+      detalhe: `${
+        erros
+          ? `${plural(erros, "erro")}${avisos ? ` e ${plural(avisos, "aviso")}` : ""} no desenho: corrija os erros antes de tecer`
+          : avisos
+            ? `${plural(avisos, "aviso")} no desenho: confira se são esperados`
+            : "nenhum erro nem aviso nas regras do desenho"
+      }${daForma}`,
       ir: "verificar",
       botao: "Verificar…",
     },

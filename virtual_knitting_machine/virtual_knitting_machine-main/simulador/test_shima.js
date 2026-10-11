@@ -414,6 +414,22 @@ test("verificar: transferência com fio é erro", semPasta, () => {
   assert.deepEqual([tecendo.nivel, tecendo.carreiras], ["erro", "202"]);
 });
 
+test("verificar: ourela só nas bordas e entrada do fio só com marcas", semPasta, () => {
+  const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
+  const H = doc.altura, W = doc.largura;
+  const regras = () =>
+    Recursos.verificarDesenho(doc, ShimaDat.linhasDeOpcao(doc), { flutuacaoMaxima: 5 })
+      .filter((i) => i.regra === "ourela" || i.regra === "guia-sem-malha")
+      .map((i) => `${i.regra} ${i.titulo.includes("painel 1") ? 1 : 2}`);
+  assert.deepEqual(regras(), ["guia-sem-malha 1", "ourela 1", "guia-sem-malha 2", "ourela 2"]);
+  // Corpo inteiro alternando 51 e 52 (tubular): é o desenho, não a ourela.
+  for (let c = 203; c <= 359; c++) for (let x = 451; x <= 653; x++) doc.pixels[(H - c) * W + x] = c % 2 ? 51 : 52;
+  assert.deepEqual(regras(), ["guia-sem-malha 1", "guia-sem-malha 2", "ourela 2"]);
+  // Cor de desenho (não é marca) na carreira com guia: não é entrada do fio.
+  doc.pixels[(H - 189) * W + 500] = doc.pixels[(H - 190) * W + 500] = 5;
+  assert.deepEqual(regras(), ["guia-sem-malha 2", "ourela 2"]);
+});
+
 test("pacotes: trechos do exemplo, desperdício, ribana, arremate e sem barra", semPasta, () => {
   const doc = ShimaDat.ler(ler("00FE_BLS_ESTAMPA_ONÇA.dat"));
   const paineis = Recursos.paineis(ShimaDat.linhasDeOpcao(doc));

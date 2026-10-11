@@ -96,9 +96,9 @@ início**):
   quantas carreiras a máquina tece (uma por fio) e a **vista do avesso**
   (espelhada e conforme a estrutura: salpicada no birdseye, o negativo no tubular, as colunas da escada e os
   fios soltos na cor deles); quantos guia-fios a intarsia precisa, as áreas pequenas, o mapa e a tabela de cada
-  guia (cor, carreiras e áreas). Passando o mouse no mapa: agulha, carreira, cor, área e guia. Sem seleção, ele
-  analisa o corpo do painel e, como o Verificar, não conta como fio os códigos de ponto, as marcas e as cores
-  com menos de 5% dos pontos.
+  guia (cor, carreiras e áreas). Passando o mouse no mapa: agulha, carreira, cor, área e guia. Não contam como
+  fio as marcas (0, 13, 16, 60/70) nem as cores com menos de 5% dos pontos; sem seleção (ou aberto pelo
+  Verificar), ele analisa o corpo do painel e, como o Verificar, também deixa de fora os códigos de ponto.
 - **Linhas de opção**: a grade mostra as 20 linhas de cada lado, com as que têm valores marcadas; escolha uma
   (na grade, na tabela da carreira ou com o conta-gotas) para ver as faixas de valores por carreira, o que ela
   faz (R1 a R6, ou um lembrete de que racking, velocidade e puxador também usam linhas), dar um nome a ela e
@@ -106,7 +106,8 @@ início**):
   **Escurecer o desenho** deixa só as linhas de opção em destaque.
 - **Verificar**: procura carreiras com malha sem guia-fio (R3) ou sem ponto (R6), cancelar malha (R5) com
   guia-fio, falta da largura do guia (13), flutuações longas (16), painéis diferentes e trechos difíceis na
-  forma das peças do Modelo (aviso), e mostra a ourela alternada e a entrada do fio (guia-fio sem malha). Marca
+  forma das peças do Modelo (aviso, depois de abrir o Modelo ou a Forma; a Ficha não conta, porque não são do
+  desenho), e mostra a ourela alternada e a entrada do fio (guia-fio sem malha). Marca
   como **ERRO** a transferência (60/70) com guia-fio na R3 ou em carreira que
   tricota sem a R5, e o corpo que não dá para tecer nem em jacquard (fios soltos longos com o avesso escolhido
   no Jacquard) nem em intarsia (mais guias do que a máquina tem); quando só um dos dois não serve, é aviso. Cada
