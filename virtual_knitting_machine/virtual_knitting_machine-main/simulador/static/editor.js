@@ -832,9 +832,9 @@ function restaurar(aba, r) {
 // Volta o desenho a como ele foi aberto; é uma alteração como as outras, que dá para desfazer.
 async function voltarAoOriginal(a) {
   if (!a.original) return;
-  fixarFlutuante(a);
   if (!(await perguntar(`Voltar ${a.nome} a como ele foi aberto? Todas as alterações desta aba saem do desenho (dá para desfazer com Ctrl+Z).`, "Voltar ao original"))) return;
   if (abaDat() !== a) return;
+  fixarFlutuante(a); // só depois de confirmar: cancelando, a colagem continua solta
   salvarHistorico(a);
   const o = a.original;
   restaurar(a, { pixels: o.pixels.slice(), largura: o.largura, altura: o.altura, paleta: o.paleta.map((c) => c.slice()) });
@@ -1370,7 +1370,9 @@ const ACOES = {
 $("painel-dat").addEventListener("click", (e) => {
   const botao = e.target.closest("[data-acao]");
   const a = abaDat();
-  if (botao && a) ACOES[botao.dataset.acao](a);
+  if (!botao || !a) return;
+  ACOES[botao.dataset.acao](a);
+  atualizarBotoes(); // a seleção pode ter mudado (Selecionar tudo, por exemplo)
 });
 
 // Duplica ou exclui carreiras (linhas inteiras) ou agulhas (colunas inteiras) da seleção, como o
@@ -1915,7 +1917,8 @@ function atualizarBotoes() {
   tem("mudar-tamanho", sel);
   tem("repetir-motivo", !!estado.motivo);
   const repetir = document.querySelector('[data-acao="repetir-motivo"]');
-  if (repetir) repetir.textContent = a.selecao ? "Repetir o motivo na seleção" : "Repetir o motivo no corpo";
+  // Uma colagem solta vira a seleção ao repetir: o texto diz onde o motivo vai entrar.
+  if (repetir) repetir.textContent = a.selecao || a.flutuante ? "Repetir o motivo na seleção" : "Repetir o motivo no corpo";
   tem("voltar-original", !!a.original && a.hist.length > 0);
   tem("usar-copia", !!estado.area);
   tem("guardar-motivo", !!estado.motivo);

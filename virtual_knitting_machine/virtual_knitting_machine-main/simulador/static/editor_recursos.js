@@ -443,7 +443,7 @@ function carimbarMotivo(d, p, m) {
 
 // Repete o motivo na seleção ou, sem seleção, no corpo do painel que está na janela (só nas agulhas que tecem).
 function repetirMotivoNaSelecao(a) {
-  fixarFlutuante(a);
+  fixarFlutuante(a); // uma colagem solta vira a seleção
   const m = estado.motivo;
   if (!m) return avisar("Escolha um motivo na Biblioteca de pontos.");
   let area = a.selecao, onde = "na seleção";
@@ -455,8 +455,23 @@ function repetirMotivoNaSelecao(a) {
   }
   const degraus = $("tipo-repeticao").value === "degraus";
   const deslocamento = degraus ? inteiro($("deslocamento-repeticao").value, 1, -99, 99) : 0;
+  const d = a.doc;
+  const antes = d.pixels.slice();
+  const blocos = blocosDeOpcao(a); // antes de pintar: depois o motivo pode ter apagado as linhas
   salvarHistorico(a);
-  RM.repetirMotivo(a.doc.pixels, a.doc.largura, area, m, deslocamento);
+  RM.repetirMotivo(d.pixels, d.largura, area, m, deslocamento);
+  // No corpo, o que não tece (fora da forma, sem seleção) fica como estava; e o motivo nunca entra nas colunas
+  // das linhas de opção.
+  if (!a.selecao) {
+    for (let y = area.y; y < area.y + area.h; y++) {
+      for (let x = area.x; x < area.x + area.w; x++) if (!RM.TECE.has(antes[y * d.largura + x])) d.pixels[y * d.largura + x] = antes[y * d.largura + x];
+    }
+  }
+  // As colunas das linhas de opção ficam inteiras como estavam (o editor acha as linhas pela cor de cada coluna).
+  for (const b of blocos) {
+    for (let y = 0; y < d.altura; y++) d.pixels.set(antes.subarray(y * d.largura + b.xMin, y * d.largura + b.xMax + 1), y * d.largura + b.xMin);
+  }
+  a.opcoes = null;
   renderizar();
   atualizarPainel();
   const passo = Math.abs(deslocamento) === 1 ? "agulha" : "agulhas";
@@ -493,12 +508,12 @@ function trechoNoPonto(a, x, y) {
 
 // Corpo do painel que está no meio da janela (ou o mais perto dele): agulhas que tecem × carreiras do corpo.
 function corpoVisivel(a) {
-  const lista = paineisComTrechos(a).filter(({ p, trechos }) => p.x0 !== null && trechos.some((t) => t.id === "corpo"));
+  const lista = paineisComTrechos(a).filter(({ p, trechos }) => RM.areaDeMalha(a.doc, p) && trechos.some((t) => t.id === "corpo"));
   if (!lista.length) return null;
   const j = $("janela"), folha = $("folha");
-  const meio = (j.scrollLeft - folha.offsetLeft + j.clientWidth / 2) / a.zoom;
-  const distancia = ({ p }) => (meio >= p.x0 && meio <= p.x1 ? 0 : Math.min(Math.abs(meio - p.x0), Math.abs(meio - p.x1)));
-  const { p, trechos } = lista.reduce((melhor, item) => (distancia(item) < distancia(melhor) ? item : melhor));
+  const v0 = (j.scrollLeft - folha.offsetLeft) / a.zoom, v1 = v0 + j.clientWidth / a.zoom;
+  const visivel = ({ p }) => Math.max(0, Math.min(v1, p.x1 + 1) - Math.max(v0, p.x0));
+  const { p, trechos } = lista.reduce((melhor, item) => (visivel(item) > visivel(melhor) ? item : melhor));
   const trecho = trechos.find((t) => t.id === "corpo");
   const m = RM.areaDeMalha(a.doc, p);
   const H = a.doc.altura;
@@ -1082,7 +1097,7 @@ const CORES_FORMA = [
   ["#7FC98C", "aumento"],
 ];
 const COR_FORMA = Object.fromEntries(CORES_FORMA.map(([cor, nome]) => [nome, cor]));
-const ZOOMS_FORMA = [0, 2, 3, 4, 6, 8]; // agulha em pixels na grade; 0 = caber no quadro
+const ZOOMS_FORMA = [0, 2, 3, 4, 6, 8, 12]; // agulha em pixels na grade; 0 = caber no quadro
 const MARGEM_FORMA = { esq: 44, topo: 10, dir: 10, base: 26 };
 // Números de cada tipo de forma que dá para ajustar à mão: [campo, nome, unidade].
 const CAMPOS_AJUSTE = {
@@ -1186,8 +1201,11 @@ function desenharGradeForma(plano, passo) {
   const cv = $("forma-previa");
   const M = MARGEM_FORMA;
   const razao = formaOpcoes.vista === "grade" ? 1 : Math.max(0.1, decimal(modelo.colunas, 30)) / Math.max(0.1, decimal(modelo.carreiras, 40));
-  let cw = ZOOMS_FORMA[formaOpcoes.zoom] || Math.min((larguraUtil(cv, 440) - M.esq - M.dir) / plano.W, 460 / (plano.H * razao));
-  cw = Math.max(0.05, Math.min(cw, 6000 / plano.W, 6000 / (plano.H * razao))); // o canvas não passa de 6.000 px
+  const caber = Math.min((larguraUtil(cv, 440) - M.esq - M.dir) / plano.W, 460 / (plano.H * razao));
+  const dprTela = Math.min(2, window.devicePixelRatio || 1);
+  const maximo = 4096 / dprTela; // o canvas não passa de 4.096 pixels da tela de cada lado
+  let cw = ZOOMS_FORMA[formaOpcoes.zoom] || caber;
+  cw = Math.max(0.05, Math.min(cw, (maximo - M.esq - M.dir) / plano.W, (maximo - M.topo - M.base) / (plano.H * razao)));
   const ch = cw * razao;
   const w = M.esq + plano.W * cw + M.dir, h = M.topo + plano.H * ch + M.base;
   const g = ajustarTela(cv, w, h);
@@ -1219,8 +1237,9 @@ function desenharGradeForma(plano, passo) {
       g.lineTo(M.esq + x * cw + 0.5, M.topo + plano.H * ch);
     }
     for (let c = 0; c <= plano.H; c += 10) {
-      g.moveTo(M.esq, M.topo + c * ch + 0.5);
-      g.lineTo(M.esq + plano.W * cw, M.topo + c * ch + 0.5);
+      const y = M.topo + (plano.H - c) * ch + 0.5;
+      g.moveTo(M.esq, y);
+      g.lineTo(M.esq + plano.W * cw, y);
     }
     g.stroke();
   }
@@ -1241,7 +1260,7 @@ function desenharGradeForma(plano, passo) {
     g.lineWidth = 2;
     g.strokeRect(M.esq - 2, y0 - 2, plano.W * cw + 4, y1 - y0 + 4);
   }
-  formaGrade = { plano, cw, ch };
+  formaGrade = { plano, cw, ch, caber };
   return { yDe, ch };
 }
 
@@ -1319,7 +1338,14 @@ function lerPontoDaForma(e) {
   form.addEventListener("click", (e) => {
     const b = e.target.closest("[data-zoom-forma]");
     if (!b) return;
-    formaOpcoes.zoom = limitar(formaOpcoes.zoom + Number(b.dataset.zoomForma), 0, ZOOMS_FORMA.length - 1);
+    const passo = Number(b.dataset.zoomForma);
+    if (formaOpcoes.zoom === 0 && passo > 0) {
+      // Do "caber" para o primeiro tamanho maior que o de agora (não para um menor).
+      const atual = formaGrade ? formaGrade.caber : 0;
+      const i = ZOOMS_FORMA.findIndex((z, k) => k > 0 && z > atual);
+      if (i < 0) return;
+      formaOpcoes.zoom = i;
+    } else formaOpcoes.zoom = limitar(formaOpcoes.zoom + passo, 0, ZOOMS_FORMA.length - 1);
     gravarArmazenado(CHAVE_FORMA, formaOpcoes);
     desenharFormaDialogo();
   });
@@ -1488,6 +1514,8 @@ function imagemDoLogo(form) {
   return { w, h, px, fonte, medias: q.medias };
 }
 
+const RESERVADAS_FIO = new Set([0, 13, 16]); // sem malha, largura do guia e sem seleção não são cor de fio
+
 // Para cada fio, a cor da paleta mais parecida com a cor dele na imagem (sem repetir a mesma cor).
 function coresDaImagemNosFios(form) {
   const a = abaDat();
@@ -1499,7 +1527,7 @@ function coresDaImagemNosFios(form) {
     if (!m) return null;
     let melhor = -1, menor = Infinity;
     paleta.forEach((c, i) => {
-      if (usadas.has(i)) return;
+      if (usadas.has(i) || RESERVADAS_FIO.has(i)) return;
       const dist = (c[0] - m[0]) ** 2 + (c[1] - m[1]) ** 2 + (c[2] - m[2]) ** 2;
       if (dist < menor) [melhor, menor] = [i, dist];
     });
@@ -1743,8 +1771,8 @@ function analisarJacquard() {
     cores.length > mostrar.length ? `<span class="suave">+${cores.length - mostrar.length}</span>` : ""
   }</div>`;
   html += `<p>${cores.length} ${cores.length === 1 ? "cor" : "cores"} na área. ${EXPLICA_AVESSO[estrutura](escada)}</p>`;
-  if (cores.length > 1) {
-    const k = cores.length;
+  const k = cores.filter((c) => c.cor !== 0 && c.n >= 0.05 * r.w * r.h).length; // ourela e marcas não contam
+  if (k > 1) {
     html += `<p>${k} fios · ${r.h.toLocaleString("pt-BR")} carreiras de desenho = <strong>${(k * r.h).toLocaleString("pt-BR")} carreiras na máquina</strong> (uma por fio).</p>`;
   }
   if (cores.length > 1 && estrutura !== "tubular") {
@@ -1940,12 +1968,17 @@ function abrirVerificar() {
 
 function rodarVerificacao() {
   const form = $("dlg-verificar").querySelector("form");
-  const maximo = inteiro(form.maximo.value, 5, 1, 500);
-  const itens = RM.verificarDesenho(verif.a.doc, blocosDeOpcao(verif.a), { flutuacaoMaxima: maximo });
-  const extras = [...itensDeCor(verif.a, maximo), ...itensDaForma()];
-  // "Nenhum problema" só vale se as regras de cor e de forma também passaram.
-  verif.itens = (extras.some((i) => i.nivel !== "info") ? itens.filter((i) => i.regra !== "nenhum") : itens).concat(extras);
+  verif.itens = itensDoVerificar(verif.a, inteiro(form.maximo.value, 5, 1, 500));
   desenharItensVerif();
+}
+
+// Tudo o que o Verificar mostra (as regras do desenho, as de cor e os trechos difíceis do Modelo, que são só
+// informação); a Ficha conta os avisos daqui.
+function itensDoVerificar(a, maximo) {
+  const itens = RM.verificarDesenho(a.doc, blocosDeOpcao(a), { flutuacaoMaxima: maximo });
+  const cor = itensDeCor(a, maximo);
+  // "Nenhum problema" só vale se as regras de cor também passaram.
+  return (cor.length ? itens.filter((i) => i.regra !== "nenhum") : itens).concat(cor, itensDaForma());
 }
 
 // Jacquard e intarsia no corpo de cada painel: fios soltos longos com o avesso em flutuação e guia-fios da
@@ -1958,9 +1991,15 @@ function itensDeCor(a, maximo) {
     const corpo = trechos.find((t) => t.id === "corpo");
     if (p.x0 === null || !corpo) continue;
     const m = RM.areaDeMalha(d, p);
+    if (!m) continue;
     const r = { x: m.x0, y: d.altura - corpo.ate, w: m.x1 - m.x0 + 1, h: corpo.ate - corpo.de + 1 };
     if (r.w * r.h > LIMITE_JACQUARD) continue;
-    const principais = new Set(RM.coresDaArea(d.pixels, d.largura, r).filter((c) => c.n >= 0.05 * r.w * r.h).map((c) => c.cor));
+    // Uma ribana (1 e 2) ou a forma (0 em volta) não são jacquard: códigos de ponto e o 0 não contam como fio.
+    const principais = new Set(
+      RM.coresDaArea(d.pixels, d.largura, r)
+        .filter((c) => c.cor !== 0 && !RM.tipoDePonto(c.cor) && c.n >= 0.05 * r.w * r.h)
+        .map((c) => c.cor),
+    );
     if (principais.size < 2) continue;
     const nome = ` (painel ${p.numero})`;
     const longas = RM.flutuacoes(d.pixels, d.largura, r, "flutuacao").lista.filter((f) => principais.has(f.cor) && f.comprimento > maximo);
@@ -2008,7 +2047,7 @@ function itensDaForma() {
       const parte = t.passo.split(":")[0];
       const tipo = parte === "Aumentos" ? "aumentos" : "diminuições";
       itens.push({
-        nivel: "aviso",
+        nivel: "info",
         regra: "forma",
         peca: indice,
         passo: plano.passos.findIndex((x) => x.nome === t.passo),
@@ -2505,7 +2544,7 @@ function desenharDesenvolver() {
         <span class="codigos-trecho">${esc(textoDoTrecho(RM.resumoDoTrecho(a.doc, p, t)))}</span></button>`,
     )
     .join("");
-  $("desenvolver-ver").hidden = desenv.trecho === null;
+  $("desenvolver-ver").hidden = desenv.trecho === null || !RM.areaDeMalha(a.doc, p);
   desenv.temBarra = trechos.some((t) => t.id === "barra");
   estadoCamposPacotes(form, desenv.temBarra);
   const dev = RM.desenvolvimento(a.doc, p, repeticoesDe(a)[p.numero] || {});
@@ -2653,14 +2692,15 @@ function desenharPreviaDesenvolvida(p, res) {
     const i = Number(b.dataset.trecho);
     desenv.trecho = desenv.trecho === i ? null : i;
     $("desenvolver-trechos").querySelectorAll("[data-trecho]").forEach((x) => x.setAttribute("aria-pressed", String(Number(x.dataset.trecho) === desenv.trecho)));
-    $("desenvolver-ver").hidden = desenv.trecho === null;
+    $("desenvolver-ver").hidden = desenv.trecho === null || !RM.areaDeMalha(desenv.a.doc, desenv.lista[desenv.painel]);
     desenharPreviaDesenvolvida(desenv.lista[desenv.painel], desenv.res);
   });
   $("desenvolver-ver").addEventListener("click", () => {
     if (!mesmaAba(desenv) || desenv.trecho === null) return;
     const { a, lista } = desenv;
     const p = lista[desenv.painel], t = desenv.trechos[desenv.trecho];
-    const m = RM.areaDeMalha(a.doc, p) || { x0: 0, x1: a.doc.largura - 1 };
+    const m = RM.areaDeMalha(a.doc, p);
+    if (!m) return;
     $("dlg-desenvolver").close();
     selecionarNoDesenho(a, { x: m.x0, y: a.doc.altura - t.ate, w: m.x1 - m.x0 + 1, h: t.ate - t.de + 1 });
     avisar(`${t.nome} do painel ${p.numero} selecionado: carreiras ${t.de}–${t.ate}, agulhas ${m.x0 + 1}–${m.x1 + 1}.`);
@@ -3636,7 +3676,7 @@ function itensAntesDeTecer() {
   if (ficha.avisos === null) {
     // O Verificar dá avisos (não erros): conta todos, com o mesmo limite de fio solto do diálogo dele.
     const maximo = inteiro($("dlg-verificar").querySelector("form").maximo.value, 5, 1, 500);
-    ficha.avisos = RM.verificarDesenho(a.doc, blocos, { flutuacaoMaxima: maximo }).filter((i) => i.nivel !== "info").length;
+    ficha.avisos = itensDoVerificar(a, maximo).filter((i) => i.nivel !== "info").length;
   }
   const uso = RM.usoDoProcessamento(a.doc, blocos);
   const pd = completarGuias(processamentoDe(a), uso);
@@ -3671,14 +3711,25 @@ function itensAntesDeTecer() {
     },
     { id: "amostra", manual: true, ok: false, titulo: "Amostra tecida e aprovada", detalhe: "marque depois de tecer a amostra e conferir medidas, ponto e cores" },
   ];
-  // O que a regra não conseguiu confirmar pode ser marcado à mão (e fica guardado com a ficha).
+  // Os avisos esperados, o programa feito fora daqui e a amostra podem ser marcados à mão. A marca vale para o
+  // desenho como ele estava ao marcar: mudou o desenho (ou é outro arquivo com o mesmo nome), ela cai.
+  const impressao = impressaoDoDesenho(a);
   for (const i of itens) {
-    if (i.ok || !ficha.conferidos[i.id]) continue;
+    i.marcavel = MARCAVEIS.has(i.id);
+    if (i.ok || !i.marcavel || ficha.conferidos[i.id] !== impressao) continue;
     i.ok = true;
     i.aMao = true;
     i.detalhe = i.manual ? "marcado à mão" : `marcado à mão (${i.detalhe})`;
   }
   return itens;
+}
+
+const MARCAVEIS = new Set(["verificar", "programa", "amostra"]);
+
+// Resumo do desenho (tamanho e soma dos pontos) que muda quando o desenho muda.
+function impressaoDoDesenho(a) {
+  const d = a.doc;
+  return `${d.largura}x${d.altura}:${crc32(d.pixels).toString(16)}`;
 }
 
 function desenharChecklist() {
@@ -3691,7 +3742,7 @@ function desenharChecklist() {
       } </span>${esc(i.titulo)}<small>${esc(i.detalhe)}</small></span><span class="acoes-check">${
         !i.ok && i.ir ? `<button type="button" class="botao pequeno" data-ir="${i.ir}">${esc(i.botao)}</button>` : ""
       }${
-        !i.ok || i.aMao
+        i.marcavel && (!i.ok || i.aMao)
           ? `<label class="marca-manual"><input type="checkbox" data-conferido="${i.id}"${i.aMao ? " checked" : ""}> ${i.manual ? "feito" : "conferido"}</label>`
           : ""
       }</span></li>`,
@@ -3738,7 +3789,7 @@ function desenharChecklist() {
   $("ficha-checklist").addEventListener("change", (e) => {
     const id = e.target.dataset.conferido;
     if (!id || !ficha) return;
-    if (e.target.checked) ficha.conferidos[id] = true;
+    if (e.target.checked) ficha.conferidos[id] = impressaoDoDesenho(ficha.a);
     else delete ficha.conferidos[id];
     gravarFicha();
     desenharChecklist();

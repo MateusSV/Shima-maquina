@@ -191,7 +191,7 @@
     const arremC = limitar(Math.round(p.arremCava), 0, recuo);
     const golaP = limitar(Math.round(p.golaP), 4, H - barra - 1);
     const arremG = centroPar(W, limitar(Math.round(p.arremGola), 0, gola));
-    const deg = limitar(Math.round(p.degraus), 1, 6);
+    const deg = limitar(Math.round(p.degraus), 1, Math.max(1, Math.min(6, Math.floor((H - barra) / 2))));
     const cava0 = H - cava + 1, gola0 = H - golaP + 1, ombro0 = H - 2 * deg + 1;
     const evCava = distribuir(recuo - arremC, porVez, Math.round(cava * 0.45));
     const ladoGola = Math.floor((gola - arremG) / 2);
@@ -254,6 +254,18 @@
     }
 
     const passos = [];
+    const ajustes = avisoDeAjustes([
+      ["largura", p.W, W],
+      ["altura", p.H, H],
+      ["barra", p.barra, barra],
+      ["altura da cava", p.cava, cava],
+      ["largura da gola", p.gola, gola],
+      ["cava: tirar por lado", p.recuo, recuo],
+      ["cava: arremate", p.arremCava, arremC],
+      ["fundo da gola", p.golaP, golaP],
+      ["degraus do ombro", p.degraus, deg],
+    ]);
+    if (ajustes) passos.push(ajustes);
     if (ombro <= 0) passos.push({ nome: "Confira as medidas", aviso: true, texto: "A gola e a cava já ocupam toda a largura: não sobra ombro." });
     if (gola0 <= cava0) passos.push({ nome: "Confira a gola", aviso: true, texto: "A gola começa antes da cava. Normalmente a gola começa depois." });
     passos.push({ nome: "Barra", de: 1, ate: barra, texto: `${W} agulhas, ${barra} carreiras de barra.` });
@@ -272,14 +284,19 @@
   function planoManga(p, porVez, dist) {
     const W = Math.max(8, Math.round(p.W)), H = Math.max(8, Math.round(p.H));
     const mesmaParidade = (v, min, max) => (v - W) % 2 === 0 ? v : v + 1 <= max ? v + 1 : Math.max(min, v - 1);
-    const punho = mesmaParidade(limitar(Math.round(p.punho), 2, W), 2, W);
+    // O punho e o topo ficam com a paridade da largura (para os dois lados serem iguais); isso não é aviso.
+    const punhoPedido = limitar(Math.round(p.punho), 2, W);
+    const punho = mesmaParidade(punhoPedido, 2, W);
     const barra = limitar(Math.round(p.barra), 0, H - 4);
     const copa = limitar(Math.round(p.copa), 4, H - barra - 2);
     const arremC = limitar(Math.round(p.arremCopa), 0, Math.floor(W / 4));
-    const topo = mesmaParidade(limitar(Math.round(p.topo), 2, W - 2 * arremC), 2, W - 2 * arremC);
+    const topoPedido = limitar(Math.round(p.topo), 2, W - 2 * arremC);
+    const topo = mesmaParidade(topoPedido, 2, W - 2 * arremC);
     const copa0 = H - copa + 1;
     const aum = Math.floor((W - punho) / 2);
-    const evAum = distribuir(aum, 1, Math.max(2, copa0 - 1 - barra));
+    // Os aumentos acabam antes da copa; os que não couberem ficam de fora (com aviso).
+    const evAum = distribuir(aum, 1, Math.max(2, copa0 - 1 - barra)).filter((e) => barra + e.off < copa0);
+    const aumentados = evAum.reduce((t, e) => t + e.n, 0);
     const dimTotal = Math.max(0, Math.floor((W - 2 * arremC - topo) / 2));
     const evCopa = distribuir(dimTotal, porVez, Math.max(2, copa - 2));
     const mapa = {};
@@ -315,6 +332,17 @@
       linhas.push(row);
     }
     const passos = [];
+    const ajustes = avisoDeAjustes([
+      ["largura na cava", p.W, W],
+      ["altura", p.H, H],
+      ["punho", p.punho, punhoPedido],
+      ["barra do punho", p.barra, barra],
+      ["altura da copa", p.copa, copa],
+      ["copa: arremate", p.arremCopa, arremC],
+      ["topo da copa", p.topo, topoPedido],
+    ]);
+    if (ajustes) passos.push(ajustes);
+    if (aumentados < aum) passos.push({ nome: "Confira a copa", aviso: true, texto: `Os aumentos não cabem antes da copa: a manga chega a ${punho + 2 * aumentados} agulhas, não ${punho + 2 * aum}. Aumente a altura ou diminua a barra e a copa.` });
     passos.push({ nome: "Punho", de: 1, ate: barra, texto: `${punho} agulhas, ${barra} carreiras de barra.` });
     const eventos = (lista, inicio) => lista.map((e) => ({ carreira: inicio + e.off, n: e.n, intervalo: e.intervalo }));
     if (evAum.length) passos.push({ nome: "Aumentos", de: barra + evAum[0].off, ate: barra + evAum[evAum.length - 1].off, texto: `${resumoEventos(evAum, "+")}.`, eventos: eventos(evAum, barra) });
@@ -330,9 +358,21 @@
   function planoForma(forma, opcoes = {}) {
     const porVez = limitar(Math.round(opcoes.porVez || 1), 1, 3);
     const marca = limitar(Math.round(opcoes.marca || 3), 1, 8);
-    if (forma.tipo === "manga") return planoManga(forma, porVez, marca);
-    if (forma.tipo === "corpo") return planoCorpo(forma, porVez, marca);
-    return planoPainel(forma);
+    const plano = forma.tipo === "manga" ? planoManga(forma, porVez, marca) : forma.tipo === "corpo" ? planoCorpo(forma, porVez, marca) : planoPainel(forma);
+    // Passos sem carreiras (barra 0, corpo reto que não cabe...) não aparecem.
+    plano.passos = plano.passos.filter((s) => s.de === undefined || s.ate >= s.de);
+    return plano;
+  }
+
+  // Números pedidos que não cabem na peça e o que foi usado no lugar, para avisar no começo do passo a passo.
+  function avisoDeAjustes(lista) {
+    const trocados = lista.filter(([, pedido, usado]) => Number.isFinite(Number(pedido)) && Math.round(Number(pedido)) !== usado);
+    if (!trocados.length) return null;
+    return {
+      nome: "Confira os números",
+      aviso: true,
+      texto: `Não cabem na peça e foram trocados: ${trocados.map(([nome, pedido, usado]) => `${nome} ${Math.round(Number(pedido))} → ${usado}`).join("; ")}.`,
+    };
   }
 
   // Trechos difíceis da forma: duas ou mais diminuições (ou aumentos) seguidas de 2 agulhas ou mais a cada
@@ -924,7 +964,7 @@
 
   // Agulhas que tecem na área de desenho do painel (da primeira à última com código de malha).
   function areaDeMalha(doc, painel) {
-    if (painel.x0 === null) return null;
+    if (painel.x0 === null || painel.x1 < painel.x0) return null; // um lado só, ou L e R encostados
     let esquerda = Infinity, direita = -Infinity;
     for (let y = painel.y0; y <= painel.y1; y++) {
       for (let x = painel.x0; x <= painel.x1; x++) {
@@ -1070,10 +1110,10 @@
   // economizador (R2) nas carreiras dele.
   function resumoDoTrecho(doc, painel, trecho) {
     const H = doc.altura, W = doc.largura;
-    const m = areaDeMalha(doc, painel) || { x0: 0, x1: W - 1 };
+    const m = areaDeMalha(doc, painel);
     const total = new Map();
     const principal = []; // código mais usado em cada carreira, de baixo para cima
-    for (let c = trecho.de; c <= trecho.ate; c++) {
+    for (let c = trecho.de; c <= trecho.ate && m; c++) {
       const y = H - c;
       const linha = new Map();
       for (let x = m.x0; x <= m.x1; x++) {
@@ -1081,7 +1121,7 @@
         linha.set(v, (linha.get(v) || 0) + 1);
         total.set(v, (total.get(v) || 0) + 1);
       }
-      principal.push([...linha].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]);
+      if (linha.size) principal.push([...linha].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]);
     }
     const codigos = [...total].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([cor, n]) => ({ cor, n }));
     let alterna = null;

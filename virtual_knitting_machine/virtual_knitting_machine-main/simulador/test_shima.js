@@ -492,3 +492,29 @@ test("forma: trechos difíceis com diminuições fortes seguidas", () => {
   const painel = Recursos.planoForma({ tipo: "painel", W: 40, H: 60, barra: 4 }, {});
   assert.deepEqual(Recursos.trechosDificeis(painel), []);
 });
+
+test("forma: números que não cabem viram aviso e não há passo sem carreiras", () => {
+  const pecas = Recursos.calcularModelo("careca", {}, { colunas: 30, carreiras: 40 }).pecas;
+  const passos = (forma) => Recursos.planoForma(forma, {}).passos;
+  // Com os números do Modelo, nenhum aviso.
+  for (const p of pecas) assert.ok(!passos(p.forma).some((s) => s.aviso), p.nome);
+  const curto = passos({ ...pecas[0].forma, H: 86, barra: 125 });
+  assert.match(curto[0].texto, /barra 125 → 84/);
+  for (const s of [...curto, ...passos({ ...pecas[0].forma, H: 9, degraus: 6 }), ...passos({ ...pecas[2].forma, barra: 0 })]) {
+    if (s.de !== undefined) assert.ok(s.de >= 1 && s.ate >= s.de, `${s.nome} ${s.de}–${s.ate}`);
+  }
+  // Manga baixa: os aumentos param antes da copa (a peça não volta a crescer).
+  const baixa = Recursos.planoForma({ ...pecas[2].forma, H: 8, barra: 4 }, {});
+  assert.ok(baixa.passos.some((s) => s.nome === "Confira a copa"));
+  const larguras = baixa.linhas.map((l) => l.segs.concat(l.arrem).reduce((t, [a, b]) => t + b - a + 1, 0));
+  const copa0 = baixa.passos.find((s) => s.nome === "Copa: arremate").de;
+  assert.ok(larguras.slice(copa0).every((w, i, lista) => i === 0 || w <= lista[i - 1]), `larguras ${larguras}`);
+});
+
+test("painel sem área de desenho (L e R encostados) não quebra os trechos", () => {
+  const painel = { numero: 1, L: null, R: null, x0: 10, x1: 9, y0: 0, y1: 4 };
+  const doc = ShimaDat.novo(20, 5, null);
+  assert.equal(Recursos.areaDeMalha(doc, painel), null);
+  const r = Recursos.resumoDoTrecho(doc, painel, { id: "corpo", nome: "Corpo", de: 1, ate: 5 });
+  assert.deepEqual([r.codigos, r.alterna, r.guias], [[], null, []]);
+});
