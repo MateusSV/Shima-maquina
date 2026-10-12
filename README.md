@@ -98,8 +98,8 @@ início**):
   (espelhada e conforme a estrutura: salpicada no birdseye, o negativo no tubular, as colunas da escada e os
   fios soltos na cor deles); quantos guia-fios a intarsia precisa, as áreas pequenas, o mapa e a tabela de cada
   guia (cor, carreiras e áreas). Passando o mouse no mapa: agulha, carreira, cor, área e guia. Não contam como
-  fio as marcas (0, 13, 16, 60/70, 99) nem a ourela (cores só nas duas agulhas de cada ponta); na seleção
-  conta toda outra cor, mesmo pouca. Sem seleção (ou aberto pelo Verificar, que também leva o limite de fio
+  fio as marcas (0, 13, 16, 60/70, 99) nem a ourela (cores só nas duas agulhas de cada ponta; na seleção, só
+  quando é código de ponto); na seleção conta toda outra cor, mesmo pouca. Sem seleção (ou aberto pelo Verificar, que também leva o limite de fio
   solto dele), ele analisa o corpo do painel e, como o Verificar, deixa de fora os códigos de ponto e as cores
   com menos de 1% dos pontos.
 - **Linhas de opção**: a grade mostra as 20 linhas de cada lado, com as que têm valores marcadas; escolha uma
@@ -145,7 +145,7 @@ início**):
 
 Os significados de códigos e linhas de opção vêm de referências públicas do KnitPaint e mudam entre
 versões: os nomes aparecem com “?” e os códigos usados pelos recursos podem ser trocados. Os valores do
-Processar, dos Pacotes e da Ficha ficam guardados no navegador, por nome de arquivo.
+Processar, dos Pacotes e da Ficha ficam guardados no navegador, por pasta e nome de arquivo.
 
 O que o editor **não** faz: gerar o programa da máquina (`.000`) e os ajustes (`.QFD`) a partir do `.dat`.
 Isso é o processamento do KnitPaint; use os valores do Processar no KnitPaint ou no SDS KnitPaint-Online da

@@ -292,6 +292,13 @@ function abrirDialogo(id) {
   dlg.showModal();
 }
 
+// O "Cancelar" dos diálogos pequenos é type="button", para o Enter num campo usar o botão de confirmar (o primeiro
+// botão de envio do formulário); o clique nele fecha o diálogo como cancelado.
+document.addEventListener("click", (e) => {
+  const cancelar = e.target.closest('dialog button[type="button"][value="cancelar"]');
+  if (cancelar) cancelar.closest("dialog").close("cancelar");
+});
+
 function trocarExtensao(nome, ext) {
   return nome.replace(/\.[^.]*$/, "") + ext;
 }
@@ -422,6 +429,7 @@ function desenharAbas() {
 }
 
 function marcarModificado(aba) {
+  aba.versao = (aba.versao || 0) + 1; // cada mudança: o Salvar sabe se o desenho mudou enquanto gravava
   if (!aba.modificado) {
     aba.modificado = true;
     desenharAbas();
@@ -509,8 +517,10 @@ async function permissaoDaPasta(pasta, pedir) {
 }
 
 async function conectarPasta(pasta, lembrar = true) {
-  // Abas abertas de outra pasta passam a ser arquivos avulsos: o "Salvar" delas não vai para a pasta nova.
-  for (const aba of estado.abas) if (aba.origem === "pasta") aba.origem = "local";
+  // Abas abertas de outra pasta passam a ser arquivos avulsos: o "Salvar" delas não vai para a pasta nova. Escolhida
+  // de novo a mesma pasta, as abas continuam dela.
+  const mesma = !!estado.pastaLocal && !!(await estado.pastaLocal.isSameEntry?.(pasta));
+  if (!mesma) for (const aba of estado.abas) if (aba.origem === "pasta") aba.origem = "local";
   estado.pastaLocal = pasta;
   estado.pastaGuardada = null;
   if (lembrar) await lembrarPasta(pasta);
@@ -630,7 +640,7 @@ async function abrirDaPasta(nome) {
 async function abrirTodos() {
   let primeiroDat = null;
   for (const a of estado.arquivosPasta) {
-    if (a.nome.endsWith(".bak")) continue;
+    if (/\.(bak|tmp)$/i.test(a.nome)) continue;
     const aba = await abrirDaPasta(a.nome);
     if (aba && aba.tipo === "dat" && !primeiroDat) primeiroDat = aba;
   }
@@ -1145,8 +1155,9 @@ function fixarFlutuante(aba = abaDat()) {
   const f = aba.flutuante;
   if (!f.levantado) salvarHistorico(aba);
   colarArea(aba.doc, f, f.x, f.y, f.transparente);
-  const x = limitar(f.x, 0, aba.doc.largura - 1), y = limitar(f.y, 0, aba.doc.altura - 1);
-  const w = limitar(f.x + f.w, 1, aba.doc.largura) - x, h = limitar(f.y + f.h, 1, aba.doc.altura) - y;
+  // A seleção fica na parte da colagem que caiu dentro do desenho; toda fora, não sobra seleção.
+  const x = Math.max(f.x, 0), y = Math.max(f.y, 0);
+  const w = Math.min(f.x + f.w, aba.doc.largura) - x, h = Math.min(f.y + f.h, aba.doc.altura) - y;
   aba.selecao = w > 0 && h > 0 ? { x, y, w, h } : null;
   aba.flutuante = null;
   marcarModificado(aba);
@@ -1234,6 +1245,9 @@ tela.addEventListener("pointerdown", (e) => {
     if (!noDesenho(p, d) || d.pixels[p.y * d.largura + p.x] === cor) return;
     salvarHistorico(a);
     balde(d, p, cor);
+    // Com Espelhado, enche também a partir do ponto simétrico (se o primeiro balde ainda não chegou lá).
+    const q = eixoEspelho === null ? null : { x: eixoEspelho - p.x, y: p.y };
+    if (q && noDesenho(q, d) && d.pixels[q.y * d.largura + q.x] !== cor) balde(d, q, cor);
     renderizar();
     atualizarPainel();
   } else if (f === "conta-gotas") {
@@ -1241,7 +1255,7 @@ tela.addEventListener("pointerdown", (e) => {
     const n = d.pixels[p.y * d.largura + p.x];
     if (e.button === 2) estado.secundaria = n;
     else estado.primaria = n;
-    atualizarPainel();
+    atualizarPainel(false);
     const linha = ShimaDat.linhaDeOpcaoEm(blocosDeOpcao(a), p.x, p.y);
     if (linha) escolherLinhaDeOpcao(a, linha);
   } else if (f === "carimbo") {
@@ -1317,7 +1331,10 @@ tela.addEventListener("pointermove", (e) => {
 function terminarGesto() {
   eixoEspelho = null;
   const a = abaDat();
-  if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma" || gesto.tipo === "carimbo")) atualizarPainel();
+  if (gesto && a && (gesto.tipo === "pincel" || gesto.tipo === "forma" || gesto.tipo === "carimbo")) {
+    marcarModificado(a); // o traço pode ter continuado depois de um Salvar feito no meio dele
+    atualizarPainel();
+  }
   // Um clique sem arrastar com a Seleção tira a seleção (em vez de deixar uma de 1 ponto).
   if (gesto && a && gesto.tipo === "selecionar" && !gesto.moveu) {
     a.selecao = null;
@@ -1831,6 +1848,7 @@ async function salvarNaPasta(a, nome) {
   } catch (erro) {
     return avisar(`Erro ao gravar: ${erro.message}`, true);
   }
+  const versao = a.versao; // o que mudar enquanto grava continua como não salvo
   try {
     let dados;
     if (estado.pastaLocal) {
@@ -1850,7 +1868,7 @@ async function salvarNaPasta(a, nome) {
     if (velha) tirarAba(velha);
     a.nome = nome;
     a.origem = "pasta";
-    a.modificado = false;
+    if (a.versao === versao) a.modificado = false;
     a.tamanho = bytes.length;
     a.impressao = impressaoDosBytes(bytes);
     desenharAbas();
@@ -1869,10 +1887,11 @@ async function baixarDat(a, nome = a.nome) {
   } catch (erro) {
     return avisar(`Erro ao gravar: ${erro.message}`, true);
   }
+  const versao = a.versao; // o que mudar enquanto baixa continua como não salvo
   const entregue = await baixar(bytes, nome);
   if (!entregue) return;
   if (a.origem !== "pasta") {
-    a.modificado = false;
+    if (a.versao === versao) a.modificado = false;
     a.tamanho = bytes.length;
     // Aberto de novo depois de baixado, o arquivo volta para esta aba.
     if (entregue === nome) a.impressao = impressaoDosBytes(bytes);
@@ -1948,10 +1967,12 @@ function escolherFerramenta(f) {
   atualizarStatus();
 }
 
-function atualizarPainel() {
+// mudouDesenho = false nas mudanças só de tela (cor escolhida, fundo, nomes): os blocos de linhas de opção continuam
+// valendo, sem varrer o desenho de novo (num desenho grande, a busca leva quase um segundo).
+function atualizarPainel(mudouDesenho = true) {
   const a = abaDat();
   if (!a) return;
-  a.opcoes = null; // depois de uma edição, os blocos de linhas de opção podem ter mudado
+  if (mudouDesenho) a.opcoes = null; // depois de uma edição, os blocos de linhas de opção podem ter mudado
   const d = a.doc;
   const cor = (n) => hexCor(d.paleta[n]);
   $("amostra-primaria").style.background = cor(estado.primaria);
@@ -1999,7 +2020,7 @@ function atualizarPainel() {
     ["Agulhas", d.largura],
     ["Carreiras", d.altura],
     ["Cores em uso", `${usadas.length} de 256`],
-    ["Origem", { pasta: `pasta ${estado.pasta}`, novo: "desenho novo", exemplo: "exemplo já carregado" }[a.origem] || "computador"],
+    ["Origem", { pasta: `pasta ${esc(estado.pasta)}`, novo: "desenho novo", exemplo: "exemplo já carregado" }[a.origem] || "computador"],
     ["Arquivo", a.tamanho ? bytesLegiveis(a.tamanho) : "ainda não salvo"],
     ["Formato", esc(String(d.assinatura || "").trim())],
   ]
@@ -2012,7 +2033,7 @@ function atualizarPainel() {
 function escolherCor(n, secundaria) {
   if (secundaria) estado.secundaria = n;
   else estado.primaria = n;
-  atualizarPainel();
+  atualizarPainel(false);
   if (estado.destacar && !secundaria) renderizar();
 }
 
@@ -2037,7 +2058,7 @@ for (const id of ["cores-uso", "codigos-nome", "grade-paleta"]) {
 $("campo-primaria").addEventListener("change", (e) => escolherCor(numeroCor(e.target.value), false));
 $("campo-fundo").addEventListener("change", (e) => {
   estado.fundo = numeroCor(e.target.value);
-  atualizarPainel();
+  atualizarPainel(false);
 });
 $("campo-rgb").addEventListener("change", (e) => {
   const a = abaDat();
@@ -2054,7 +2075,7 @@ $("campo-nome-cor").addEventListener("change", (e) => {
   if (texto) legenda[estado.primaria] = texto;
   else delete legenda[estado.primaria];
   gravarLegenda(legenda);
-  atualizarPainel();
+  atualizarPainel(false);
 });
 $("btn-trocar-cores").addEventListener("click", trocarCores);
 $("espelhado").addEventListener("change", (e) => {
@@ -2076,7 +2097,7 @@ $("colar-transparente").addEventListener("change", (e) => {
 
 function trocarCores() {
   [estado.primaria, estado.secundaria] = [estado.secundaria, estado.primaria];
-  atualizarPainel();
+  atualizarPainel(false);
 }
 
 function atualizarBotoes() {

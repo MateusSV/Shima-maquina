@@ -23,6 +23,7 @@ import errno
 import json
 import os
 import sys
+import threading
 import warnings
 import webbrowser
 from functools import partial
@@ -45,6 +46,7 @@ PASTA_DESENHOS = Path(__file__).resolve().parents[2] / "07 122 SSGsv"
 PREFIXO_ARQUIVOS = "/api/arquivos"
 TAMANHO_MAXIMO = 32 * 1024 * 1024
 EXTENSOES_GRAVAVEIS = (".dat",)
+TRAVA_GRAVACAO = threading.Lock()  # o servidor atende pedidos em paralelo; as gravações vão uma de cada vez
 CABECALHO_EDITOR = "X-Editor-Shima"
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 
@@ -102,7 +104,7 @@ class Manipulador(SimpleHTTPRequestHandler):
         arquivos = [
             {"nome": a.name, "tamanho": a.stat().st_size}
             for a in sorted(pasta.iterdir(), key=lambda a: a.name.lower())
-            if a.is_file() and not a.name.startswith(".")
+            if a.is_file() and not a.name.startswith(".") and not a.name.lower().endswith(".tmp")
         ]
         self._json(HTTPStatus.OK, {"pasta": pasta.name, "arquivos": arquivos})
 
@@ -142,11 +144,13 @@ class Manipulador(SimpleHTTPRequestHandler):
             self._json(HTTPStatus.NOT_FOUND, {"erro": "Pasta de desenhos não encontrada."})
             return
         copia = arquivo.with_name(arquivo.name + ".bak")
-        if arquivo.exists() and not copia.exists():
-            copia.write_bytes(arquivo.read_bytes())
-        temporario = arquivo.with_name(arquivo.name + ".tmp")
-        temporario.write_bytes(corpo)
-        os.replace(temporario, arquivo)
+        # Uma gravação por vez: duas ao mesmo tempo usariam o mesmo .tmp e o mesmo teste do .bak.
+        with TRAVA_GRAVACAO:
+            if arquivo.exists() and not copia.exists():
+                copia.write_bytes(arquivo.read_bytes())
+            temporario = arquivo.with_name(arquivo.name + ".tmp")
+            temporario.write_bytes(corpo)
+            os.replace(temporario, arquivo)
         self._json(HTTPStatus.OK, {"nome": arquivo.name, "tamanho": len(corpo), "copia": copia.name if copia.exists() else None})
 
     def _simular(self, consulta: dict[str, list[str]]) -> None:
