@@ -100,6 +100,64 @@ test("cabeçalho do .000 vai até a linha END, mesmo com END no nome do arquivo"
   assert.deepEqual(ShimaArquivos.lerPrograma(bytesDe("START\rF=X.000\t\r")).campos, []);
 });
 
+test("padrão do .000: corridas, grupo repetido e zero cortado no fim", () => {
+  // 0xFF, n, n valores, vezes; senão contagem e valor. O último valor perdido (zero do preenchimento) vale 0.
+  assert.deepEqual(ShimaArquivos.expandirPadrao(Uint8Array.from([0xff, 2, 0x08, 0x90, 3, 2, 0x10, 3])), [8, 0x90, 8, 0x90, 8, 0x90, 0x10, 0x10, 0, 0, 0]);
+  // 14 de cabeçalho, duas carreiras de 5 + 3 agulhas + 5 e 2 no fim.
+  const carreira = (a) => [3, 0, 0, 0, 3, ...a, 1, 0, 0, 0, 3];
+  const valores = [...new Array(13).fill(7), 3, ...carreira([0x90, 0x08, 0x90]), ...carreira([0x10, 0x10, 0x12]), 3, 1];
+  const p = ShimaArquivos.lerPadrao(Uint8Array.from(valores.flatMap((v) => [1, v])));
+  assert.equal(p.largura, 3);
+  assert.deepEqual(p.carreiras.map((c) => [...c.agulhas]), [[0x90, 0x08, 0x90], [0x10, 0x10, 0x12]]);
+  assert.deepEqual(p.carreiras[0].depois, [1, 0, 0, 0, 3]);
+  assert.deepEqual(p.fim, [3, 1]);
+});
+
+test("programa .000: padrão, repetição, guias-fio, pontos e agulhas batem com o desenho", semPasta, () => {
+  const b = ler("00FE_BLS_ESTAMPA_ONÇA.dat");
+  const doc = ShimaDat.ler(b.buffer.slice(b.byteOffset, b.byteOffset + b.length));
+  const W = doc.largura, H = doc.altura;
+  const pixel = (carreira, x) => doc.pixels[(H - carreira) * W + x];
+  const c = ShimaArquivos.decifrarPrograma(ShimaArquivos.abrir("00_C_P.000", ler("00_C_P.000")));
+  const m = ShimaArquivos.decifrarPrograma(ShimaArquivos.abrir("00_M_P.000", ler("00_M_P.000")));
+
+  // Padrão: uma carreira por largura do painel (203 e 199 agulhas); a do corpo é a carreira 203 do
+  // desenho com o código 1 (frente) = 0x90 e o código 2 (atrás) = 0x08, nas colunas x 451 a 653.
+  assert.equal(c.padrao.largura, 203);
+  assert.equal(m.padrao.largura, 199);
+  assert.equal(c.padrao.carreiras.length, 94);
+  const corpo = Array.from({ length: 203 }, (_, k) => ({ 1: 0x90, 2: 0x08 })[pixel(203, 451 + k)]);
+  for (let r = 12; r <= 88; r++) assert.deepEqual([...c.padrao.carreiras[r].agulhas], corpo, `carreira ${r} do padrão`);
+
+  // Repetição: as linhas 56 a 63 voltam (R2 nas carreiras 216 a 223); o valor é o do .QFD menos um.
+  assert.deepEqual(c.blocos, [{ numero: 1, de: 56, ate: 63, valor: 64 }]);
+  assert.deepEqual(m.blocos, [{ numero: 1, de: 56, ate: 63, valor: 29 }]);
+
+  // Guias-fio: os conjuntos das linhas dão os guias 1, 4 e 8; o corpo usa o conjunto 8 = guia 4 (R3 = 4).
+  assert.deepEqual(c.guias, [1, 4, 8]);
+  assert.equal(c.linhas[100].conjunto, 8);
+  assert.deepEqual(c.conjuntos.find((x) => x.numero === 8).guias.map((g) => g.guia), [4]);
+  // Pontos: os do R6 do painel (5 no corpo, 14 e 17 na barra, 12 no fim) estão nas linhas.
+  const pontos = new Map(c.pontos.map((x) => [x.ponto, x.linhas]));
+  assert.equal(pontos.get(5), 159);
+  assert.equal(pontos.get(14), 9);
+  assert.equal(pontos.get(17), 2);
+  assert.equal(pontos.get(12), 5);
+
+  // Agulhas: a tabela 1 repete as colunas 46 a 53, marcadas com 2 na carreira 367 do desenho,
+  // 14 vezes a mais, o número na carreira 368.
+  const marcadas = [];
+  for (let col = 1; col <= 211; col++) if (pixel(367, 446 + col) === 2) marcadas.push(col);
+  assert.deepEqual([marcadas[0], marcadas[marcadas.length - 1]], [46, 53]);
+  const t = c.tabelas[0];
+  assert.deepEqual(t.trechos.map((x) => x.tipo), ["copia", "copia", "repete", "copia"]);
+  assert.equal(t.trechos[1].origem, 46);
+  const repete = t.trechos[2];
+  assert.equal((repete.ate - repete.de + 1) / (repete.origemFim - repete.origem + 1), pixel(368, 446 + 46));
+  assert.deepEqual(c.agulhas, { de: 11, ate: 333 });
+  assert.deepEqual(m.agulhas, { de: 11, ate: 329 });
+});
+
 test("abre os ajustes .QFD: registros encadeados até o fim", semPasta, () => {
   const q = ShimaArquivos.abrir("00_C_P.QFD", ler("00_C_P.QFD"));
   assert.match(q.titulo, /AUTOMATIC SETTINGS/);

@@ -1834,6 +1834,7 @@ details > summary { cursor: pointer; }
 //          Tipo 0xA1: compactada. u32 LE com o tamanho descompactado e, em seguida, LZSS (o mesmo do .dat).
 //          O conteúdo descompactado tem 19 bytes de cabeçalho, linhas de 66 bytes e 4 bytes de fechamento.
 //          Cada linha tem três blocos de 22 bytes que começam por 0x81, 0x82 e 0x83 (um por sistema do carro).
+//          Repetições, guias-fio, tabelas de agulhas e padrão: decifrarPrograma, mais abaixo, e FORMATO_000.md.
 //
 // .QFD
 //   0x00   texto "AUTOMATIC SETTINGS REV  4."
@@ -1954,6 +1955,187 @@ details > summary { cursor: pointer; }
     return { tipo: "programa", tamanho: bytes.length, ...lerCabecalhoPrograma(bytes), secoes: acharSecoes(bytes), bytes };
   }
 
+  // ----- .000: o que já foi decifrado de cada seção -----
+  // Descoberto comparando 00_C_P.000 e 00_M_P.000 (painéis de 203 e 199 agulhas) com o desenho
+  // 00FE_BLS_ESTAMPA_ONÇA.dat e com os .QFD. Detalhes e o que falta em simulador/FORMATO_000.md.
+
+  const TIPO_REPETICOES = 0xf5;
+  const TIPO_GUIAS = 0xe8;
+  const TIPO_AGULHAS = 0xe2;
+  const TIPO_PADRAO = 0xb0;
+
+  // Nome de cada tipo de seção (o 4º byte da marca 80 00 02 <tipo>); "?" = ainda não decifrado.
+  const NOMES_SECOES = {
+    0xaf: "início (?)",
+    0xa1: "linhas do programa",
+    0xf5: "repetições (economizador)",
+    0xe8: "conjuntos de guias-fio",
+    0xe2: "tabela de agulhas",
+    0xb0: "padrão das agulhas",
+    0xcc: "guias-fio por trilho (?)",
+    0xcd: "guias-fio usados (?)",
+    0xb5: "guias-fio usados (?)",
+  };
+
+  function nomeDaSecao(secao) {
+    return NOMES_SECOES[secao.tipo] || "?";
+  }
+
+  const bcd = (b) => (b >> 4) * 10 + (b & 0x0f);
+  const ehBcd = (b) => b >> 4 <= 9 && (b & 0x0f) <= 9;
+  // Números de dois bytes: centenas no nibble baixo do primeiro byte (o alto é uma marca: 0x80 agulha da
+  // máquina, 0x40 coluna do desenho) e o resto em BCD no segundo. "83 33" = 333, "41 83" = 183.
+  const numero2 = (alto, baixo) => (alto & 0x0f) * 100 + bcd(baixo);
+
+  // Repetições (0xF5): 03 03, 31 pares (0x80 + número em BCD, valor em BCD) e 03 03 01.
+  // O valor é o da repetição usada no R2 do desenho; no .QFD fica um a mais (65 no .QFD, 64 aqui).
+  function lerRepeticoes(dados) {
+    const lista = [];
+    for (let j = 2; j + 1 < dados.length && dados[j] !== 0x03; j += 2) {
+      lista.push({ numero: bcd(dados[j] & 0x7f), valor: ehBcd(dados[j + 1]) ? bcd(dados[j + 1]) : dados[j + 1] });
+    }
+    return lista;
+  }
+
+  // Conjuntos de guias-fio (0xE8): 03 03 e, para cada conjunto, 80 <número> e 32 pares
+  // (0x10 ou 0x20 = lado, guia-fio; 16 posições por lado). Cada linha do programa diz qual conjunto usa.
+  function lerConjuntosDeGuias(dados) {
+    const conjuntos = [];
+    let j = 2;
+    while (j + 1 < dados.length && dados[j] === 0x80) {
+      const conjunto = { numero: dados[j + 1], guias: [] };
+      j += 2;
+      for (let posicao = 0; j + 1 < dados.length && (dados[j] === 0x10 || dados[j] === 0x20); posicao++, j += 2) {
+        if (dados[j + 1]) conjunto.guias.push({ lado: dados[j] >> 4, posicao: posicao % 16, guia: dados[j + 1] });
+      }
+      conjuntos.push(conjunto);
+    }
+    return conjuntos;
+  }
+
+  // Tabela de agulhas (0xE2): número da tabela (0x81, 0x82…) e trechos de 12 bytes
+  // 03 03 <tipo> <agulha inicial> <agulha final> <origem> <origem final> 00, até 03 03 01.
+  // Tipo 0x82: as agulhas da máquina recebem as colunas do desenho a partir de <origem>.
+  // Tipo 0x88: as agulhas repetem as agulhas da máquina <origem>…<origem final> (economizador de largura).
+  function lerTabelaAgulhas(dados) {
+    const tabela = { numero: dados[0] & 0x0f, trechos: [] };
+    for (let j = 1; j + 11 < dados.length && dados[j] === 0x03 && dados[j + 1] === 0x03; j += 12) {
+      const tipo = dados[j + 2];
+      const n = (k) => numero2(dados[j + k], dados[j + k + 1]);
+      tabela.trechos.push({ tipo: tipo === 0x88 ? "repete" : tipo === 0x82 ? "copia" : `0x${tipo.toString(16)}`, de: n(3), ate: n(5), origem: n(7), origemFim: n(9) });
+    }
+    return tabela;
+  }
+
+  // Padrão (0xB0): comprimido em corridas. Um byte de contagem e o valor; 0xFF, n, n valores e a
+  // contagem de vezes que o grupo se repete. Expandido: 14 valores de cabeçalho, as carreiras
+  // (5 valores de controle, um byte por agulha e mais 5) e 2 valores no fim.
+  const CABECALHO_PADRAO = 14;
+  const BORDA_PADRAO = 5;
+  const FIM_PADRAO = 2;
+
+  const LIMITE_PADRAO = 16_000_000; // valores expandidos; um arquivo estragado não pode travar a página
+
+  function expandirPadrao(dados) {
+    const valores = [];
+    // O fim da seção perde os zeros (são o preenchimento até a próxima): um valor que falta é 0.
+    const em = (k) => (k < dados.length ? dados[k] : 0);
+    for (let j = 0; j < dados.length; ) {
+      if (valores.length > LIMITE_PADRAO) throw new Error("padrão grande demais");
+      if (dados[j] === 0xff) {
+        const n = em(j + 1);
+        const grupo = Array.from({ length: n }, (_, k) => em(j + 2 + k));
+        for (let vez = em(j + 2 + n); vez > 0; vez--) valores.push(...grupo);
+        j += 3 + n;
+      } else {
+        for (let vez = dados[j]; vez > 0; vez--) valores.push(em(j + 1));
+        j += 2;
+      }
+    }
+    return valores;
+  }
+
+  function lerPadrao(dados) {
+    const valores = expandirPadrao(dados);
+    const util = valores.length - CABECALHO_PADRAO - FIM_PADRAO;
+    // A largura é a que faz toda carreira começar e terminar pelo valor 03.
+    for (let passo = 2 * BORDA_PADRAO + 1; passo <= util; passo++) {
+      if (util % passo) continue;
+      let encaixa = true;
+      for (let s = CABECALHO_PADRAO; s < CABECALHO_PADRAO + util && encaixa; s += passo) encaixa = valores[s] === 3 && valores[s + passo - 1] === 3;
+      if (!encaixa) continue;
+      const largura = passo - 2 * BORDA_PADRAO;
+      const carreiras = [];
+      for (let s = CABECALHO_PADRAO; s < CABECALHO_PADRAO + util; s += passo) {
+        carreiras.push({
+          antes: valores.slice(s, s + BORDA_PADRAO),
+          agulhas: Uint8Array.from(valores.slice(s + BORDA_PADRAO, s + BORDA_PADRAO + largura)),
+          depois: valores.slice(s + BORDA_PADRAO + largura, s + passo),
+        });
+      }
+      return { cabecalho: valores.slice(0, CABECALHO_PADRAO), largura, carreiras, fim: valores.slice(valores.length - FIM_PADRAO) };
+    }
+    throw new Error("não foi possível achar a largura das carreiras do padrão");
+  }
+
+  // O que já se sabe de uma linha do programa (uma passada do carro), pelo bloco do sistema 1.
+  function descreverLinha(sistemas) {
+    const s1 = sistemas[0];
+    return {
+      conjunto: s1[3], // conjunto de guias-fio (seção 0xE8); 0 = sem fio
+      ponto: s1[6], // número do ponto: o valor do R6 no desenho; 0 = nenhum
+      repeticao: s1[10] ? { numero: s1[10], voltar: s1[11] } : null, // fim de um trecho que repete
+    };
+  }
+
+  // Resumo do que foi decifrado de um programa já lido (lerPrograma).
+  function decifrarPrograma(programa) {
+    const secoes = programa.secoes;
+    const daSecao = (tipo, ler) => {
+      const s = secoes.find((x) => x.tipo === tipo);
+      if (!s) return null;
+      try {
+        return ler(s.dados);
+      } catch (erro) {
+        return null;
+      }
+    };
+    const principal = secoes.filter((s) => s.linhas && s.linhas.length).sort((a, b) => b.linhas.length - a.linhas.length)[0] || null;
+    const repeticoes = daSecao(TIPO_REPETICOES, lerRepeticoes) || [];
+    const conjuntos = daSecao(TIPO_GUIAS, lerConjuntosDeGuias) || [];
+    const tabelas = secoes.filter((s) => s.tipo === TIPO_AGULHAS).map((s) => lerTabelaAgulhas(s.dados));
+    const padrao = daSecao(TIPO_PADRAO, lerPadrao);
+    const linhas = principal ? principal.linhas.map(descreverLinha) : [];
+
+    const pontos = new Map();
+    const usados = new Set();
+    const blocos = [];
+    linhas.forEach((l, i) => {
+      if (l.ponto) pontos.set(l.ponto, (pontos.get(l.ponto) || 0) + 1);
+      if (l.conjunto) usados.add(l.conjunto);
+      if (l.repeticao) {
+        const r = repeticoes.find((x) => x.numero === l.repeticao.numero);
+        blocos.push({ numero: l.repeticao.numero, de: i + 1 - l.repeticao.voltar, ate: i + 1, valor: r ? r.valor : null });
+      }
+    });
+    const guias = new Set();
+    for (const c of conjuntos) if (usados.has(c.numero)) for (const g of c.guias) guias.add(g.guia);
+    const tabela = tabelas[0];
+    const agulhas = tabela && tabela.trechos.length ? { de: tabela.trechos[0].de, ate: tabela.trechos[tabela.trechos.length - 1].ate } : null;
+    return {
+      secaoLinhas: principal,
+      linhas,
+      pontos: [...pontos].sort((a, b) => a[0] - b[0]).map(([ponto, linhasComEle]) => ({ ponto, linhas: linhasComEle })),
+      guias: [...guias].sort((a, b) => a - b),
+      conjuntos,
+      repeticoes,
+      blocos,
+      tabelas,
+      agulhas,
+      padrao,
+    };
+  }
+
   // ----- .QFD -----
 
   function lerAjustes(buffer) {
@@ -2002,7 +2184,24 @@ details > summary { cursor: pointer; }
     return { tipo, nome, tamanho: bytes.length, bytes, textos: textos(bytes) };
   }
 
-  const api = { abrir, tipoDoArquivo, tipoPeloNome, lerPrograma, lerAjustes, textos, hex, linhasHex };
+  const api = {
+    abrir,
+    tipoDoArquivo,
+    tipoPeloNome,
+    lerPrograma,
+    lerAjustes,
+    textos,
+    hex,
+    linhasHex,
+    nomeDaSecao,
+    lerRepeticoes,
+    lerConjuntosDeGuias,
+    lerTabelaAgulhas,
+    expandirPadrao,
+    lerPadrao,
+    descreverLinha,
+    decifrarPrograma,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.ShimaArquivos = api;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -5941,26 +6140,75 @@ function abaComparada(aba) {
   return aba.comparar ? estado.abas.find((a) => String(a.id) === aba.comparar) || null : null;
 }
 
+// O que já foi decifrado do programa (ShimaArquivos.decifrarPrograma), calculado uma vez por aba.
+function decifrado(aba) {
+  if (!aba.decifrado) aba.decifrado = ShimaArquivos.decifrarPrograma(aba.aberto);
+  return aba.decifrado;
+}
+
+// "1, 4–9 e 12" a partir de números em ordem.
+function faixasDeNumeros(numeros) {
+  const partes = [];
+  for (let i = 0; i < numeros.length; i++) {
+    let j = i;
+    while (j + 1 < numeros.length && numeros[j + 1] === numeros[j] + 1) j++;
+    partes.push(j > i ? `${numeros[i]}–${numeros[j]}` : String(numeros[i]));
+    i = j;
+  }
+  return partes.length ? RecursosMalha.listaComE(partes) : "—";
+}
+
+function guiasDoConjunto(d, numero) {
+  if (!numero) return "—";
+  const c = d.conjuntos.find((x) => x.numero === numero);
+  const guias = c ? [...new Set(c.guias.map((g) => g.guia))].sort((a, b) => a - b) : [];
+  return guias.length ? RecursosMalha.listaComE(guias) : `conjunto ${numero}`;
+}
+
+const bitsDoValor = (v) => {
+  const bits = [];
+  for (let b = 7; b >= 0; b--) if (v & (1 << b)) bits.push(b);
+  return bits.length ? `${bits.length > 1 ? "bits" : "bit"} ${RecursosMalha.listaComE(bits)}` : "nenhum bit";
+};
+const hex2 = (v) => `0x${v.toString(16).padStart(2, "0").toUpperCase()}`;
+
+// Cor de cada valor do padrão: 0 em branco e os outros espalhados pelo círculo de cores.
+function corDoPadrao(v) {
+  if (!v) return [255, 255, 255];
+  const h = ((v * 137.508) % 360) / 60, s = 0.62, l = 0.52;
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h % 2) - 1)), m = l - c / 2;
+  const [r, g, b] = h < 1 ? [c, x, 0] : h < 2 ? [x, c, 0] : h < 3 ? [0, c, x] : h < 4 ? [0, x, c] : h < 5 ? [x, 0, c] : [c, 0, x];
+  return [r, g, b].map((k) => Math.round((k + m) * 255));
+}
+const ESCALA_PADRAO = { x: 3, y: 4 }; // pixels da tela por agulha e por carreira
+
 function inspetorPrograma(aba) {
   const p = aba.aberto;
+  const d = decifrado(aba);
   const outra = abaComparada(aba);
-  const secoesComLinhas = p.secoes.filter((s) => s.linhas && s.linhas.length);
-  const principal = secoesComLinhas.sort((x, y) => y.linhas.length - x.linhas.length)[0];
+  const principal = d.secaoLinhas;
   let html = `<div class="cabecalho-inspetor"><h2 class="mono">${esc(aba.nome)}</h2>
     <p class="suave">Programa de tricô gerado pelo KnitPaint para a máquina. Aberto só para consulta: para alterar, edite o .dat e processe de novo no SDS-ONE.</p></div>`;
-  html += guias(aba, [["resumo", "Resumo"], ["secoes", "Seções"], ["linhas", "Linhas do programa"], ["hex", "Hexadecimal"]]);
+  html += guias(aba, [["resumo", "Resumo"], ["linhas", "Linhas do programa"], ["agulhas", "Agulhas e repetição"], ["padrao", "Padrão"], ["secoes", "Seções"], ["hex", "Hexadecimal"]]);
+  const aviso = `<p class="suave pequeno">Guias-fio, pontos, repetição, agulhas e padrão foram decifrados comparando os arquivos de exemplo com o desenho, sem documentação da Shima. Confira com o que a máquina mostra antes de confiar.</p>`;
 
   if (aba.guia === "resumo") {
+    const repeticoes = d.blocos.map((b) => `linhas ${b.de} a ${b.ate} (repetição ${b.numero}${b.valor != null ? ` = ${b.valor}` : ""})`);
     html += `<dl class="info grande">
       ${p.campos.map((c) => `<dt>${esc(c.chave)}</dt><dd class="mono">${esc(c.valor)}</dd>`).join("")}
       <dt>Assinatura</dt><dd class="mono">${esc(p.copyright)}</dd>
       <dt>Tamanho</dt><dd class="mono">${bytesLegiveis(p.tamanho)}</dd>
-      <dt>Seções</dt><dd class="mono">${p.secoes.length} (${p.secoes.filter((s) => s.compactada).length} compactadas)</dd>
-      <dt>Linhas do programa</dt><dd class="mono">${principal ? `${principal.linhas.length} linhas × 3 sistemas` : "—"}</dd>
-    </dl>
+      <dt>Linhas do programa</dt><dd>${principal ? `${principal.linhas.length} passadas do carro` : "—"}</dd>
+      <dt>Repetição</dt><dd>${repeticoes.length ? RecursosMalha.listaComE(repeticoes) : "nenhuma"}</dd>
+      <dt>Guias-fio</dt><dd>${d.guias.length ? RecursosMalha.listaComE(d.guias) : "—"}</dd>
+      <dt>Pontos (R6)</dt><dd>${d.pontos.length ? d.pontos.map((x) => `${x.ponto} <span class="suave">(${x.linhas} ${x.linhas === 1 ? "linha" : "linhas"})</span>`).join(", ") : "—"}</dd>
+      <dt>Largura na máquina</dt><dd>${d.agulhas ? `agulhas ${d.agulhas.de} a ${d.agulhas.ate} (${d.agulhas.ate - d.agulhas.de + 1} agulhas)` : "—"}</dd>
+      <dt>Padrão</dt><dd>${d.padrao ? `${d.padrao.carreiras.length} carreiras de ${d.padrao.largura} agulhas` : "—"}</dd>
+      <dt>Seções</dt><dd>${p.secoes.length} (${p.secoes.filter((s) => s.compactada).length} compactadas)</dd>
+    </dl>${aviso}
     <p class="suave pequeno">Campos do cabeçalho: F = nome do arquivo. Os outros (S, I, C, T, M) são gravados pelo KnitPaint; o significado não é documentado.</p>`;
   } else if (aba.guia === "secoes") {
-    html += `<div class="tabela-rolavel"><table class="tabela"><thead><tr><th>Nº</th><th>Posição</th><th>Tipo</th><th>No arquivo</th><th>Conteúdo</th><th>Linhas</th>${outra ? "<th>Igual ao outro?</th>" : ""}</tr></thead><tbody>
+    html += `<div class="tabela-rolavel"><table class="tabela"><thead><tr><th>Nº</th><th>O que é</th><th>Posição</th><th>Tipo</th><th>No arquivo</th><th>Conteúdo</th><th>Linhas</th>${outra ? "<th>Igual ao outro?</th>" : ""}</tr></thead><tbody>
       ${p.secoes
         .map((s, i) => {
           let igual = "";
@@ -5970,11 +6218,13 @@ function inspetorPrograma(aba) {
             igual = `<td>${mesmo ? "sim" : "<strong>diferente</strong>"}</td>`;
           }
           return `<tr class="${aba.detalhe === i ? "selecionada" : ""}"><td><button type="button" class="link" data-detalhe="${i}">${s.numero}</button></td>
+          <td>${esc(ShimaArquivos.nomeDaSecao(s))}</td>
           <td class="mono">0x${s.inicio.toString(16)}</td><td class="mono">0x${s.tipo.toString(16).toUpperCase()}${s.compactada ? " · LZSS" : ""}</td>
           <td class="mono">${s.tamanho} bytes</td><td class="mono">${s.dados.length} bytes</td><td class="mono">${s.linhas ? s.linhas.length : "—"}</td>${igual}</tr>`;
         })
         .join("")}
-    </tbody></table></div>`;
+    </tbody></table></div>
+    <p class="suave pequeno">Com “?”: seções que ainda não foram decifradas; o nome é um palpite.</p>`;
     html += seletorComparar(aba);
     if (aba.detalhe != null && p.secoes[aba.detalhe]) {
       const s = p.secoes[aba.detalhe];
@@ -6000,19 +6250,124 @@ function inspetorPrograma(aba) {
           });
           const dif = linhasOutra && (!linhasOutra[n] || sistemas.some((bytes, s) => bytes.some((b, k) => linhasOutra[n][s][k] !== b)));
           if (dif) diferentes++;
-          return `<tr class="${dif ? "diferente" : ""}"><th class="mono">${n + 1}</th>${celulas.join("")}</tr>`;
+          const l = d.linhas[n];
+          const notas = [
+            ...d.blocos.filter((b) => b.de === n + 1).map((b) => `começa a repetição ${b.numero}`),
+            ...d.blocos.filter((b) => b.ate === n + 1).map((b) => `volta à linha ${b.de}${b.valor != null ? ` (repetição ${b.numero} = ${b.valor})` : ""}`),
+          ];
+          return `<tr class="${dif ? "diferente" : ""}"><th class="mono">${n + 1}</th><td class="mono">${guiasDoConjunto(d, l.conjunto)}</td><td class="mono">${l.ponto || "—"}</td><td class="pequeno">${notas.join("; ")}</td>${celulas.join("")}</tr>`;
         })
         .join("");
-      html += `<p class="suave pequeno">Seção ${principal.numero}: ${principal.linhas.length} linhas de 66 bytes, um bloco de 22 bytes por sistema do carro (começam por 81, 82 e 83).</p>`;
+      html += `<p class="suave pequeno">Seção ${principal.numero}: ${principal.linhas.length} linhas, uma por passada do carro. Cada linha tem 66 bytes, um bloco de 22 por sistema (começam por 81, 82 e 83). No sistema 1, o 4º byte é o conjunto de guias-fio, o 7º o ponto (R6) e o 11º e o 12º marcam o fim de um trecho que repete.</p>`;
       html += seletorComparar(aba);
       if (linhasOutra) html += `<p><strong>${diferentes}</strong> de ${principal.linhas.length} linhas diferentes de ${esc(outra.nome)}.</p>`;
-      html += `<div class="tabela-rolavel alta"><table class="tabela tabela-hex"><thead><tr><th>Linha</th><th>Sistema 1</th><th>Sistema 2</th><th>Sistema 3</th></tr></thead><tbody>${corpo}</tbody></table></div>`;
+      html += `<div class="tabela-rolavel alta"><table class="tabela tabela-hex"><thead><tr><th>Linha</th><th>Guias-fio</th><th>Ponto</th><th>Nota</th><th>Sistema 1</th><th>Sistema 2</th><th>Sistema 3</th></tr></thead><tbody>${corpo}</tbody></table></div>`;
+    }
+  } else if (aba.guia === "agulhas") {
+    const usadas = d.repeticoes.filter((r) => r.valor || d.blocos.some((b) => b.numero === r.numero));
+    html += `<h3 class="sub">Repetição (economizador)</h3>`;
+    html += usadas.length
+      ? `<table class="tabela"><thead><tr><th>Repetição</th><th>Valor</th><th>Linhas do programa</th></tr></thead><tbody>${usadas
+          .map((r) => {
+            const blocos = d.blocos.filter((b) => b.numero === r.numero).map((b) => `${b.de} a ${b.ate}`);
+            return `<tr><td class="mono">${r.numero}</td><td class="mono">${r.valor}</td><td>${blocos.length ? RecursosMalha.listaComE(blocos) : "—"}</td></tr>`;
+          })
+          .join("")}</tbody></table>
+        <p class="suave pequeno">O trecho é o das carreiras com R2 no desenho. Nos exemplos, o .QFD guarda 1 a mais que o .000 (65 e 64 no painel C).</p>`
+      : `<p>Sem repetição.</p>`;
+    for (const t of d.tabelas) {
+      html += `<h3 class="sub">Tabela de agulhas ${t.numero}</h3>
+        <table class="tabela"><thead><tr><th>Agulhas da máquina</th><th>Vêm de</th></tr></thead><tbody>${t.trechos
+          .map((x) => {
+            let origem;
+            if (x.tipo === "copia") origem = `colunas ${x.origem} a ${x.origem + x.ate - x.de} do painel`;
+            else if (x.tipo === "repete") {
+              const largura = x.origemFim - x.origem + 1;
+              const vezes = (x.ate - x.de + 1) / largura;
+              origem = `repetem as agulhas ${x.origem} a ${x.origemFim} (${Number.isInteger(vezes) ? `${vezes} ${vezes === 1 ? "vez" : "vezes"} a mais` : `${x.ate - x.de + 1} agulhas`})`;
+            } else origem = `trecho ${esc(x.tipo)}: ${x.origem}–${x.origemFim}`;
+            return `<tr><td class="mono">${x.de} a ${x.ate}</td><td>${origem}</td></tr>`;
+          })
+          .join("")}</tbody></table>`;
+    }
+    if (d.tabelas.length)
+      html += `<p class="suave pequeno">É o economizador de largura. As colunas do painel contam a partir da primeira depois das linhas de opção da esquerda. No exemplo, a tabela 1 sai das marcas acima do painel: 2 nas colunas que repetem e, na carreira de cima, quantas vezes a mais. A tabela 2 o KnitPaint monta sozinho, com 4 colunas perto de cada borda; para que ela serve ainda não se sabe.</p>`;
+    html += `<h3 class="sub">Conjuntos de guias-fio</h3>`;
+    html += d.conjuntos.length
+      ? `<table class="tabela"><thead><tr><th>Conjunto</th><th>Lado 1</th><th>Lado 2</th><th>Linhas do programa</th></tr></thead><tbody>${d.conjuntos
+          .map((c) => {
+            const lado = (n) => {
+              const g = c.guias.filter((x) => x.lado === n).map((x) => x.guia);
+              const unicos = [...new Set(g)];
+              return unicos.length ? unicos.map((u) => `${u}${g.filter((v) => v === u).length > 1 ? ` (×${g.filter((v) => v === u).length})` : ""}`).join(", ") : "—";
+            };
+            const linhas = d.linhas.map((l, i) => (l.conjunto === c.numero ? i + 1 : 0)).filter(Boolean);
+            return `<tr><td class="mono">${c.numero}</td><td class="mono">${lado(1)}</td><td class="mono">${lado(2)}</td><td class="pequeno">${faixasDeNumeros(linhas)}</td></tr>`;
+          })
+          .join("")}</tbody></table>
+        <p class="suave pequeno">Cada linha do programa diz qual conjunto usa. No exemplo, o corpo usa o conjunto 8, com o guia-fio 4 (o R3 do desenho).</p>`
+      : `<p>Não foram encontrados conjuntos de guias-fio.</p>`;
+    html += aviso;
+  } else if (aba.guia === "padrao") {
+    const pd = d.padrao;
+    if (!pd) html += `<p>Não foi possível ler o padrão deste programa.</p>`;
+    else {
+      const contagem = new Map();
+      for (const c of pd.carreiras) for (const v of c.agulhas) contagem.set(v, (contagem.get(v) || 0) + 1);
+      const valores = [...contagem].sort((a, b) => b[1] - a[1]);
+      const legenda = valores
+        .slice(0, 24)
+        .map(([v, n]) => `<li><span class="amostra" style="background: rgb(${corDoPadrao(v).join(",")}); box-shadow: inset 0 0 0 1px var(--linha)"></span><span class="mono">${hex2(v)}</span> ${bitsDoValor(v)} · ${n.toLocaleString("pt-BR")}</li>`)
+        .join("");
+      html += `<p class="suave pequeno">${pd.carreiras.length} carreiras de ${pd.largura} agulhas, a primeira embaixo, como no desenho. Cada agulha tem um byte com o que ela faz na carreira; no corpo do exemplo, ${hex2(0x90)} é o código 1 (tricotar na frente) e ${hex2(0x08)} o código 2 (tricotar atrás). As carreiras do começo e do fim são as que o KnitPaint acrescenta sozinho.</p>
+        <div class="previa"><canvas data-padrao style="width: ${pd.largura * ESCALA_PADRAO.x}px; height: ${pd.carreiras.length * ESCALA_PADRAO.y}px; image-rendering: pixelated"></canvas></div>
+        <p class="pequeno mono" data-padrao-info>Passe o mouse ou toque no padrão para ver a carreira, a agulha e o valor.</p>
+        <ul class="legenda">${legenda}</ul>${valores.length > 24 ? `<p class="suave pequeno">E mais ${valores.length - 24} valores.</p>` : ""}${aviso}`;
     }
   } else {
     html += seletorComparar(aba);
     html += tabelaHex(p.bytes, outra ? outra.aberto.bytes : null);
   }
   return html;
+}
+
+function desenharPadraoPrograma(aba) {
+  const cv = $("inspetor").querySelector("canvas[data-padrao]");
+  const pd = decifrado(aba).padrao;
+  if (!cv || !pd) return;
+  const linhas = pd.carreiras.length;
+  cv.width = pd.largura;
+  cv.height = linhas;
+  const g = cv.getContext("2d");
+  const img = g.createImageData(pd.largura, linhas);
+  const cores = new Map();
+  pd.carreiras.forEach((c, r) => {
+    const y = linhas - 1 - r;
+    c.agulhas.forEach((v, k) => {
+      if (!cores.has(v)) cores.set(v, corDoPadrao(v));
+      const [cr, cg, cb] = cores.get(v);
+      const i = (y * pd.largura + k) * 4;
+      img.data[i] = cr;
+      img.data[i + 1] = cg;
+      img.data[i + 2] = cb;
+      img.data[i + 3] = 255;
+    });
+  });
+  g.putImageData(img, 0, 0);
+}
+
+function infoDoPadrao(aba, e) {
+  const cv = e.target;
+  const pd = decifrado(aba).padrao;
+  const info = $("inspetor").querySelector("[data-padrao-info]");
+  if (!pd || !info) return;
+  const k = Math.floor((e.offsetX / cv.clientWidth) * pd.largura);
+  const r = pd.carreiras.length - 1 - Math.floor((e.offsetY / cv.clientHeight) * pd.carreiras.length);
+  const c = pd.carreiras[r];
+  if (!c || k < 0 || k >= pd.largura) return;
+  const v = c.agulhas[k];
+  const ctrl = (l) => l.map((x) => x.toString(16).padStart(2, "0")).join(" ");
+  info.textContent = `Carreira ${r + 1} do padrão · agulha ${k + 1} · ${hex2(v)} (${bitsDoValor(v)}) · controle ${ctrl(c.antes)} … ${ctrl(c.depois)}`;
 }
 
 function inspetorAjustes(aba) {
@@ -6067,8 +6422,10 @@ function inspetorDesconhecido(aba) {
 
 function desenharInspetor(aba) {
   const el = $("inspetor");
-  if (aba.tipo === "programa") el.innerHTML = inspetorPrograma(aba);
-  else if (aba.tipo === "ajustes") el.innerHTML = inspetorAjustes(aba);
+  if (aba.tipo === "programa") {
+    el.innerHTML = inspetorPrograma(aba);
+    if (aba.guia === "padrao") desenharPadraoPrograma(aba);
+  } else if (aba.tipo === "ajustes") el.innerHTML = inspetorAjustes(aba);
   else if (aba.tipo === "imagem") el.innerHTML = inspetorImagem(aba);
   else el.innerHTML = inspetorDesconhecido(aba);
 }
@@ -6093,6 +6450,14 @@ $("inspetor").addEventListener("click", (e) => {
     abrirDialogoImportar(destino);
   }
 });
+
+// Mouse por cima ou toque no padrão: a carreira, a agulha e o valor.
+for (const tipo of ["pointermove", "pointerdown"]) {
+  $("inspetor").addEventListener(tipo, (e) => {
+    const aba = abaAtual();
+    if (aba && aba.tipo === "programa" && e.target.matches("canvas[data-padrao]")) infoDoPadrao(aba, e);
+  });
+}
 
 $("inspetor").addEventListener("change", (e) => {
   const aba = abaAtual();

@@ -149,13 +149,14 @@ Processar, dos Pacotes e da Ficha ficam guardados no navegador, por pasta e nome
 
 O que o editor **não** faz: gerar o programa da máquina (`.000`) e os ajustes (`.QFD`) a partir do `.dat`.
 Isso é o processamento do KnitPaint; use os valores do Processar no KnitPaint ou no SDS KnitPaint-Online da
-Shima Seiki. O navegador também não alcança a rede da máquina; o pendrive só no Chrome e no Edge (nos outros,
+Shima Seiki. O formato do `.000` está sendo decifrado a partir dos arquivos de exemplo: o que já se sabe e o
+que falta estão em [`FORMATO_000.md`](virtual_knitting_machine/virtual_knitting_machine-main/simulador/FORMATO_000.md). O navegador também não alcança a rede da máquina; o pendrive só no Chrome e no Edge (nos outros,
 baixe o `.zip` e copie).
 
 | Arquivo | O que é | No editor |
 | --- | --- | --- |
 | `.dat` | desenho do KnitPaint (SDS-ONE) | edição completa e gravação |
-| `.000` | programa de tricô da máquina | consulta: cabeçalho, seções, linhas, comparação |
+| `.000` | programa de tricô da máquina | consulta: linhas com guia-fio e ponto, repetição, agulhas, padrão, seções, comparação |
 | `.QFD` | ajustes automáticos | consulta: registros, comparação |
 | `.png` / `.jpg` | imagem | importação para dentro de um desenho |
 
